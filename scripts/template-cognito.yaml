@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Cognito user pool with Google sign-in, open to every Google account; each new
+  address is asked to verify with SES.
+
+Parameters:
+  GoogleClientId:
+    Type: String
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+  CallbackUrls:
+    Type: CommaDelimitedList
+    Default: 'http://localhost:8000/'
+  DomainPrefix:
+    Type: String
+    Default: meters-trk
+
+Resources:
+  PreSignupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../build/lambda
+      Handler: handlers/presignup.handler
+      Runtime: python3.13
+      Architectures: [arm64]
+      Timeout: 5
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              # An SES account still in its sandbox refuses every message to an address that is
+              # not a verified identity, so sign-up asks SES to mail the new address its
+              # verification request, after reading whether one is already out. Neither action
+              # takes a resource-level grant.
+              Action:
+                - ses:GetIdentityVerificationAttributes
+                - ses:VerifyEmailIdentity
+              Resource: '*'
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-UserPool'
+      AliasAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      # Google is the only way in: the pool's own sign-up would let anyone register any address
+      # under a password and reach that address's account.
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      LambdaConfig:
+        PreSignUp: !GetAtt PreSignupFunction.Arn
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+
+  PreSignupPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PreSignupFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  GoogleProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      ProviderName: Google
+      ProviderType: Google
+      UserPoolId: !Ref UserPool
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: 'openid email profile'
+      AttributeMapping:
+        email: email
+        email_verified: email_verified
+        name: name
+        username: sub
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub '${DomainPrefix}-${AWS::AccountId}'
+      UserPoolId: !Ref UserPool
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      SupportedIdentityProviders: [Google]
+      CallbackURLs: !Ref CallbackUrls
+      LogoutURLs: !Ref CallbackUrls
+      AllowedOAuthFlows: [code]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes: [openid, email, profile]
+      # Tokens come only from the hosted Google sign-in; no password or custom flow can mint one.
+      ExplicitAuthFlows: [ALLOW_REFRESH_TOKEN_AUTH]
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  HostedUiDomain:
+    Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'

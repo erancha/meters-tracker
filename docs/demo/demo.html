@@ -1,0 +1,1104 @@
+<title>מונים בפעולה</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--
+  Client-facing walkthrough of the planned meters-tracker chat, showing the whole product,
+  including parts not yet built. It replays one building owner's story against a mock phone
+  screen: Google sign-in, authorizing a representative, linking the electricity and water meters
+  of one apartment, reading tariffs off a previous statement, a blurry photo the system refuses
+  to guess at, the closing readings two months later, and the PDF report in the owner's
+  mailbox. Readings and tariffs are illustrative; every consumption and charge shown is computed
+  here from them.
+  Clicking the phone pauses and resumes the replay; the step buttons walk it beat by beat.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap">
+
+<style>
+/* Layout: a dark utility-room workbench — the phone on one side, the narrated acts on the
+   other — so the light app screen reads as the live thing. Single committed dark look. */
+:root {
+  color-scheme: dark;
+  --c-ink:    #0d1820;
+  --c-panel:  #142430;
+  --c-raised: #1b2f3d;
+  --c-line:   #26404f;
+  --c-wire:   #3a5a6d;
+  --c-paper:  #e8eff3;
+  --c-muted:  #8ea3b0;
+  --c-dim:    #5f7684;
+  --c-live:   #5fb3e8;
+  --c-amber:  #e3a73a;
+  --sans: "IBM Plex Sans Hebrew", "Noto Sans Hebrew", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--c-ink); }
+body {
+  margin: 0;
+  background: var(--c-ink);
+  color: var(--c-paper);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  direction: rtl;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-block: 2rem 4rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+.masthead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+  border-bottom: 1px solid var(--c-line); padding-bottom: 0.7rem; margin-bottom: 1.3rem;
+}
+.masthead h1 { font-size: 1.3rem; font-weight: 600; margin: 0; text-wrap: balance; }
+.masthead h1 span { color: var(--c-muted); font-weight: 400; font-size: 0.95rem; margin-inline-start: 0.6rem; }
+.about-toggle {
+  background: none; border: 0; color: var(--c-muted); font: inherit; font-size: 0.85rem;
+  padding: 0; cursor: pointer; flex: none;
+}
+.about-toggle:hover { color: var(--c-paper); }
+.about-toggle:focus-visible { outline: 2px solid var(--c-live); outline-offset: 3px; }
+.about-toggle::before { content: "◂ "; }
+.about-toggle[aria-expanded="true"]::before { content: "▾ "; }
+.about { display: grid; gap: 1.2rem; margin-bottom: 1.6rem; }
+.lede { margin: 0; max-width: 64ch; color: var(--c-muted); font-size: 0.95rem; }
+.lede strong { color: var(--c-paper); font-weight: 500; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.2rem; }
+.facts h3 { font-size: 0.78rem; letter-spacing: 0.04em; color: var(--c-dim); margin: 0 0 0.3rem; font-weight: 600; }
+.facts p { margin: 0; font-size: 0.88rem; color: var(--c-muted); }
+
+.bench { display: grid; grid-template-columns: 410px minmax(0, 1fr); gap: 3rem; align-items: start; }
+@media (max-width: 940px) { .bench { grid-template-columns: minmax(0, 1fr); gap: 2rem; } }
+.rig { position: sticky; top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+@media (max-width: 940px) { .rig { position: static; } }
+
+/* The phone screen stays 390px wide at every window size and the whole device scales instead,
+   so the cursor maths divide client rects by the same factor. */
+.stage { display: flex; justify-content: center; overflow: hidden; height: calc(724px * var(--k)); }
+.device {
+  width: 410px; flex: none;
+  transform: scale(var(--k)); transform-origin: top center;
+  background: #04080b; border: 1px solid var(--c-wire); border-radius: 26px; padding: 9px;
+  box-shadow: 0 30px 60px -30px rgba(0,0,0,0.9);
+}
+.viewport {
+  position: relative; border-radius: 18px; overflow: hidden; background: #f6f8f9;
+  height: 704px; cursor: pointer;
+}
+.statusbar {
+  direction: ltr; height: 26px; background: #f6f8f9; color: #1d2a33;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 1rem; font-family: var(--mono); font-size: 11px; font-weight: 500;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+.screen {
+  position: relative; height: calc(704px - 26px);
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+}
+.screen::-webkit-scrollbar { display: none; }
+.screen * { pointer-events: none; }
+
+.tap {
+  position: absolute; left: 0; top: 0; width: 26px; height: 26px;
+  margin: -13px 0 0 -13px; border-radius: 50%;
+  border: 2px solid rgba(29,91,140,0.85); background: rgba(29,91,140,0.16);
+  pointer-events: none; opacity: 0; z-index: 20;
+  transition: transform 420ms cubic-bezier(.4,.15,.2,1), opacity 200ms linear;
+}
+.tap.on { opacity: 1; }
+.tap.hit { animation: hit 340ms ease-out; }
+@keyframes hit { 0% { box-shadow: 0 0 0 0 rgba(29,91,140,0.45); } 100% { box-shadow: 0 0 0 22px rgba(29,91,140,0); } }
+
+.veil {
+  position: absolute; inset: auto 0 0 0; z-index: 30;
+  display: flex; justify-content: center; padding: 0 0 14px; pointer-events: none;
+}
+.veil span {
+  background: rgba(13,24,32,0.88); color: #fff; font-family: var(--sans); font-size: 0.85rem;
+  padding: 0.35rem 0.9rem; border-radius: 999px;
+}
+
+.screen .tour-flash { outline: 2px dashed rgba(201,74,36,0.85); outline-offset: 3px; border-radius: 6px; }
+
+.transport {
+  background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 12px;
+  padding: 0.85rem 0.9rem 0.9rem;
+}
+.track { height: 3px; background: var(--c-raised); border-radius: 2px; overflow: hidden; margin-bottom: 0.8rem; }
+.track span { display: block; height: 100%; background: var(--c-live); width: 0; transition: width 200ms linear; }
+.controls { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.controls button {
+  font-family: var(--sans); font-size: 0.85rem; font-weight: 500;
+  color: var(--c-paper); background: var(--c-raised);
+  border: 1px solid var(--c-line); border-radius: 7px;
+  padding: 0.4rem 0.7rem; cursor: pointer; line-height: 1;
+}
+.controls button:hover { background: #22394a; border-color: var(--c-wire); }
+.controls button:focus-visible { outline: 2px solid var(--c-live); outline-offset: 2px; }
+.controls .primary { background: var(--c-live); border-color: var(--c-live); color: #06121a; font-weight: 600; min-width: 76px; }
+.controls .primary:hover { background: #7cc2ee; border-color: #7cc2ee; }
+#speed { direction: ltr; font-family: var(--mono); }
+.controls .counter { margin-inline-start: auto; direction: ltr; font-family: var(--mono); font-size: 0.78rem; color: var(--c-dim); }
+.hint { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--c-dim); }
+
+.script { display: flex; flex-direction: column; gap: 0.8rem; }
+.act {
+  border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-panel); overflow: hidden;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.act.live { border-color: var(--c-wire); background: var(--c-raised); }
+.act.done { opacity: 0.62; }
+.act > button.head {
+  width: 100%; display: flex; align-items: baseline; gap: 0.8rem;
+  background: none; border: 0; color: inherit; font: inherit; text-align: start;
+  padding: 0.8rem 1rem; cursor: pointer;
+}
+.act > button.head:focus-visible { outline: 2px solid var(--c-live); outline-offset: -3px; }
+.act .no { font-size: 0.76rem; font-weight: 600; color: var(--c-dim); flex: none; }
+.act.live .no { color: var(--c-live); }
+.act .name { font-weight: 600; font-size: 1.05rem; }
+.act .beat { margin-inline-start: auto; direction: ltr; font-family: var(--mono); font-size: 0.7rem; color: var(--c-dim); flex: none; }
+.act .body { padding: 0 1rem 1rem; padding-inline-start: 4.4rem; }
+.act:not(.live) .body { display: none; }
+@media (max-width: 720px) { .act .body { padding-inline-start: 1rem; } }
+.caption { margin: 0; font-size: 0.97rem; max-width: 62ch; min-height: 3.1em; }
+
+.readout {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;
+  background: var(--c-line); border: 1px solid var(--c-line); border-radius: 9px;
+  overflow: hidden; margin: 1rem 0 0;
+}
+.readout div { background: #0f1d27; padding: 0.5rem 0.6rem; min-width: 0; }
+.readout dt { font-size: 0.72rem; font-weight: 500; color: var(--c-dim); margin: 0 0 0.15rem; }
+.readout dd { margin: 0; font-family: var(--mono); font-size: 1.05rem; font-weight: 500; color: var(--c-live); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.readout dd.unset { color: var(--c-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tap, .track span { transition: none; }
+}
+
+/* ── The app: light, inside the phone ─────────────────────────────────── */
+.screen {
+  --accent: #1d5b8c; --accent-soft: #e6eff6; --accent-border: #b9cfe0;
+  --ink: #1d2a33; --muted: #6b7a84; --hair: #dde4e8; --card: #fff;
+  --elec: #a8670c; --elec-soft: #fdf1dc; --water: #1f6fb8; --water-soft: #e3effa;
+  --warn: #8a4b00; --warn-soft: #fff4e0; --ok: #2c7a3f;
+  --total: #c0392b;
+  font-family: system-ui, "Segoe UI", Arial, sans-serif; color: var(--ink); background: #f6f8f9;
+  font-size: 15px; line-height: 1.45; direction: rtl;
+}
+.screen p { margin: 0; }
+.screen p + p, .screen p + .chips, .screen .chips + p, .screen dl + p, .screen p + dl { margin-top: 0.45rem; }
+/* Inline, not inline-block: an atomic box lets a line break right after an opening parenthesis. */
+.screen .ltr { direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
+.screen .num { font-variant-numeric: tabular-nums; }
+.screen .muted { color: var(--muted); font-size: 0.88em; }
+.screen .icon { width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.screen .brand { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--accent); font-weight: 700; }
+.screen .brand .icon { width: 1.3em; height: 1.3em; }
+
+/* landing */
+.screen .landing { min-height: 100%; display: flex; flex-direction: column; padding: 2.2rem 1.3rem 1.5rem; gap: 1.4rem; }
+.screen .landing .brand { font-size: 2.1rem; align-self: center; }
+.screen .landing .pitch { font-size: 1.15rem; text-align: center; text-wrap: balance; }
+.screen .landing ul { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: 0.5rem; color: #3b4952; }
+.screen .landing .signin-wrap { margin-top: auto; display: grid; gap: 0.5rem; justify-items: center; }
+.screen .google {
+  display: inline-flex; align-items: center; gap: 0.6rem; background: #fff; color: var(--ink);
+  border: 1px solid #c9d2d8; border-radius: 999px; padding: 0.65rem 1.4rem; font: inherit; font-weight: 600;
+}
+.screen .google .g { font-weight: 700; color: var(--accent); font-family: Arial, sans-serif; }
+
+/* chat */
+.screen .chat { min-height: 100%; display: flex; flex-direction: column; }
+.screen .app-head {
+  position: sticky; top: 0; z-index: 5; background: #eef3f6; border-bottom: 1px solid var(--hair);
+  display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem;
+}
+.screen .who { font-size: 0.75rem; color: var(--muted); text-align: end; line-height: 1.25; }
+.screen .who b { color: var(--ink); font-weight: 600; }
+.screen .msgs { list-style: none; margin: 0; padding: 0.8rem 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; flex: 1; }
+.screen .msg { max-width: 88%; border-radius: 12px; padding: 0.55rem 0.75rem; }
+.screen .msg.user { align-self: flex-start; background: var(--accent-soft); border-end-start-radius: 4px; }
+.screen .msg.bot { align-self: flex-end; background: var(--card); border: 1px solid var(--hair); border-end-end-radius: 4px; }
+.screen .msg.photo { padding: 0.3rem; background: var(--accent-soft); }
+.screen .msg.photo .shots { display: flex; gap: 0.3rem; }
+.screen .msg.photo svg { display: block; width: 168px; height: auto; border-radius: 8px; }
+.screen .msg.photo .shots svg { width: 128px; }
+.screen .msg.alert { background: var(--warn-soft); border-color: #f0d6a8; }
+/* Fixed resolves against the scaled device, so the inset clears its bezel and status bar. */
+.screen .lightbox {
+  position: fixed; inset: 35px 9px 9px; z-index: 25; border-radius: 0 0 18px 18px;
+  background: rgba(8,14,18,0.94); display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.screen .lightbox svg { width: 100%; height: auto; border-radius: 6px; }
+.screen .lightbox-close {
+  position: absolute; top: 0.7rem; left: 0.7rem; width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  border: 0; background: rgba(255,255,255,0.16); color: #fff; font-size: 1.1rem; line-height: 1;
+}
+
+.screen .card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; font-weight: 600; margin-bottom: 0.4rem; }
+.screen .kind { font-size: 0.75rem; font-weight: 600; border-radius: 999px; padding: 0.05rem 0.55rem; }
+.screen .kind-elec { color: var(--elec); background: var(--elec-soft); }
+.screen .kind-water { color: var(--water); background: var(--water-soft); }
+.screen .tag-new { font-size: 0.72rem; color: var(--accent); border: 1px solid var(--accent-border); border-radius: 999px; padding: 0 0.45rem; font-weight: 500; }
+.screen dl.facts-list { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.2rem 0.8rem; font-size: 0.92em; }
+.screen dl.facts-list dt { color: var(--muted); }
+.screen dl.facts-list dd { margin: 0; }
+.screen .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.screen .chip {
+  font: inherit; font-size: 0.88rem; background: #fff; color: var(--accent);
+  border: 1px solid var(--accent-border); border-radius: 999px; padding: 0.25rem 0.75rem;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+}
+.screen .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.screen .chip.on::before { content: "✓"; }
+.screen .actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; align-items: center; }
+.screen .primary { font: inherit; font-weight: 600; background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 8px; padding: 0.4rem 1.2rem; }
+.screen .secondary { font: inherit; background: #fff; color: var(--accent); border: 1px solid var(--accent-border); border-radius: 8px; padding: 0.4rem 0.9rem; }
+.screen .done { color: var(--ok); font-weight: 600; font-size: 0.9rem; }
+.screen .sum { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.9em; }
+.screen .sum td { padding: 0.2rem 0; border-bottom: 1px solid var(--hair); }
+.screen .sum td:not(:first-child) { text-align: end; font-variant-numeric: tabular-nums; }
+.screen .sum tr:last-child td { border-bottom: 0; font-weight: 700; }
+
+.screen .composer {
+  position: sticky; bottom: 0; z-index: 5; background: #eef3f6; border-top: 1px solid var(--hair);
+  display: flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.7rem;
+}
+.screen .glyph { background: #fff; border: 1px solid var(--accent-border); color: var(--accent); border-radius: 50%; width: 2.3rem; height: 2.3rem; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.screen .draft { flex: 1; min-width: 0; background: #fff; border: 1px solid #ccd6dc; border-radius: 18px; padding: 0.45rem 0.8rem; min-height: 2.3rem; font-size: 0.92rem; }
+.screen .draft.empty { color: #9aa7af; }
+.screen .send { font: inherit; font-size: 0.85rem; font-weight: 600; color: #fff; background: var(--accent); border: 0; border-radius: 18px; padding: 0.5rem 0.9rem; flex: none; }
+.screen .send:disabled { background: #c5d0d7; color: #f4f7f9; }
+
+/* mail */
+.screen .mail { min-height: 100%; background: #fff; }
+.screen .mail-head { position: sticky; top: 0; background: #f1f3f4; border-bottom: 1px solid var(--hair); padding: 0.7rem 0.9rem; display: flex; align-items: center; gap: 0.6rem; }
+.screen .mail-head strong { font-size: 1.05rem; }
+.screen .mail-head .who { margin-inline-start: auto; }
+.screen .inbox { list-style: none; margin: 0; padding: 0; }
+.screen .inbox li { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 0.1rem 0.6rem; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--hair); }
+.screen .inbox .from { font-weight: 700; }
+.screen .inbox .count { color: var(--muted); font-weight: 400; margin-inline-start: 0.3rem; }
+.screen .inbox .date { color: var(--muted); font-size: 0.8rem; text-align: end; }
+.screen .inbox .subject { grid-column: 1 / -1; font-weight: 600; font-size: 0.92rem; }
+.screen .inbox .snippet { grid-column: 1 / -1; color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.screen .inbox li.read { opacity: 0.55; }
+.screen .inbox li.read .from, .screen .inbox li.read .subject { font-weight: 500; }
+.screen .thread { padding: 0.8rem 0.9rem 1.5rem; display: grid; gap: 0.6rem; }
+.screen .thread h2 { font-size: 1.05rem; margin: 0 0 0.3rem; line-height: 1.35; }
+.screen .thread .count-note { color: var(--muted); font-size: 0.8rem; font-weight: 400; }
+.screen .mail-item { border: 1px solid var(--hair); border-radius: 10px; padding: 0.55rem 0.75rem; }
+.screen .mail-item header { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; }
+.screen .mail-item .snippet { color: var(--muted); font-size: 0.85rem; }
+.screen .mail-item.open { border-color: var(--accent-border); }
+.screen .mail-item.open .body { margin-top: 0.5rem; display: grid; gap: 0.4rem; font-size: 0.92rem; }
+.screen .attachment { display: inline-flex; align-items: center; gap: 0.5rem; border: 1px solid #ccd6dc; border-radius: 8px; padding: 0.45rem 0.7rem; font-size: 0.82rem; background: #fafbfc; justify-self: start; }
+.screen .attachment .pdf { color: #fff; background: #c0392b; border-radius: 4px; font-size: 0.68rem; font-weight: 700; padding: 0.1rem 0.3rem; font-family: Arial, sans-serif; }
+
+.screen .viewer { min-height: 100%; background: #525c63; padding-bottom: 1.5rem; }
+.screen .viewer-bar { position: sticky; top: 0; background: #2f373d; color: #fff; padding: 0.6rem 0.9rem; font-size: 0.82rem; display: flex; gap: 0.6rem; align-items: center; }
+.screen .page { background: #fff; margin: 0.9rem 0.6rem 0; padding: 1.1rem 0.9rem 1.3rem; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+
+/* statement — the PDF and the photographed previous statement share one renderer */
+.screen .stmt { font-size: 12.5px; color: #111; }
+.screen .stmt-head { display: grid; gap: 0.15rem; margin-bottom: 0.6rem; }
+.screen .stmt-head strong { font-size: 14px; }
+.screen .stmt-mark { justify-self: start; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 0.05rem 0.4rem; }
+.screen .stmt-mark.final { color: var(--ok); border: 1px solid #a9d3b4; }
+.screen .stmt-mark.forecast { color: var(--warn); border: 1px solid #f0d6a8; }
+.screen .stmt table { width: 100%; border-collapse: collapse; }
+.screen .stmt td { border: 1px solid #9aa3a8; padding: 0.22rem 0.4rem; }
+.screen .stmt td:last-child { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; width: 34%; }
+.screen .stmt tr.reading td:last-child { background: #e9edf0; }
+.screen .stmt tr.total td { color: var(--total); font-weight: 700; font-size: 13.5px; }
+.screen .stmt-thumb { width: 168px; height: 150px; overflow: hidden; border-radius: 8px; background: #fff; }
+.screen .stmt-thumb .stmt { width: 373px; transform: scale(0.45); transform-origin: top right; padding: 0.6rem; }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <h1>מונים בפעולה<span>הדמיה של המערכת המתוכננת</span></h1>
+    <button type="button" class="about-toggle" id="about-toggle" aria-expanded="false" aria-controls="about">על ההדמיה</button>
+  </header>
+
+  <div class="about" id="about" hidden>
+    <p class="lede">
+      סיפור אחד מתחילתו ועד סופו, על מסך טלפון: בעל בניין נכנס עם Google, מוסיף נציג שיפעל בשמו,
+      מצלם את מוני החשמל והמים של דירה, מעלה חשבון קודם כדי שהמערכת תקרא ממנו את התעריפים, ואחרי
+      חודשיים הנציג מצלם שוב והתקופה נסגרת. <strong>כל הממשק הוא צ'אט</strong>, והמערכת מובילה:
+      מציעה, ומבקשת אישור קצר.
+    </p>
+    <div class="facts">
+      <div><h3>השליטה</h3><p>לחיצה על הטלפון משהה וממשיכה. כשההדמיה מושהית אפשר לגלול במסך ולהתקדם צעד־צעד.</p></div>
+      <div><h3>המספרים</h3><p>הקריאות והתעריפים לדוגמה. הצריכה והחיובים מחושבים בדף עצמו מתוכם.</p></div>
+      <div><h3>התמונות</h3><p>המונים מצוירים לפי הצילומים האמיתיים: VEGA דיגיטלי לחשמל ו־ARAD מכני למים.</p></div>
+    </div>
+  </div>
+
+  <div class="bench">
+    <div class="rig">
+      <div class="stage" id="stage">
+        <div class="device">
+          <div class="viewport" id="viewport" role="button" tabindex="0" aria-label="השהיה או המשך של ההדמיה">
+            <div class="statusbar"><span id="clock"></span><span>▮▮▯ 81%</span></div>
+            <div class="screen" id="screen" lang="he"></div>
+            <div class="tap" id="tap"></div>
+            <div class="veil" id="veil" hidden><span>מושהה · לחיצה להמשך</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="transport">
+        <div class="track"><span id="progress"></span></div>
+        <div class="controls">
+          <button type="button" class="primary" id="playpause">השהיה</button>
+          <button type="button" id="prev" title="צעד אחורה">→ צעד</button>
+          <button type="button" id="next" title="צעד קדימה">צעד ←</button>
+          <button type="button" id="restart">מהתחלה</button>
+          <button type="button" id="speed">1×</button>
+          <span class="counter" id="counter"></span>
+        </div>
+        <p class="hint">רווח: השהיה/המשך · חצים: צעד קדימה ואחורה</p>
+      </div>
+    </div>
+
+    <div class="script" id="script"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ═══ The story's data ═══════════════════════════════════════════════════ */
+const OWNER = "owner@example.com";
+const DELEGATE = "delegate@example.com";
+const PROPERTY = "הגפן 7";
+const APARTMENT = "עורף - קרקע - מערב";
+const APARTMENT_LABEL = PROPERTY + " / " + APARTMENT;
+const PERIOD_MONTHS = 2;
+const LINK_DAY = "2026-10-29";
+const CLOSE_DAY = "2027-01-02";
+const TARIFFS = { elec: 0.6432, water: 15.62 };
+const KINDS = {
+  elec:  { name: "חשמל", unit: "קוט״ש", serial: "99840522" },
+  water: { name: "מים",  unit: "קוב",   serial: "2721058" }
+};
+const READINGS = {
+  elec:  { open: 39269.1, close: 40601.1 },
+  water: { open: 1204.6,  close: 1227.1 }
+};
+/* The VEGA display carries a second register just above the first; which one is cumulative is
+   unknown, so the chat defaults to the top line and remembers a correction per meter. */
+const ELEC_SECOND_LINE_OFFSET = 0.2;
+const PREVIOUS_STATEMENT = {
+  apartment: "חזית - קומה 1", from: "2026-08-03", to: "2026-10-03", final: true,
+  waterTariffNote: "תעריף גבוה; תעריף נמוך לתחזוקת חצר",
+  readings: { elec: { open: 28800.5, close: 30132.5 }, water: { open: 682.3, close: 704.8 } }
+};
+const MAIL_SUBJECT = "[" + APARTMENT_LABEL + "] קריאות מונים";
+
+/* ═══ Dates, numbers, money ═════════════════════════════════════════════ */
+function parseIso(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
+function iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function addMonths(s, n) { const d = parseIso(s); return iso(new Date(d.getFullYear(), d.getMonth() + n, d.getDate())); }
+function firstOfNextMonth(s) { const d = parseIso(s); return iso(new Date(d.getFullYear(), d.getMonth() + 1, 1)); }
+function dmy(s) { const [y, m, d] = s.split("-"); return d + "/" + m + "/" + y; }
+function dm(s) { const [, m, d] = s.split("-"); return d + "/" + m; }
+
+const reading = n => n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const amount = n => (Math.round(n * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 });
+const shekels = n => Math.round(n).toLocaleString("en-US") + " ₪";
+const consumption = r => Math.round((r.close - r.open) * 10) / 10;
+const cost = (kind, r) => consumption(r) * TARIFFS[kind];
+const ltr = s => '<span class="ltr num">' + s + "</span>";
+
+function periodStart() { return state.start === "month" ? firstOfNextMonth(LINK_DAY) : LINK_DAY; }
+function periodEnd() { return addMonths(periodStart(), PERIOD_MONTHS); }
+function periodLabel(from, to) { return ltr(dmy(from)) + " – " + ltr(dmy(to)); }
+
+/* ═══ Meter photos, drawn after the real ones ═══════════════════════════ */
+function elecPhoto(value) {
+  const line = n => reading(n).replace(",", "");
+  return '<svg viewBox="0 0 200 150" style="direction:ltr" role="img" aria-label="צילום מונה חשמל">' +
+    '<rect width="200" height="150" fill="#d6d3cc"/>' +
+    '<rect width="200" height="16" fill="#eceae5"/><rect y="134" width="200" height="16" fill="#eceae5"/>' +
+    '<rect x="6" y="22" width="40" height="104" rx="3" fill="#f3f3f1" stroke="#b5b5b0"/>' +
+    '<rect x="16" y="52" width="20" height="34" rx="3" fill="#262626"/><rect x="16" y="62" width="20" height="8" fill="#8e1b1b"/>' +
+    '<rect x="54" y="18" width="98" height="112" rx="5" fill="#e6e7e8" stroke="#979797"/>' +
+    '<text x="103" y="36" text-anchor="middle" font-family="Arial" font-weight="700" font-size="14" fill="#c62828">VEGA</text>' +
+    '<rect x="62" y="42" width="72" height="42" rx="2" fill="#3e5ad6"/>' +
+    '<text x="130" y="59" text-anchor="end" font-family="monospace" font-size="15" fill="#0c1a5e">' + line(value) + "</text>" +
+    '<text x="130" y="79" text-anchor="end" font-family="monospace" font-size="15" fill="#0c1a5e">' + line(value + ELEC_SECOND_LINE_OFFSET) + "</text>" +
+    '<text x="132" y="67" text-anchor="end" font-family="Arial" font-size="5" fill="#9fb1ff">kWh</text>' +
+    '<text x="140" y="62" font-family="Arial" font-size="6" fill="#444">CE</text>' +
+    '<text x="64" y="94" font-family="Arial" font-size="5.5" fill="#333">230V 10(65)A 50-60Hz</text>' +
+    '<circle cx="84" cy="108" r="7" fill="#e8622c" stroke="#a6421c"/>' +
+    '<text x="72" y="124" font-family="Arial" font-size="7" font-weight="700" fill="#222">RESET</text>' +
+    '<text x="146" y="124" text-anchor="end" font-family="Arial" font-size="8" font-weight="700" fill="#222">' + KINDS.elec.serial + "</text>" +
+    '<rect x="158" y="22" width="38" height="104" fill="#3a3a3a"/>' +
+    '<circle cx="170" cy="50" r="5" fill="#777"/><circle cx="185" cy="50" r="5" fill="#777"/>' +
+    '<circle cx="170" cy="96" r="5" fill="#777"/><circle cx="185" cy="96" r="5" fill="#777"/>' +
+    "</svg>";
+}
+
+/* A blurry shot catches the units wheel mid-roll between two digits, under dust. */
+function waterPhoto(value, blurry) {
+  const whole = String(Math.floor(value)).padStart(5, "0");
+  const tenth = String(Math.round(value * 10) % 10);
+  const cell = 15, x0 = 55, y0 = 52, h = 19;
+  let cells = "";
+  for (let i = 0; i < 6; i += 1) {
+    const x = x0 + i * cell;
+    const red = i === 5;
+    cells += '<rect x="' + x + '" y="' + y0 + '" width="' + (cell - 1) + '" height="' + h + '" fill="' + (red ? "#b3261e" : "#efece4") + '"/>';
+    const digit = red ? tenth : whole[i];
+    const fill = red ? "#fff" : "#151515";
+    if (blurry && i === 4) {
+      const next = String((Number(digit) + 1) % 10);
+      cells += '<g clip-path="url(#roll)"><text x="' + (x + 7) + '" y="' + (y0 + 7) + '" text-anchor="middle" font-family="monospace" font-size="15" fill="' + fill + '">' + digit + "</text>" +
+               '<text x="' + (x + 7) + '" y="' + (y0 + 26) + '" text-anchor="middle" font-family="monospace" font-size="15" fill="' + fill + '">' + next + "</text></g>";
+    } else {
+      cells += '<text x="' + (x + 7) + '" y="' + (y0 + 15) + '" text-anchor="middle" font-family="monospace" font-size="15" fill="' + fill + '">' + digit + "</text>";
+    }
+  }
+  const dial = (cx, cy) => '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="#f4e2e0" stroke="#c9a9a4"/><path d="M' + cx + " " + cy + " l3 -6 l-6 0 z\" fill=\"#c62828\"/>";
+  const dust = blurry
+    ? '<g fill="#cfc6b4" opacity="0.55"><circle cx="80" cy="60" r="16"/><circle cx="118" cy="98" r="22"/><circle cx="62" cy="96" r="12"/></g>'
+    : "";
+  /* SVG ids are document-wide, so only the single blurry shot defines and uses them. */
+  const defs = blurry
+    ? '<defs><clipPath id="roll"><rect x="' + (x0 + 4 * cell) + '" y="' + y0 + '" width="' + (cell - 1) + '" height="' + h + '"/></clipPath>' +
+      '<filter id="soft"><feGaussianBlur stdDeviation="1.3"/></filter></defs>'
+    : "";
+  return '<svg viewBox="0 0 200 150" style="direction:ltr" role="img" aria-label="צילום מונה מים">' + defs +
+    '<rect width="200" height="150" fill="#6d665c"/>' +
+    '<g' + (blurry ? ' filter="url(#soft)"' : "") + ">" +
+    '<circle cx="100" cy="75" r="66" fill="#8c7b58"/><circle cx="100" cy="75" r="54" fill="#e8e3d6"/>' +
+    '<text x="68" y="44" font-family="Arial" font-size="8" fill="#555">m³</text>' +
+    cells +
+    '<rect x="72" y="76" width="56" height="12" fill="#d8d3c5"/>' +
+    '<text x="100" y="85" text-anchor="middle" font-family="Arial" font-size="9" fill="#222">' + KINDS.water.serial + "</text>" +
+    '<text x="66" y="110" font-family="Arial" font-weight="700" font-size="12" fill="#1f3c8c">ARAD</text>' +
+    dial(122, 102) + dial(138, 88) + dial(112, 118) +
+    dust + "</g></svg>";
+}
+
+/* ═══ The statement: the emailed PDF, and the previous one photographed for its tariffs ═══ */
+function statementHtml(d) {
+  const r = d.readings;
+  const rows = [
+    ["עלות קוט״ש (כולל מע״מ)", "₪ " + TARIFFS.elec.toFixed(4), ""],
+    ["עלות קוב מים (כולל מע״מ" + (d.waterTariffNote ? "; " + d.waterTariffNote : "") + ")", "₪ " + TARIFFS.water.toFixed(3), ""],
+    ["מונה כניסה חשמל", reading(r.elec.open), "reading"],
+    ["מונה יציאה חשמל", reading(r.elec.close), "reading"],
+    ["סה״כ קוט״ש שנצרכו", amount(consumption(r.elec)), ""],
+    ["מונה כניסה מים", reading(r.water.open), "reading"],
+    ["מונה יציאה מים", reading(r.water.close), "reading"],
+    ["סה״כ קוב מים שנצרכו", amount(consumption(r.water)), ""],
+    ["סה״כ עלות חשמל לתקופה", shekels(cost("elec", r.elec)), ""],
+    ["סה״כ עלות מים לתקופה", shekels(cost("water", r.water)), ""]
+  ];
+  const total = cost("elec", r.elec) + cost("water", r.water);
+  return '<div class="stmt">' +
+    '<div class="stmt-head"><strong>' + PROPERTY + " · " + d.apartment + "</strong>" +
+      "<span>תקופה " + periodLabel(d.from, d.to) + "</span>" +
+      '<span class="stmt-mark ' + (d.final ? "final" : "forecast") + '">' + (d.final ? "חישוב סופי" : "צפי") + "</span></div>" +
+    "<table>" + rows.map(([label, value, cls]) =>
+      '<tr class="' + cls + '"><td>' + label + '</td><td><span class="ltr">' + value + "</span></td></tr>").join("") +
+      '<tr class="total" data-t="pdf-total"><td>סה״כ עלות חשמל ומים לתקופה</td><td><span class="ltr">' + shekels(total) + "</span></td></tr>" +
+    "</table></div>";
+}
+
+function currentStatement() {
+  return { apartment: APARTMENT, from: periodStart(), to: periodEnd(), final: true, readings: READINGS };
+}
+
+/* ═══ Icons ═════════════════════════════════════════════════════════════ */
+const ICONS = {
+  gauge: '<svg class="icon" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/><circle cx="12" cy="16" r="1.4"/></svg>',
+  camera: '<svg class="icon" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  back: '<svg class="icon" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
+  clip: '<svg class="icon" viewBox="0 0 24 24"><path d="M8 12.5l5.5-5.5a3 3 0 1 1 4.2 4.2l-7 7a5 5 0 0 1-7-7l6-6"/></svg>'
+};
+
+/* ═══ Chat building blocks ══════════════════════════════════════════════ */
+const user = (html, t) => '<li class="msg user"' + (t ? ' data-t="' + t + '"' : "") + "><p>" + html + "</p></li>";
+const photos = (t, ...svgs) => '<li class="msg user photo" data-t="' + t + '"><div class="shots">' + svgs.join("") + "</div></li>";
+const blurryWaterPhoto = () => waterPhoto(READINGS.water.open, true);
+/* Key: the data-t of a tappable thumbnail. Value: the photo it expands to. */
+const EXPANDABLE = { "photo-water-blurry": blurryWaterPhoto };
+const bot = (html, t, extra) => '<li class="msg bot' + (extra ? " " + extra : "") + '"' + (t ? ' data-t="' + t + '"' : "") + ">" + html + "</li>";
+const kind = k => '<span class="kind kind-' + k + '">' + KINDS[k].name + "</span>";
+const meterTitle = (k, isNew) => '<div class="card-title">' + kind(k) + " מונה " + ltr(KINDS[k].serial) + (isNew ? '<span class="tag-new">חדש</span>' : "") + "</div>";
+const facts = pairs => '<dl class="facts-list">' + pairs.map(([dt, dd]) => "<dt>" + dt + "</dt><dd>" + dd + "</dd>").join("") + "</dl>";
+const chip = (label, t, on) => '<button class="chip' + (on ? " on" : "") + '" data-t="' + t + '">' + label + "</button>";
+const confirm = (t, done, label = "אישור", extra = "") =>
+  '<div class="actions">' + (done ? '<span class="done">✓ אושר</span>' : '<button class="primary" data-t="' + t + '">' + label + "</button>" + extra) + "</div>";
+
+const OWNER_CHAT = [
+  s => bot("<p>שלום " + ltr(OWNER) + ". החשבון חדש ועדיין ריק.</p>" +
+           "<p>אפשר להתחיל בצילום של מונה מים או חשמל: אזהה אותו ואציע לאיזו דירה לשייך. אפשר גם להוסיף מי שיפעל בשמך.</p>" +
+           '<div class="chips">' + chip(ICONS.camera + " צילום מונה", "chip-photo") + chip("הוספת מורשה", "chip-delegate") + "</div>"),
+  s => user("הוסף את " + ltr(DELEGATE) + " כמורשה לפעול בחשבון שלי"),
+  s => bot('<div class="card-title">הוספת מורשה</div>' +
+           "<p>הכתובת " + ltr(DELEGATE) + " תוכל לצלם מונים, לשאול ולתקן נתונים בחשבון הזה.</p>" +
+           '<p class="muted">היא לא תוכל להוסיף מורשים, ולא יהיה לה חשבון משלה.</p>' +
+           confirm("confirm-delegate", s.delegateOk), "delegate-card"),
+  s => bot("<p>הכתובת " + ltr(DELEGATE) + " נוספה. בכניסה עם Google היא תגיע ישר לחשבון הזה.</p>"),
+
+  s => photos("photo-elec", elecPhoto(READINGS.elec.open)),
+  s => bot(meterTitle("elec", true) +
+           "<p>בצג שני מספרים. איזה מהם הקריאה?</p>" +
+           '<div class="chips" data-t="reading-choice">' +
+             chip(ltr(reading(READINGS.elec.open)) + " (עליון)", "pick-top", s.elecPick === "top") +
+             chip(ltr(reading(READINGS.elec.open + ELEC_SECOND_LINE_OFFSET)) + " (תחתון)", "pick-bottom", s.elecPick === "bottom") + "</div>" +
+           "<p>המונה עדיין לא מקושר לדירה. לאיזה נכס ודירה הוא שייך?</p>"),
+  s => user(PROPERTY + ", " + APARTMENT),
+  s => bot('<div class="card-title">קישור מונה חדש</div>' +
+           facts([
+             ["נכס", PROPERTY + ' <span class="tag-new">חדש</span>'],
+             ["דירה", APARTMENT + ' <span class="tag-new">חדשה</span>'],
+             ["מונה", kind("elec") + " " + ltr(KINDS.elec.serial)],
+             ["קריאת פתיחה", ltr(reading(READINGS.elec.open)) + " " + KINDS.elec.unit + " · " + ltr(dmy(LINK_DAY))],
+             ["תחילת תקופה", '<div class="chips" data-t="start-choice">' +
+                chip(ltr(dm(LINK_DAY)) + " (היום)", "start-today", s.start === "today") +
+                chip(ltr(dm(firstOfNextMonth(LINK_DAY))) + " (תחילת חודש)", "start-month", s.start === "month") + "</div>"],
+             ["אורך תקופה", "חודשיים · עד " + ltr(dmy(periodEnd()))]
+           ]) +
+           confirm("confirm-elec", s.elecOk), "link-card"),
+  s => bot("<p><b>נשמר.</b> " + APARTMENT_LABEL + " · " + KINDS.elec.name + "</p>" +
+           facts([["קריאת פתיחה", ltr(reading(READINGS.elec.open)) + " " + KINDS.elec.unit + " · " + ltr(dmy(LINK_DAY))],
+                  ["תקופה", periodLabel(periodStart(), periodEnd())]]) +
+           '<p class="muted">אין עדיין קריאה קודמת, ולכן אין צריכה או צפי.</p>' +
+           "<p>חסרים תעריפים. אפשר להקליד אותם, או לצלם חשבון קודם.</p>"),
+
+  s => '<li class="msg user photo" data-t="photo"><div class="stmt-thumb">' + statementHtml(PREVIOUS_STATEMENT) + "</div></li>",
+  s => bot('<div class="card-title">תעריפים מחשבון קודם</div>' +
+           "<p>זיהיתי חשבון של " + PROPERTY + " / " + PREVIOUS_STATEMENT.apartment + ", עד " + ltr(dmy(PREVIOUS_STATEMENT.to)) + ".</p>" +
+           facts([[kind("elec"), ltr("₪ " + TARIFFS.elec.toFixed(4)) + " ל" + KINDS.elec.unit],
+                  [kind("water"), ltr("₪ " + TARIFFS.water.toFixed(3)) + " ל" + KINDS.water.unit + " (תעריף גבוה)"]]) +
+           '<p class="muted">כולל מע״מ. התעריף הנמוך לתחזוקת חצר לא נשמר, כי אין בחשבון מוני חצר.</p>' +
+           confirm("confirm-tariffs", s.tariffsOk, "אישור ושמירה"), "tariff-card"),
+  s => bot("<p>התעריפים נשמרו, בתוקף מ־" + ltr(dmy(LINK_DAY)) + ".</p>"),
+
+  s => photos("photo-water-blurry", blurryWaterPhoto()),
+  s => bot(meterTitle("water", true) +
+           "<p>לא הצלחתי לקרוא את הקריאה בוודאות: <b>" + ltr(String(Math.floor(READINGS.water.open)).padStart(5, "0").slice(0, 4) + "?." + String(Math.round(READINGS.water.open * 10) % 10)) + "</b></p>" +
+           '<p class="muted">ספרת היחידות באמצע סיבוב, ויש אבק על הזכוכית.</p>' +
+           "<p>אפשר לצלם שוב, קרוב וישר מול המונה, או לכתוב את הקריאה.</p>", "unclear", "alert"),
+  s => photos("photo-water", waterPhoto(READINGS.water.open, false)),
+  s => bot(meterTitle("water", true) +
+           facts([["קריאה", ltr(reading(READINGS.water.open)) + " " + KINDS.water.unit]]) +
+           "<p>הצעה: לשייך לדירה <b>" + APARTMENT_LABEL + "</b>, שמונה החשמל שלה קושר לפני 7 דקות.</p>" +
+           '<p class="muted">תקופת הדירה: ' + periodLabel(periodStart(), periodEnd()) + ".</p>" +
+           confirm("confirm-water", s.waterOk, "אישור", '<button class="secondary">דירה אחרת</button>'), "water-proposal"),
+  s => bot("<p><b>נשמר.</b> " + APARTMENT_LABEL + " · " + KINDS.water.name + "</p>" +
+           facts([["קריאת פתיחה", ltr(reading(READINGS.water.open)) + " " + KINDS.water.unit + " · " + ltr(dmy(LINK_DAY))]]) +
+           '<p class="muted">לדירה שני מונים ותקופה אחת משותפת.</p>')
+];
+
+function closeCard(k, done, n) {
+  const r = READINGS[k];
+  const register = k === "elec" ? '<br><span class="muted">המספר העליון, כפי שנקבע למונה הזה</span>' : "";
+  return bot('<div class="card-title">' + kind(k) + " " + APARTMENT_LABEL + "</div>" +
+    '<p class="muted">מונה ' + ltr(KINDS[k].serial) + " · תמונה " + n + " מתוך 2</p>" +
+    facts([
+      ["קריאה קודמת", ltr(reading(r.open)) + " · " + ltr(dmy(LINK_DAY))],
+      ["קריאה נוכחית", ltr(reading(r.close)) + " · " + ltr(dmy(CLOSE_DAY)) + register],
+      ["צריכה", ltr(amount(consumption(r))) + " " + KINDS[k].unit],
+      ["חיוב", ltr(shekels(cost(k, r)))]
+    ]) +
+    "<p>זו הקריאה הראשונה אחרי סוף התקופה (" + ltr(dmy(periodEnd())) + "), ולכן היא סוגרת אותה.</p>" +
+    confirm("confirm-close-" + k, done, "אישור וסגירה"), "close-" + k);
+}
+
+const DELEGATE_CHAT = [
+  s => bot("<p>שלום " + ltr(DELEGATE) + ". החשבון: <b>" + ltr(OWNER) + "</b>.</p>" +
+           "<p>התקופה של <b>" + APARTMENT_LABEL + "</b> הסתיימה ב־" + ltr(dmy(periodEnd())) + ". חסרות קריאות סגירה לחשמל ולמים.</p>" +
+           '<div class="chips">' + chip(ICONS.camera + " צילום מונים", "chip-photo") + "</div>", "delegate-welcome"),
+  s => photos("photo-closing", elecPhoto(READINGS.elec.close), waterPhoto(READINGS.water.close, false)),
+  s => closeCard("elec", s.closeElec, 1),
+  s => closeCard("water", s.closeWater, 2),
+  s => {
+    const total = cost("elec", READINGS.elec) + cost("water", READINGS.water);
+    const row = k => "<tr><td>" + kind(k) + "</td><td>" + ltr(amount(consumption(READINGS[k]))) + " " + KINDS[k].unit + "</td><td>" + ltr(shekels(cost(k, READINGS[k]))) + "</td></tr>";
+    return bot("<p><b>התקופה " + periodLabel(periodStart(), periodEnd()) + " נסגרה.</b></p>" +
+      '<table class="sum">' + row("elec") + row("water") + "<tr><td>סה״כ</td><td></td><td>" + ltr(shekels(total)) + "</td></tr></table>" +
+      "<p>נפתחה תקופה חדשה: " + periodLabel(periodEnd(), addMonths(periodEnd(), PERIOD_MONTHS)) + ".</p>" +
+      '<p class="muted">דוח PDF נשלח ל־' + ltr(OWNER) + ".</p>", "summary");
+  }
+];
+
+/* ═══ Screens ═══════════════════════════════════════════════════════════ */
+function landingHtml() {
+  return '<main class="landing">' +
+    '<span class="brand">' + ICONS.gauge + "מונים</span>" +
+    '<p class="pitch">מצלמים את המונה. המערכת מזהה את הדירה, מחשבת צריכה וחיוב, ושולחת דוח.</p>' +
+    "<ul><li>מוני מים וחשמל, כל דירה בנפרד</li><li>צפי לסוף התקופה, וחישוב סופי כשהיא נסגרת</li><li>הכול בצ'אט, בעברית</li></ul>" +
+    '<div class="signin-wrap"><button class="google" data-t="signin"><span class="g">G</span>התחברות עם Google</button>' +
+    '<span class="muted">כניסה רק עם חשבון Google</span></div>' +
+    "</main>";
+}
+
+function chatHtml() {
+  const owner = state.user === "owner";
+  const conv = owner ? OWNER_CHAT : DELEGATE_CHAT;
+  const shown = owner ? state.ownerShown : state.delegateShown;
+  const who = owner
+    ? "<b>" + ltr(OWNER) + "</b>"
+    : "<b>" + ltr(DELEGATE) + "</b><br>בחשבון של " + ltr(OWNER);
+  const messages = conv.slice(0, shown).map(m => m(state)).join("");
+  /* Send stays dimmed while there is nothing to send, or while the chat waits on a confirm
+     button. */
+  const awaitingButton = messages.includes('class="primary"');
+  const sendable = state.draft !== "" && !awaitingButton;
+  return '<div class="chat">' +
+    '<header class="app-head"><span class="brand">' + ICONS.gauge + 'מונים</span><span class="who">' + who + "</span></header>" +
+    '<ul class="msgs">' + messages + "</ul>" +
+    '<div class="composer"><span class="glyph" data-t="camera">' + ICONS.camera + "</span>" +
+      '<div class="draft' + (state.draft ? "" : " empty") + '" data-t="composer">' + (state.draft || "הודעה, או צילום של מונה") + "</div>" +
+      '<button class="send" data-t="send"' + (sendable ? "" : " disabled") + ">שליחה</button></div>" +
+    (state.expanded === null ? "" :
+      '<div class="lightbox" data-t="lightbox"><button class="lightbox-close" data-t="lightbox-close" aria-label="סגירה">✕</button>' +
+      EXPANDABLE[state.expanded]() + "</div>") +
+    "</div>";
+}
+
+const MAILS = [
+  { day: CLOSE_DAY, text: "חשמל · קריאת סגירה " + reading(READINGS.elec.close) },
+  { day: CLOSE_DAY, text: "מים · קריאת סגירה " + reading(READINGS.water.close) }
+];
+
+function mailSnippet() {
+  const total = cost("elec", READINGS.elec) + cost("water", READINGS.water);
+  return "חשמל " + shekels(cost("elec", READINGS.elec)) + " · מים " + shekels(cost("water", READINGS.water)) + " · סה״כ " + shekels(total);
+}
+
+function mailHead(title) {
+  return '<header class="mail-head">' + title + '<span class="who">' + ltr(OWNER) + "</span></header>";
+}
+
+function inboxHtml() {
+  const last = MAILS[MAILS.length - 1];
+  return '<main class="mail">' + mailHead("<strong>דואר נכנס</strong>") +
+    '<ul class="inbox"><li data-t="thread">' +
+      '<span class="from">מונים<span class="count">' + MAILS.length + "</span></span>" +
+      '<span class="date">' + ltr(dm(last.day)) + " " + ICONS.clip + "</span>" +
+      '<span class="subject">' + MAIL_SUBJECT + "</span>" +
+      '<span class="snippet">' + mailSnippet() + "</span></li></ul></main>";
+}
+
+function threadHtml() {
+  const items = MAILS.map((m, i) => {
+    const latest = i === MAILS.length - 1;
+    return '<article class="mail-item' + (latest ? " open" : "") + '">' +
+      "<header><b>מונים</b><span>" + ltr(dmy(m.day)) + "</span></header>" +
+      '<div class="snippet">' + m.text + "</div>" +
+      (latest
+        ? '<div class="body"><p>קריאות הסגירה של התקופה ' + periodLabel(periodStart(), periodEnd()) + " אושרו.</p>" +
+          "<p>" + mailSnippet() + "</p><p>הדוח המלא מצורף.</p>" +
+          '<span class="attachment" data-t="attachment"><span class="pdf">PDF</span>' + ltr(pdfName()) + "</span></div>"
+        : "") +
+      "</article>";
+  }).join("");
+  return '<main class="mail">' + mailHead('<span data-t="back">' + ICONS.back + "</span><strong>שיחה</strong>") +
+    '<div class="thread"><h2>' + MAIL_SUBJECT + ' <span class="count-note">· ' + MAILS.length + " הודעות</span></h2>" + items + "</div></main>";
+}
+
+function pdfName() { return "hagefen-7_back-ground-west_" + CLOSE_DAY + ".pdf"; }
+
+function pdfHtml() {
+  return '<main class="viewer"><div class="viewer-bar">' + ICONS.back + ltr(pdfName()) + "</div>" +
+    '<div class="page">' + statementHtml(currentStatement()) + "</div></main>";
+}
+
+const SCREENS = { landing: landingHtml, chat: chatHtml, inbox: inboxHtml, thread: threadHtml, pdf: pdfHtml };
+
+/* ═══ State ═════════════════════════════════════════════════════════════ */
+const state = {};
+function resetState() {
+  Object.assign(state, {
+    screen: "landing", user: null, clock: "29/10 09:05",
+    ownerShown: 0, delegateShown: 0, draft: "", expanded: null,
+    delegateOk: false, elecPick: "top", start: "today", elecOk: false,
+    tariffsOk: false, waterOk: false, closeElec: false, closeWater: false
+  });
+}
+
+/* ═══ The script ════════════════════════════════════════════════════════ */
+const ACTS = [
+  { name: "התחברות" },
+  { name: "הוספת מורשה" },
+  { name: "קישור מונה החשמל" },
+  { name: "תעריפים מחשבון קודם" },
+  { name: "מונה המים: צילום מטושטש" },
+  { name: "חודשיים אחר כך: סגירת התקופה" },
+  { name: "הדוח במייל" }
+];
+
+const ownerUpTo = n => () => { state.ownerShown = n; };
+const delegateUpTo = n => () => { state.delegateShown = n; };
+
+const BEATS = [
+  /* ── Act 0 ── */
+  { act: 0, hold: 3800, cap: "הכניסה למערכת רק דרך חשבון Google, בלי סיסמה נפרדת.",
+    apply() { Object.assign(state, { screen: "landing", user: null }); } },
+  { act: 0, hold: 4800, tap: "signin", clock: "29/10 09:06",
+    cap: "כתובת שנכנסת בפעם הראשונה מקבלת חשבון משלה. המערכת מציעה מה לעשות, במקום לחכות להוראות.",
+    apply() { Object.assign(state, { screen: "chat", user: "owner", ownerShown: 1 }); } },
+
+  /* ── Act 1 ── */
+  { act: 1, hold: 2600, tap: "chip-delegate", cap: "כל הפעולות בצ'אט, בשפה חופשית.",
+    apply() { state.draft = "הוסף את " + DELEGATE + " כמורשה לפעול בחשבון שלי"; } },
+  { act: 1, hold: 4600, tap: "send", flash: "delegate-card",
+    cap: "לפני כל שינוי המערכת מסבירה מה יקרה ומבקשת אישור.",
+    apply() { state.draft = ""; ownerUpTo(3)(); } },
+  { act: 1, hold: 4400, tap: "confirm-delegate",
+    cap: "הנציג יפעל רק בחשבון הזה. רק בעל החשבון מנהל את רשימת המורשים.",
+    apply() { state.delegateOk = true; ownerUpTo(4)(); } },
+
+  /* ── Act 2 ── */
+  { act: 2, hold: 2800, tap: "camera", clock: "29/10 09:12", cap: "צילום של מונה החשמל בארון.",
+    apply: ownerUpTo(5) },
+  { act: 2, hold: 6200, flash: "reading-choice",
+    cap: "המערכת מזהה את סוג המונה ואת המספר הסידורי שלו. בצג הזה שני מספרים: העליון מסומן כברירת מחדל, ובחירה אחרת תישמר למונה הזה.",
+    apply: ownerUpTo(6) },
+  { act: 2, hold: 2600, tap: "composer", cap: "המונה לא מוכר, אז המערכת שואלת לאיזו דירה הוא שייך. כשיש כבר נכסים ודירות בחשבון, היא מציעה מתוכם.",
+    apply() { state.draft = PROPERTY + ", " + APARTMENT; } },
+  { act: 2, hold: 4600, tap: "send", flash: "link-card",
+    cap: "סיכום לפני שמירה: נכס ודירה חדשים, קריאת פתיחה ותחילת תקופה.",
+    apply() { state.draft = ""; ownerUpTo(8)(); } },
+  { act: 2, hold: 5400, tap: "start-month", flash: "start-choice",
+    cap: "התמונה צולמה ב־29/10, אבל השכירות מתחילה ב־1/11. הקריאה מהתמונה משמשת קריאת פתיחה לתקופה שמתחילה ב־1/11.",
+    apply() { state.start = "month"; } },
+  { act: 2, hold: 5200, tap: "confirm-elec",
+    cap: "קריאת פתיחה לא שולחת דוח, כי עוד אין צריכה לדווח עליה. כשחסר משהו, המערכת אומרת מה ואיך להשלים.",
+    apply() { state.elecOk = true; ownerUpTo(9)(); } },
+
+  /* ── Act 3 ── */
+  { act: 3, hold: 3000, tap: "camera", clock: "29/10 09:15", cap: "במקום להקליד תעריפים, אפשר לצלם חשבון קודם.",
+    apply: ownerUpTo(10) },
+  { act: 3, hold: 6000, flash: "tariff-card",
+    cap: "המערכת קוראת מהחשבון את התעריפים כולל מע״מ ומציגה אותם לאישור. התעריף הנמוך לחצר לא רלוונטי, ולכן לא נשמר.",
+    apply: ownerUpTo(11) },
+  { act: 3, hold: 3800, tap: "confirm-tariffs",
+    cap: "התעריפים נשמרים בטבלה מרכזית לחשבון, עם תאריך תחולה.",
+    apply() { state.tariffsOk = true; ownerUpTo(12)(); } },
+
+  /* ── Act 4 ── */
+  { act: 4, hold: 3200, tap: "camera", clock: "29/10 09:18",
+    cap: "צילום של מונה המים: אבק על הזכוכית, וספרה באמצע סיבוב.",
+    apply: ownerUpTo(13) },
+  { act: 4, hold: 5600, flash: "unclear",
+    cap: "המערכת לא מנחשת. היא אומרת מה לא הצליחה לקרוא, ומבקשת צילום נוסף או הקלדה.",
+    apply: ownerUpTo(14) },
+  { act: 4, hold: 5200, tap: "photo-water-blurry",
+    cap: "לחיצה על תמונה מגדילה אותה. כאן רואים למה הקריאה לא ודאית: ספרת היחידות באמצע סיבוב.",
+    apply() { state.expanded = "photo-water-blurry"; } },
+  { act: 4, hold: 1800, tap: "lightbox-close", cap: "ה־✕ סוגר את התמונה וחוזר לצ'אט.",
+    apply() { state.expanded = null; } },
+  { act: 4, hold: 2600, tap: "camera", clock: "29/10 09:19", cap: "צילום שני, מקרוב.",
+    apply: ownerUpTo(15) },
+  { act: 4, hold: 6200, flash: "water-proposal",
+    cap: "המערכת מציעה לשייך את מונה המים לדירה שמונה החשמל שלה קושר זה עתה. התקופה שייכת לדירה, ולכן לא נשאלת שוב.",
+    apply: ownerUpTo(16) },
+  { act: 4, hold: 4200, tap: "confirm-water", cap: "לדירה שני מונים, ותקופה אחת משותפת.",
+    apply() { state.waterOk = true; ownerUpTo(17)(); } },
+
+  /* ── Act 5 ── */
+  { act: 5, hold: 3600, clock: "02/01 08:40",
+    cap: "חודשיים אחר כך. הפעם נכנס הנציג, " + DELEGATE + ".",
+    apply() { Object.assign(state, { screen: "landing", user: null }); } },
+  { act: 5, hold: 5600, tap: "signin", clock: "02/01 08:41", flash: "delegate-welcome",
+    cap: "הנציג מגיע ישר לחשבון של בעל הבניין. המערכת יודעת שהתקופה הסתיימה ב־01/01, ומבקשת קריאות סגירה.",
+    apply() { Object.assign(state, { screen: "chat", user: "delegate" }); delegateUpTo(1)(); } },
+  { act: 5, hold: 3400, tap: "camera", clock: "02/01 08:44",
+    cap: "שתי תמונות ברצף, חשמל ומים. המערכת מעבדת אותן אחת־אחת.",
+    apply: delegateUpTo(2) },
+  { act: 5, hold: 7000, flash: "close-elec",
+    cap: "המונה מוכר, אז אין שאלות על נכס ודירה. הקריאה נלקחת מהמספר העליון, כפי שנקבע למונה הזה. זו הקריאה הראשונה אחרי סוף התקופה, ולכן היא מוצעת כקריאת סגירה.",
+    apply: delegateUpTo(3) },
+  { act: 5, hold: 5000, tap: "confirm-close-elec", flash: "close-water",
+    cap: "החיוב הוא צריכה כפול תעריף, בלי רכיבים נוספים.",
+    apply() { state.closeElec = true; delegateUpTo(4)(); } },
+  { act: 5, hold: 6000, tap: "confirm-close-water", flash: "summary",
+    cap: "התקופה נסגרת, ותקופה חדשה נפתחת מאותן קריאות.",
+    apply() { state.closeWater = true; delegateUpTo(5)(); } },
+
+  /* ── Act 6 ── */
+  { act: 6, hold: 5600, clock: "02/01 08:47", scroll: "top", flash: "thread",
+    cap: "תיבת הדואר של בעל הבניין. נושא המייל קבוע לכל דירה, ולכן כל המיילים שלה מקובצים לשיחה אחת.",
+    apply() { state.screen = "inbox"; } },
+  { act: 6, hold: 5000, tap: "thread", scroll: "attachment",
+    cap: "מייל לכל קריאת סגירה, של החשמל ושל המים. גם המיילים של התקופות הבאות ייכנסו לאותה שיחה.",
+    apply() { state.screen = "thread"; } },
+  { act: 6, hold: 5200, tap: "attachment", scroll: "top",
+    cap: "הדוח: תעריפים, קריאות כניסה ויציאה, צריכה וחיוב לכל מונה.",
+    apply() { state.screen = "pdf"; } },
+  { act: 6, hold: 6000, scroll: "pdf-total", flash: "pdf-total",
+    cap: "מסומן כחישוב סופי, כי התקופה נסגרה. לפני הסגירה, אותו דוח מציג צפי.",
+    apply() {} }
+];
+
+/* ═══ Player ════════════════════════════════════════════════════════════ */
+const screenEl = document.getElementById("screen");
+const viewportEl = document.getElementById("viewport");
+const stageEl = document.getElementById("stage");
+const tapEl = document.getElementById("tap");
+const veilEl = document.getElementById("veil");
+const clockEl = document.getElementById("clock");
+const progressEl = document.getElementById("progress");
+const counterEl = document.getElementById("counter");
+const playpauseEl = document.getElementById("playpause");
+const speedEl = document.getElementById("speed");
+const scriptEl = document.getElementById("script");
+
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let cursor = 0;      // index of the beat that runs next, or is running now
+let playing = true;
+let speed = 1;
+let token = 0;       // bumping it cancels whatever beat is mid-flight
+
+function render() {
+  const keep = screenEl.scrollTop;
+  screenEl.innerHTML = SCREENS[state.screen]();
+  screenEl.scrollTop = keep;
+  clockEl.textContent = state.clock;
+  paintReadout();
+}
+
+function readoutValues() {
+  const meters = (state.elecOk ? 1 : 0) + (state.waterOk ? 1 : 0);
+  const closed = (state.closeElec ? 1 : 0) + (state.closeWater ? 1 : 0);
+  const bill = state.closeElec && state.closeWater
+    ? shekels(cost("elec", READINGS.elec) + cost("water", READINGS.water)) : null;
+  return {
+    meters: String(meters),
+    readings: String(meters + closed),
+    tariffs: state.tariffsOk ? "נשמרו" : null,
+    bill
+  };
+}
+
+function buildScript() {
+  scriptEl.innerHTML = ACTS.map((act, i) =>
+    '<section class="act" data-act="' + i + '">' +
+      '<button type="button" class="head"><span class="no">מערכה ' + (i + 1) + '</span>' +
+      '<span class="name">' + act.name + '</span><span class="beat" data-beatcount></span></button>' +
+      '<div class="body"><p class="caption"></p>' +
+        '<dl class="readout">' +
+          '<div><dt>מונים</dt><dd data-r="meters"></dd></div>' +
+          '<div><dt>קריאות</dt><dd data-r="readings"></dd></div>' +
+          '<div><dt>תעריפים</dt><dd data-r="tariffs"></dd></div>' +
+          '<div><dt>חיוב לתקופה</dt><dd data-r="bill"></dd></div>' +
+        "</dl></div></section>").join("");
+  scriptEl.querySelectorAll(".act .head").forEach((head, i) =>
+    head.addEventListener("click", () => seekTo(BEATS.findIndex(b => b.act === i), true)));
+}
+
+function paintReadout() {
+  const values = readoutValues();
+  scriptEl.querySelectorAll("[data-r]").forEach(node => {
+    const v = values[node.getAttribute("data-r")];
+    node.textContent = v === null ? "—" : v;
+    node.classList.toggle("unset", v === null);
+  });
+}
+
+function paintScript(index) {
+  const beat = BEATS[index];
+  scriptEl.querySelectorAll(".act").forEach((node, i) => {
+    node.classList.toggle("live", i === beat.act);
+    node.classList.toggle("done", i < beat.act);
+    if (i === beat.act) {
+      node.querySelector(".caption").textContent = beat.cap;
+      const within = BEATS.filter(b => b.act === i);
+      node.querySelector("[data-beatcount]").textContent = (within.indexOf(beat) + 1) + " / " + within.length;
+    }
+  });
+  progressEl.style.width = ((index + 1) / BEATS.length * 100) + "%";
+  counterEl.textContent = (index + 1) + " / " + BEATS.length;
+}
+
+function target(name) { return screenEl.querySelector('[data-t="' + name + '"]'); }
+function scale() { return Number(stageEl.style.getPropertyValue("--k")); }
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, reduced ? Math.min(ms, 400) : ms / speed));
+}
+
+/* Position within the scrolled content, in the screen's own unscaled pixels. */
+function contentTop(el) {
+  return (el.getBoundingClientRect().top - screenEl.getBoundingClientRect().top) / scale() + screenEl.scrollTop;
+}
+
+function smoothScroll(top, instant) {
+  const max = screenEl.scrollHeight - screenEl.clientHeight;
+  screenEl.scrollTo({ top: Math.max(0, Math.min(top, max)), behavior: reduced || instant ? "auto" : "smooth" });
+}
+
+function settleScroll(beat, instant) {
+  if (beat.scroll === "top") smoothScroll(0, instant);
+  else if (beat.scroll) smoothScroll(contentTop(target(beat.scroll)) - 120, instant);
+  else if (state.screen === "chat") smoothScroll(screenEl.scrollHeight, instant);
+}
+
+/* The sticky header and composer cover the screen's edges, so a target must clear both. */
+function ensureVisible(el) {
+  const top = contentTop(el);
+  const height = el.getBoundingClientRect().height / scale();
+  const viewTop = screenEl.scrollTop + 60;
+  const viewBottom = screenEl.scrollTop + screenEl.clientHeight - 70;
+  if (top < viewTop || top + height > viewBottom) {
+    smoothScroll(top - screenEl.clientHeight / 2 + height / 2);
+    return true;
+  }
+  return false;
+}
+
+function placeCursor(el) {
+  const r = el.getBoundingClientRect();
+  const v = viewportEl.getBoundingClientRect();
+  const k = scale();
+  const x = (r.left + r.width / 2 - v.left) / k;
+  const y = (r.top + r.height / 2 - v.top) / k;
+  tapEl.style.transform = "translate(" + x + "px," + y + "px)";
+  tapEl.classList.add("on");
+}
+
+function flash(name) { target(name).classList.add("tour-flash"); }
+
+async function runBeat(index, mine) {
+  const beat = BEATS[index];
+  paintScript(index);
+
+  if (beat.tap) {
+    const el = target(beat.tap);
+    if (ensureVisible(el)) { await wait(450); if (token !== mine) return; }
+    placeCursor(el);
+    await wait(reduced ? 60 : 460);
+    if (token !== mine) return;
+    tapEl.classList.remove("hit");
+    void tapEl.offsetWidth;
+    tapEl.classList.add("hit");
+    await wait(reduced ? 40 : 260);
+    if (token !== mine) return;
+  } else {
+    tapEl.classList.remove("on");
+  }
+
+  beat.apply();
+  if (beat.clock) state.clock = beat.clock;
+  render();
+  tapEl.classList.remove("on");
+  settleScroll(beat, false);
+  if (beat.flash) flash(beat.flash);
+
+  await wait(beat.hold);
+}
+
+async function loop() {
+  const mine = ++token;
+  while (playing && token === mine && cursor < BEATS.length) {
+    await runBeat(cursor, mine);
+    if (token !== mine) return;
+    cursor += 1;
+  }
+  if (token === mine && cursor >= BEATS.length) {
+    playing = false;
+    playpauseEl.textContent = "שוב";
+    veilEl.hidden = true;
+    tapEl.classList.remove("on");
+  }
+}
+
+function setPlaying(on) {
+  playing = on;
+  playpauseEl.textContent = on ? "השהיה" : "המשך";
+  veilEl.hidden = on;
+  if (on) loop(); else { token += 1; tapEl.classList.remove("on"); }
+}
+
+/* Rebuilds the screen as it stands once every beat before next has run. */
+function seekTo(next, play) {
+  token += 1;
+  resetState();
+  for (let i = 0; i < next; i += 1) {
+    BEATS[i].apply();
+    if (BEATS[i].clock) state.clock = BEATS[i].clock;
+  }
+  render();
+  cursor = next;
+  tapEl.classList.remove("on");
+  if (next > 0) {
+    settleScroll(BEATS[next - 1], true);
+    if (BEATS[next - 1].flash) flash(BEATS[next - 1].flash);
+  } else {
+    screenEl.scrollTop = 0;
+  }
+  paintScript(Math.min(play ? next : Math.max(next - 1, 0), BEATS.length - 1));
+  setPlaying(play);
+}
+
+function togglePlay() {
+  if (cursor >= BEATS.length) { seekTo(0, true); return; }
+  setPlaying(!playing);
+}
+
+/* A paused beat may already have applied, so a step forward always lands after it. */
+function step(delta) {
+  const next = delta > 0 ? Math.min(cursor + 1, BEATS.length) : Math.max(cursor - 1, 0);
+  seekTo(next, false);
+}
+
+playpauseEl.addEventListener("click", togglePlay);
+viewportEl.addEventListener("click", togglePlay);
+viewportEl.addEventListener("keydown", e => { if (e.key === "Enter") togglePlay(); });
+document.getElementById("restart").addEventListener("click", () => seekTo(0, true));
+document.getElementById("next").addEventListener("click", () => step(1));
+document.getElementById("prev").addEventListener("click", () => step(-1));
+document.addEventListener("keydown", e => {
+  if (e.target.closest("button")) return;
+  if (e.key === " ") { e.preventDefault(); togglePlay(); }
+  else if (e.key === "ArrowLeft") step(1);
+  else if (e.key === "ArrowRight") step(-1);
+});
+
+speedEl.addEventListener("click", () => {
+  speed = speed === 1 ? 2 : speed === 2 ? 0.5 : 1;
+  speedEl.textContent = speed + "×";
+});
+
+const aboutToggle = document.getElementById("about-toggle");
+const aboutEl = document.getElementById("about");
+aboutToggle.addEventListener("click", () => {
+  const open = aboutToggle.getAttribute("aria-expanded") === "true";
+  aboutToggle.setAttribute("aria-expanded", String(!open));
+  aboutEl.hidden = open;
+});
+
+const DEVICE_WIDTH = 410;
+function fitDevice() {
+  stageEl.style.setProperty("--k", Math.min(1, stageEl.clientWidth / DEVICE_WIDTH).toFixed(4));
+}
+window.addEventListener("resize", fitDevice);
+fitDevice();
+
+buildScript();
+resetState();
+render();
+paintScript(0);
+loop();
+</script>

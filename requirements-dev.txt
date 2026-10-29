@@ -1,0 +1,10 @@
+-r requirements.txt
+# Test and CI dependencies, pinned so that a new upstream release cannot change what the suite runs
+# against without a repo change — moto rewrites service behavior across minor versions. Raising a
+# version is a deliberate edit, proven by the suite; the frontend pins the same way through its
+# committed package-lock.json.
+boto3==1.43.89
+pytest==9.1.1
+moto[dynamodb,ssm,ses,s3]==5.2.3
+ruff==0.17.3
+PyYAML==6.0.3

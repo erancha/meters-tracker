@@ -1,0 +1,234 @@
+"""The HTTP handler's contract: routes, status codes and error bodies, the photo size and type
+limits, file URL authorization, and the verified-email requirement."""
+
+import base64
+import hashlib
+import json
+from urllib.parse import unquote
+
+import boto3
+import pytest
+from engine_kit import ACCOUNT, Kit, electricity, options, reading
+
+from handlers import api
+
+USER_EMAIL = ACCOUNT
+TOO_LARGE = 4 * 1024 * 1024 + 1
+
+
+def event(route, body=None, key=None, email=USER_EMAIL, email_verified="true"):
+    claims = {"sub": "s-1", "email": email, "email_verified": email_verified}
+    return {
+        "routeKey": route,
+        "requestContext": {"authorizer": {"jwt": {"claims": claims}}},
+        "pathParameters": None if key is None else {"key": key},
+        "body": None if body is None else json.dumps(body),
+    }
+
+
+@pytest.fixture
+def kit(env, ddb, monkeypatch):
+    kit = Kit()
+    monkeypatch.setattr(api, "_model", lambda: kit.model)
+    return kit
+
+
+def _body(result):
+    return json.loads(result["body"])
+
+
+def _post_photo(kit, data=b"photo-0", media_type="image/jpeg"):
+    kit._photos[hashlib.sha256(data).hexdigest()] = electricity()
+    body = {"image": base64.b64encode(data).decode(), "media_type": media_type}
+    return api.handler(event("POST /turn", body), None)
+
+
+def _choice(card, option):
+    return {"choice": {"pending": card["pending"], "version": card["version"], "option": option}}
+
+
+def _stored_keys():
+    listed = boto3.client("s3").list_objects_v2(Bucket="files")
+    return [o["Key"] for o in listed.get("Contents", [])]
+
+
+def _seed_known_meter(kit):
+    apartment = kit.apartment(start="2026-10-01")
+    kit.meter(
+        apartment,
+        "E-392",
+        "electricity",
+        [reading("2026-10-01", 392000, opens="2026-10-01")],
+        display_choice=0,
+    )
+
+
+def test_get_chat_returns_history_and_snapshot(kit):
+    _seed_known_meter(kit)
+    _post_photo(kit)
+    result = api.handler(event("GET /chat"), None)
+    assert result["statusCode"] == 200
+    body = _body(result)
+    assert body["messages"][0]["role"] == "user"
+    assert body["snapshot"]["card"]["kind"] == "reading"
+    assert body["snapshot"]["waiting"] == 0
+
+
+def test_post_turn_image_creates_reading_card(kit):
+    _seed_known_meter(kit)
+    result = _post_photo(kit)
+    assert result["statusCode"] == 200
+    body = _body(result)
+    assert options(body["snapshot"]["card"]) == ["confirm", "reject"]
+    assert body["replies"][-1]["card"] == body["snapshot"]["card"]
+    assert len(_stored_keys()) == 1
+
+
+def test_choice_confirms_the_reading(kit):
+    _seed_known_meter(kit)
+    card = _body(_post_photo(kit))["snapshot"]["card"]
+    result = api.handler(event("POST /turn", _choice(card, "confirm")), None)
+    assert result["statusCode"] == 200
+    assert _body(result)["snapshot"]["card"] is None
+    assert kit.readings("E-392")[-1]["value"] == 392691
+
+
+def test_choice_on_handled_item_is_409(kit):
+    _seed_known_meter(kit)
+    card = _body(_post_photo(kit))["snapshot"]["card"]
+    choice = _choice(card, "confirm")
+    api.handler(event("POST /turn", choice), None)
+    result = api.handler(event("POST /turn", choice), None)
+    assert result["statusCode"] == 409
+    assert _body(result) == {"error": "already_handled", "snapshot": {"card": None, "waiting": 0}}
+    assert len(kit.readings("E-392")) == 2
+
+
+def test_oversized_image_is_400(kit):
+    result = _post_photo(kit, data=b"x" * TOO_LARGE)
+    assert result["statusCode"] == 400
+    assert _body(result) == {"error": "image_too_large"}
+    assert _stored_keys() == []
+    assert kit.store.pending(ACCOUNT) == []
+
+
+def test_gif_is_400(kit):
+    result = _post_photo(kit, media_type="image/gif")
+    assert result["statusCode"] == 400
+    assert _body(result) == {"error": "unsupported_image_type"}
+    assert _stored_keys() == []
+    assert kit.store.pending(ACCOUNT) == []
+
+
+def test_files_url_of_own_account_is_served(kit):
+    result = api.handler(event("GET /files/{key}", key=f"{ACCOUNT}%2Fimages%2Fa.jpg"), None)
+    assert result["statusCode"] == 200
+    assert f"{ACCOUNT}/images/a.jpg" in unquote(_body(result)["url"])
+
+
+def test_files_url_of_other_account_is_403(kit):
+    result = api.handler(event("GET /files/{key}", key="other%40x.com%2Fimages%2Fa.jpg"), None)
+    assert result["statusCode"] == 403
+    assert _body(result) == {"error": "forbidden"}
+
+
+def test_unknown_route_raises(kit):
+    with pytest.raises(ValueError):
+        api.handler(event("GET /nope"), None)
+
+
+def test_choice_on_parked_item_is_409(kit):
+    kit.store.put_pending(
+        ACCOUNT,
+        {
+            "seq": "2026-10-29T08:00:00_aaaa",
+            "kind": "close_period",
+            "status": "parked",
+            "step": "x",
+            "version": 1,
+            "data": {},
+        },
+    )
+    card = {"pending": "2026-10-29T08:00:00_aaaa", "version": 1}
+    result = api.handler(event("POST /turn", _choice(card, "confirm")), None)
+    assert result["statusCode"] == 409
+    assert _body(result)["error"] == "already_handled"
+
+
+def test_invalid_base64_is_400(kit):
+    result = api.handler(
+        event("POST /turn", {"image": "!!not base64!!", "media_type": "image/jpeg"}), None
+    )
+    assert result["statusCode"] == 400
+    assert _body(result) == {"error": "invalid_image"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"image": "aGk="},
+        {"text": "a", "image": "aGk="},
+        {"choice": {"pending": "x"}},
+        {"choice": {"pending": "x", "option": "confirm"}},
+        {"choice": {"pending": "x", "version": "1", "option": "confirm"}},
+        {"choice": {"pending": "x", "version": True, "option": "confirm"}},
+        {"text": 5},
+        [],
+    ],
+)
+def test_malformed_body_is_400(kit, body):
+    result = api.handler(event("POST /turn", body), None)
+    assert result["statusCode"] == 400
+    assert _body(result) == {"error": "invalid_request"}
+    assert _stored_keys() == []
+
+
+def test_get_chat_does_not_build_the_model(kit, monkeypatch):
+    def refuse():
+        raise AssertionError("model built")
+
+    monkeypatch.setattr(api, "_model", refuse)
+    assert api.handler(event("GET /chat"), None)["statusCode"] == 200
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["owner@x.com.evil%2Fimages%2Fa.jpg", "other%40x.com%2F..%2Fa.jpg", "%2Fowner%40x.com%2Fa.jpg"],
+)
+def test_files_url_with_lookalike_key_is_403(kit, key):
+    result = api.handler(event("GET /files/{key}", key=key), None)
+    assert result["statusCode"] == 403
+
+
+def test_non_ascii_image_is_400(kit):
+    result = api.handler(event("POST /turn", {"image": "é", "media_type": "image/jpeg"}), None)
+    assert result["statusCode"] == 400
+    assert _body(result) == {"error": "invalid_image"}
+
+
+@pytest.mark.parametrize("without_body", ["absent", "none"])
+def test_turn_without_body_is_400(kit, without_body):
+    request = event("POST /turn")
+    if without_body == "absent":
+        del request["body"]
+    result = api.handler(request, None)
+    assert result["statusCode"] == 400
+    assert _body(result) == {"error": "invalid_request"}
+
+
+def test_option_not_on_the_current_card_is_409(kit):
+    _seed_known_meter(kit)
+    card = _body(_post_photo(kit))["snapshot"]["card"]
+    result = api.handler(event("POST /turn", _choice(card, "reset")), None)
+    assert result["statusCode"] == 409
+    assert _body(result) == {"error": "already_handled", "snapshot": {"card": card, "waiting": 0}}
+    assert len(kit.readings("E-392")) == 1
+
+
+@pytest.mark.parametrize("route", ["GET /chat", "POST /turn"])
+def test_unverified_email_is_403_and_creates_no_account(kit, route):
+    result = api.handler(event(route, {"text": "שלום"}, email_verified="false"), None)
+    assert result["statusCode"] == 403
+    assert _body(result) == {"error": "email_unverified"}
+    assert kit.store.access_get(USER_EMAIL) is None

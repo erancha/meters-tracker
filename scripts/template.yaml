@@ -1,0 +1,406 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: meters-tracker - chat API, tables, file bucket, and frontend hosting.
+
+Parameters:
+  UserPoolId:
+    Type: String
+  UserPoolClientId:
+    Type: String
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: 'http://localhost:8000'
+  ApiTimeoutSeconds:
+    Type: Number
+    Default: 60
+    Description: The api function's time limit, also passed to it so it can tell a photo whose
+      reading invocation was killed from one still being read
+  LlmModel:
+    Type: String
+    AllowedPattern: '^(anthropic|openai):.+$'
+    Description: The model the API calls, as provider:model (anthropic:claude-opus-5-5 or an
+      openai model); passed from scripts/params.sh by scripts/deploy.sh
+  LlmKeyParam:
+    Type: String
+    Default: /meters-tracker/llm/api-key
+    Description: SSM SecureString parameter holding the API key of the provider LlmModel names;
+      written by scripts/set-model-key.sh and read by the API on each turn
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    MemorySize: 256
+    Timeout: 30
+    # ApplicationLogLevel only takes effect with the JSON log format; raise it to INFO to see the
+    # request lines the code emits.
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: WARN
+    Environment:
+      Variables:
+        ACCESS_TABLE: !Ref AccessTable
+        PROPERTIES_TABLE: !Ref PropertiesTable
+        APARTMENTS_TABLE: !Ref ApartmentsTable
+        METERS_TABLE: !Ref MetersTable
+        PERIODS_TABLE: !Ref PeriodsTable
+        READINGS_TABLE: !Ref ReadingsTable
+        TARIFFS_TABLE: !Ref TariffsTable
+        PENDING_TABLE: !Ref PendingTable
+        MESSAGES_TABLE: !Ref MessagesTable
+        APP_CONFIG_PATH: /var/task/app.json
+
+Resources:
+  # Every table is retained, deletion-protected and point-in-time recoverable. CloudFormation
+  # rejects YAML anchors, so those settings are repeated on each table.
+  AccessTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+
+  PropertiesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  ApartmentsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  MetersTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  PeriodsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  ReadingsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  TariffsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  PendingTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+
+  # Holds the uploaded meter photos under '{account}/images/'; the browser reads one only through
+  # the short-lived presigned URL the file endpoint hands out. Versioned and retained so a deleted
+  # or overwritten photo stays recoverable for 30 days.
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: !Ref AllowedOrigins
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: [Authorization, Content-Type]
+      Auth:
+        DefaultAuthorizer: CognitoJwt
+        Authorizers:
+          CognitoJwt:
+            JwtConfiguration:
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
+              audience:
+                - !Ref UserPoolClientId
+            IdentitySource: '$request.header.Authorization'
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # CodeUri must sit on each function: cloudformation package rewrites only per-function
+      # values and would otherwise upload the template's own directory.
+      CodeUri: ../build/lambda
+      Handler: handlers/api.handler
+      # A turn may wait on the model for a photo reading; the invocation outlives the HTTP API's
+      # 30s cap on the browser's request, and the app reads the stored answer from the chat.
+      Timeout: !Ref ApiTimeoutSeconds
+      Environment:
+        Variables:
+          LAMBDA_TIMEOUT_SECONDS: !Ref ApiTimeoutSeconds
+          FILES_BUCKET: !Ref FilesBucket
+          LLM_MODEL: !Ref LlmModel
+          LLM_KEY_PARAM: !Ref LlmKeyParam
+      Events:
+        Chat:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Method: GET
+            Path: /chat
+        Turn:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Method: POST
+            Path: /turn
+        File:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Method: GET
+            Path: /files/{key}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AccessTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PropertiesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApartmentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MetersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PeriodsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReadingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TariffsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PendingTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MessagesTable
+        - S3ReadPolicy:
+            BucketName: !Ref FilesBucket
+        - S3WritePolicy:
+            BucketName: !Ref FilesBucket
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:\
+                parameter${LlmKeyParam}"
+            # Covers reading the SecureString through the AWS-managed SSM key.
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        Origins:
+          - Id: frontend
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: frontend
+          ViewerProtocolPolicy: redirect-to-https
+          # AWS managed CachingOptimized policy: a changed frontend file is served only after an
+          # invalidation of the distribution.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:\
+                  distribution/${Distribution}"
+
+Outputs:
+  ApiUrl:
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com'
+  FrontendBucket:
+    Value: !Ref FrontendBucket
+  FrontendUrl:
+    Value: !Sub 'https://${Distribution.DomainName}'
+  DistributionId:
+    Value: !Ref Distribution
