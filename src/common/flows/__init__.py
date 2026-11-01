@@ -19,6 +19,7 @@ Building blocks:
 - propose / edit_reading: the value a photo proposes and the edits a reading card accepts
 - save_reading / summary / price_in / price_on: the reading record, the reply that follows a
   save, and the price it is charged at
+- Figures / period_figures: one meter's period figures, shared by the summary and the report
 - failed_photos / failure_record: the photos the model failed on, recorded with the reading
 - put_period / flagged / move_period: period rows and the reading flags that point at them
 - with_apartment / dated_rows: resolving a typed apartment name; card rows with parsed dates
@@ -30,7 +31,15 @@ from datetime import timedelta
 from common import texts
 from common.dates import parse_iso
 from common.model import IntentResult
-from common.periods import charge, consumption, forecast, open_period, period_readings, tariff_on
+from common.periods import (
+    Consumption,
+    charge,
+    consumption,
+    forecast,
+    open_period,
+    period_readings,
+    tariff_on,
+)
 
 READING = "reading"
 AWAITING = "awaiting"
@@ -326,6 +335,30 @@ def price_on(engine, user, meter_type, d) -> float | None:
     return price_in(engine.store.tariffs(user.account), meter_type, d)
 
 
+@dataclass(frozen=True)
+class Figures:
+    """One meter's figures for a period. outlook is the period's units: the final count, else the
+    forecast, which is None until time has passed since the opening reading."""
+
+    consumption: Consumption
+    outlook: float | None
+    price: float | None
+    amount: float | None
+
+
+def period_figures(engine, user, meter_type, readings, period) -> Figures | None:
+    """The meter's figures for the period, or None when it has no reading there. A final count is
+    priced on its last reading's date, a forecast on today."""
+    c = consumption(readings, period)
+    if c is None:
+        return None
+    outlook = c.units if c.final else forecast(c, period)
+    priced_on = parse_iso(c.last["date"]) if c.final else engine.clock()
+    price = price_on(engine, user, meter_type, priced_on)
+    amount = None if outlook is None or price is None else charge(outlook, price)
+    return Figures(c, outlook, price, amount)
+
+
 def summary(engine, user, meter, reading) -> Reply:
     apartment, prop = place(engine, user, meter["apartment_id"])
     readings = engine.store.readings(user.account, meter["serial"])
@@ -340,14 +373,9 @@ def summary(engine, user, meter, reading) -> Reply:
     period_units = outlook = amount = None
     final = False
     if containing:
-        period = containing[-1]
-        c = consumption(readings, period)
-        period_units, final = c.units, c.final
-        outlook = c.units if final else forecast(c, period)
-        priced_on = parse_iso(c.last["date"]) if final else engine.clock()
-        price = price_on(engine, user, meter["type"], priced_on)
-        if outlook is not None and price is not None:
-            amount = charge(outlook, price)
+        figures = period_figures(engine, user, meter["type"], readings, containing[-1])
+        period_units, final = figures.consumption.units, figures.consumption.final
+        outlook, amount = figures.outlook, figures.amount
     return Reply(
         texts.summary_after_save(
             prop["name"],

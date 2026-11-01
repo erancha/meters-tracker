@@ -162,6 +162,18 @@ and the charge when a tariff is in force.
   the reply says so and shows no amount; no later or guessed tariff is used. A tariff that
   leaves a type unpriced counts as no tariff for that type.
 
+## Period report
+
+- **When.** A confirmed reading that has a previous one sends one report, and so does a close. A
+  meter's first reading sends nothing. A reading before every period has none to report.
+- **Figures.** Each live meter shows its opening reading, its closing or latest reading, its units,
+  its outlook, its price and its cost, all as in the section above. A meter with no reading in the
+  period is named as such.
+- **Total.** The sum of the costs. A meter with no reading, or no price, leaves it uncalculated,
+  shown as such. The report is final only when every meter's figures are.
+- **Re-close.** The report names the one to ignore by the period's closing date before the move,
+  the date that report carried.
+
 ## Tariffs
 
 The tariffs flow (`src/common/flows/tariffs.py`) writes a tariff row only from its confirmed

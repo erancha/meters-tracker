@@ -18,12 +18,16 @@ limit was being read by an invocation that was killed, so the snapshot turns it 
 and the queue clears. "Today" is the injected clock throughout, including the date prefix of every
 pending seq and message timestamp, so the once-a-day greeting and the reading dates agree on what
 day it is.
+
+Flows mark a period for a report during a turn and the engine sends it once the turn's replies are
+stored, so a reading that also closes its period sends one report, with the final figures. A
+report that fails is logged and never fails the turn: the reading is already saved.
 """
 
 import secrets
 from datetime import timedelta
 
-from common import dates, texts
+from common import dates, report, texts
 from common.flows import (
     AWAITING,
     READING,
@@ -42,6 +46,9 @@ from common.flows import (
     request_context,
     tariffs,
 )
+from common.log import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = [
     "Action",
@@ -72,6 +79,7 @@ class Engine:
         store,
         model,
         files,
+        mailer,
         config: dict,
         lambda_timeout: timedelta,
         model_name: str,
@@ -80,10 +88,17 @@ class Engine:
         self.store = store
         self.model = model
         self.files = files
+        self.mailer = mailer
         self.config = config
         self.lambda_timeout = lambda_timeout
         self.model_name = model_name
         self.clock = clock
+        # Key: (apartment id, period start)
+        # Value: ISO date of the report this one replaces, or None
+        self._reports_due = {}
+
+    def report_due(self, apartment_id, period_start, ignored=None):
+        self._reports_due[(apartment_id, period_start)] = ignored
 
     def stamp(self) -> str:
         """A sortable, unique key for a pending item or a message: the clock's date, the wall
@@ -123,7 +138,21 @@ class Engine:
     def _result(self, user, replies: list[Reply], image_key=None) -> TurnResult:
         for reply in replies:
             self._append(user, "assistant", reply.text, reply.card, reply.image_key)
+        self._send_reports(user)
         return TurnResult(replies, self.snapshot(user), image_key)
+
+    def _send_reports(self, user):
+        due, self._reports_due = self._reports_due, {}
+        for (apartment_id, period_start), ignored in due.items():
+            try:
+                built = report.build(self, user, apartment_id, period_start, ignored)
+                report.send(built, self.mailer, user.account)
+            except Exception:
+                logger.exception(
+                    "sending a period report failed apartment=%s period=%s",
+                    apartment_id,
+                    period_start,
+                )
 
     def _handle(self, user, message, handler) -> list[Reply]:
         """Runs a stored message's handler; any failure marks the message and raises

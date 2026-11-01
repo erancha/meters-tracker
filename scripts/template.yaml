@@ -26,6 +26,11 @@ Parameters:
       written by scripts/set-model-key.sh, passed by scripts/deploy.sh and read by the API on
       each turn
 
+  SesSender:
+    Type: String
+    Description: Verified SES identity used as the From address of the emailed reports; passed
+      from scripts/params.sh by scripts/deploy.sh
+
 Globals:
   Function:
     Runtime: python3.13
@@ -284,6 +289,7 @@ Resources:
           FILES_BUCKET: !Ref FilesBucket
           LLM_MODEL: !Ref LlmModel
           LLM_KEY_PARAM: !Ref LlmKeyParam
+          SES_SENDER: !Ref SesSender
       Events:
         Chat:
           Type: HttpApi
@@ -339,6 +345,11 @@ Resources:
               Condition:
                 StringEquals:
                   kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+            # Every identity, since the SES sandbox also authorizes the send against the
+            # recipient's address, which is any owner's.
+            - Effect: Allow
+              Action: ses:SendRawEmail
+              Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/*'
 
   FrontendBucket:
     Type: AWS::S3::Bucket

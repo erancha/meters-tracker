@@ -40,7 +40,9 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
   readings.
 - Prices are typed in the chat or read from a photo of a previous statement; closing a period
   with no prices on record asks for them.
-- What is planned next, such as the emailed PDF report and a daily reminder, is in the
+- After a confirmed reading that has a previous one, and after a close, the owner gets an email
+  with a PDF of the apartment's period: both meters, the costs, and whether the total is final.
+- What is planned next, such as a daily reminder, is in the
   repository's [issues](https://github.com/erancha/meters-tracker/issues).
 
 ## Tech stack
@@ -54,6 +56,7 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
   served from S3 behind CloudFront
 - **Auth** — Cognito with Google as the only sign-in; a pre-sign-up Lambda asks SES to verify
   each new address
+- **Email** — SES sends the period report, a PDF drawn with fpdf2
 - **Infrastructure** — two CloudFormation stacks deployed by shell scripts; data retained across
   stack deletes; S3 and CloudFront host the browser app
 - **Tests** — pytest with moto and a fake model; ruff for lint and format; Vitest with Testing

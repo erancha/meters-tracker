@@ -7,12 +7,14 @@ import json
 import os
 from datetime import date, timedelta
 
+import boto3
 from fake_model import FakeModel
 
 from common.access import User
 from common.engine import Action, Choice, Engine
 from common.files import Files
 from common.model import Candidate, MeterReadingResult, StatementResult
+from common.notify import Mailer
 from common.store import Store
 
 ACCOUNT = "owner@x.com"
@@ -93,6 +95,7 @@ class Kit:
             self.store,
             self.model,
             Files("files"),
+            Mailer(boto3.client("ses"), os.environ["SES_SENDER"]),
             config,
             timedelta(seconds=int(os.environ["LAMBDA_TIMEOUT_SECONDS"])),
             os.environ["LLM_MODEL"],

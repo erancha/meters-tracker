@@ -78,8 +78,9 @@ result, its time and its estimated cost; it is the quick check of a single photo
 2. Run [`scripts/init-env.sh`](../scripts/init-env.sh). It copies `aws-config.example.sh` and
    `params.example.sh` to their gitignored siblings, readable only by their owner, and refuses
    to overwrite either without `--force`. Fill in the AWS access key pair and region in
-   `scripts/aws-config.sh`, and the Google OAuth client id and secret and the model
-   (`LLM_MODEL`, as `provider:model`) in `scripts/params.sh`.
+   `scripts/aws-config.sh`, and the Google OAuth client id and secret, the model
+   (`LLM_MODEL`, as `provider:model`) and the verified SES sender (`SES_SENDER`) in
+   `scripts/params.sh`.
 3. Run [`scripts/set-model-key.sh <provider>`](../scripts/set-model-key.sh) once to store the
    key of the provider `LLM_MODEL` names, then [`scripts/deploy.sh`](../scripts/deploy.sh), which
    stops with that command when the key is missing.

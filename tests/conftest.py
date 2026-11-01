@@ -9,6 +9,7 @@ from common.store import Store
 
 REGION = "eu-central-1"
 FILES_BUCKET = "files"
+SES_SENDER = "reports@meters.test"
 KEYED_BY_PK_ONLY = ["access"]
 KEYED_BY_PK_AND_SK = [
     "properties",
@@ -44,6 +45,7 @@ def env(monkeypatch):
     for name in KEYED_BY_PK_ONLY + KEYED_BY_PK_AND_SK:
         monkeypatch.setenv(f"{name.upper()}_TABLE", name)
     monkeypatch.setenv("FILES_BUCKET", FILES_BUCKET)
+    monkeypatch.setenv("SES_SENDER", SES_SENDER)
     monkeypatch.setenv("AWS_DEFAULT_REGION", REGION)
     monkeypatch.setenv("APP_CONFIG_PATH", "config/app.json")
     monkeypatch.setenv("LAMBDA_TIMEOUT_SECONDS", "60")
@@ -53,8 +55,8 @@ def env(monkeypatch):
 @pytest.fixture
 def ddb():
     """Mocked DynamoDB resource with the app's tables pre-created (access keyed by pk only, the
-    rest by pk+sk) and an empty mocked S3 bucket. The AWS mock stays active for the whole test, so
-    code under test may also build its own boto3 clients."""
+    rest by pk+sk), an empty mocked S3 bucket and a verified report sender in mocked SES. The AWS
+    mock stays active for the whole test, so code under test may also build its own boto3 clients."""
     with mock_aws():
         resource = boto3.resource("dynamodb", region_name=REGION)
         for name in KEYED_BY_PK_ONLY:
@@ -64,6 +66,7 @@ def ddb():
         boto3.client("s3", region_name=REGION).create_bucket(
             Bucket=FILES_BUCKET, CreateBucketConfiguration={"LocationConstraint": REGION}
         )
+        boto3.client("ses", region_name=REGION).verify_email_identity(EmailAddress=SES_SENDER)
         yield resource
 
 

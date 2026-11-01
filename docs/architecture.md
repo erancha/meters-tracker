@@ -19,6 +19,7 @@ graph LR
     L --> S3[(S3 files bucket<br/>meter photos)]
     L --> SSM[SSM parameter<br/>model API key]
     L --> CL[Claude API<br/>read photo · classify text]
+    L --> SES2[SES<br/>period report with PDF]
     CF[CloudFront] --> FB[(S3 frontend bucket)]
     C --> CF
 ```
@@ -69,6 +70,9 @@ graph LR
   one retry. A photo still marked as being read once the limit has passed belonged to a killed
   invocation, so the next snapshot turns it into an unreadable card asking for a retake, and the
   next photo replaces it.
+- **SES** — the api Lambda sends the period report through it (see Period report under
+  [Cross-cutting mechanisms](#cross-cutting-mechanisms)), from the verified `SES_SENDER`. The
+  policy allows every identity because the SES sandbox also checks the recipient's address.
 - **DynamoDB tables** — nine, described under [Storage](#storage).
 - **Files bucket** — the private S3 bucket holding uploaded meter photos.
 - **SSM parameters** `/meters-tracker/llm/<provider>/api-key` — one SecureString per model
@@ -173,12 +177,20 @@ standby card, so the model names the apartment exactly as stored. The prompts ar
   `APP_CONFIG_PATH` environment variable, so an edit needs `deploy.sh`. Each table's name
   reaches the code as `<NAME>_TABLE` (`READINGS_TABLE` and so on), the bucket as
   `FILES_BUCKET`, the model as `LLM_MODEL`, the key parameter as `LLM_KEY_PARAM`, the api
-  time limit as `LAMBDA_TIMEOUT_SECONDS`.
+  time limit as `LAMBDA_TIMEOUT_SECONDS`, the mail sender as `SES_SENDER`.
 - **Sign-in and accounts.** `src/common/access.py` maps the JWT's email, lowercased, through
   the `access` table: a row names its account; an address with no row becomes the owner of its
   own account, keyed by that address, with a conditional write so two first requests agree.
   Data belongs to the account; the message history and the pending queue belong to the
   signed-in address ([ADR 0002](adr/0002-google-sign-in-and-delegation.md)).
+- **Period report.** A flow marks a period for a report during a turn, and the engine sends it
+  once the turn's replies are stored, so a reading that also closes its period sends one report,
+  with the final figures. `src/common/report.py` takes the figures from `period_figures`, the code
+  the chat's summary uses, and draws a one-page PDF with fpdf2. It shapes the Hebrew with HarfBuzz
+  and a DejaVu Sans font shipped under `src/common/fonts/`, and is imported only when a report is
+  drawn. `src/common/notify.py` sends it as raw MIME, base64 encoded, under the fixed subject of
+  [ADR 0004](adr/0004-fixed-email-subject.md). A failed report is logged and never fails the turn,
+  since the reading is already saved.
 - **Dates.** Every stored and shown date is a calendar date in Asia/Jerusalem
   (`src/common/dates.py`), and the engine takes "today" from an injected clock, so tests fix
   the day.
@@ -236,8 +248,9 @@ expires after 30 days. `deploy.sh` refuses to create the app stack while such le
 - `src/handlers/` — the Lambda entry points, `api.py` and `presignup.py`.
 - `src/common/` — the shared core: `engine.py` and `flows/` (the conversation), `periods.py`
   (pure period arithmetic), `store.py` and `paging.py` (DynamoDB), `files.py` (S3), `model.py`
-  and `prompts.py` (the model), `access.py`, `texts.py` (every Hebrew string), `dates.py`,
-  `log.py`, `ses_identity.py`, `webapi.py`.
+  and `prompts.py` (the model), `report.py` and `notify.py` (the period report and its email),
+  `fonts/` (the font the PDF ships with), `access.py`, `texts.py` (every Hebrew string),
+  `dates.py`, `log.py`, `ses_identity.py`, `webapi.py`.
 - `tests/` — pytest against moto's AWS fakes and a fake model; `engine_kit.py` seeds data and
   fixes the clock for the engine tests, and `test_owner_story.py` walks the owner's whole story.
   `intents.json` holds the recorded messages of a real-model check ([Tests](development.md#tests)).

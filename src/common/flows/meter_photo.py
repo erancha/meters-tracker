@@ -10,7 +10,9 @@ open_period, propose_close -> saved. A reading is never saved twice for one mete
 back-dated reading never displaces a confirmed closing reading without the user's choice. A
 two-number display's choice becomes the meter's only when a reading is saved. A failed read
 leaves no pending row, and a retake replaces the unreadable card it answers, carrying its
-photos as the ones the model failed on.
+photos as the ones the model failed on. A saved reading that has a previous one marks its period
+for a report; a re-close's report names the report it replaces, dated by the period's closing date
+before the move.
 """
 
 from datetime import datetime
@@ -46,7 +48,13 @@ from common.flows import (
     tariffs,
 )
 from common.model import MeterReadingResult
-from common.periods import apartment_meters, is_closing_candidate, period_end, within_reclose_window
+from common.periods import (
+    apartment_meters,
+    is_closing_candidate,
+    period_end,
+    period_readings,
+    within_reclose_window,
+)
 
 KIND = "meter_photo"
 SWAP_OPTIONS = ["reclose", "keep_open"]
@@ -329,6 +337,9 @@ def _replace(engine, user, item) -> list[Reply]:
 def _reclose(engine, user, item) -> list[Reply]:
     data = item["data"]
     other = data["other"]
+    apartment_id = _meter(engine, user, data)["apartment_id"]
+    periods = engine.store.periods(user.account, apartment_id)
+    [closed] = [p for p in periods if p["start"] == other["closes_period"]]
     engine.store.update_reading(
         user.account,
         data["serial"],
@@ -340,23 +351,41 @@ def _reclose(engine, user, item) -> list[Reply]:
     reading = save_reading(
         engine, user, item, opens=other["opens_period"], closes=other["closes_period"]
     )
-    period_change.realign(
-        engine,
-        user,
-        _meter(engine, user, data)["apartment_id"],
-        other["closes_period"],
-        other["opens_period"],
-    )
-    return _done(engine, user, item, reading)
+    period_change.realign(engine, user, apartment_id, other["closes_period"], other["opens_period"])
+    return _done(engine, user, item, reading, ignored=closed["closed_on"])
 
 
-def _done(engine, user, item, reading) -> list[Reply]:
+def _reported_period(readings, periods, reading) -> str | None:
+    """The start of the period a saved reading reports: the one it closes, else the latest it
+    belongs to; None for a back-dated reading before every period."""
+    if reading["closes_period"] is not None:
+        return reading["closes_period"]
+    starts = [
+        p["start"]
+        for p in periods
+        if any(r["seq"] == reading["seq"] for r in period_readings(readings, p))
+    ]
+    return starts[-1] if starts else None
+
+
+def _mark_report(engine, user, meter, reading, ignored):
+    readings = engine.store.readings(user.account, meter["serial"])
+    if readings[0]["seq"] == reading["seq"]:
+        return
+    periods = engine.store.periods(user.account, meter["apartment_id"])
+    start = _reported_period(readings, periods, reading)
+    if start is not None:
+        engine.report_due(meter["apartment_id"], start, ignored)
+
+
+def _done(engine, user, item, reading, ignored=None) -> list[Reply]:
     """Finishes a saved reading: a two-number display's choice becomes the meter's, the item
-    leaves the queue, and the summary follows."""
+    leaves the queue, its period is marked for a report, and the summary follows."""
     data = item["data"]
     meter = _meter(engine, user, data)
     if meter["display_choice"] is None and display_choice(data) is not None:
         engine.store.update_meter(
             user.account, meter["serial"], display_choice=display_choice(data)
         )
+    _mark_report(engine, user, meter, reading, ignored)
     return drop(engine, user, item, [summary(engine, user, meter, reading)], state="saved")

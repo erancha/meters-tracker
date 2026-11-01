@@ -235,6 +235,7 @@ def test_concurrent_confirms_of_one_link_card_create_one_property(env, ddb):
         _QueueReadBefore(kit.store, queue_before),
         kit.model,
         kit.engine.files,
+        kit.engine.mailer,
         kit.engine.config,
         kit.engine.lambda_timeout,
         kit.engine.model_name,

@@ -1,3 +1,7 @@
 anthropic==2.3.0
 openai==3.41.0
 pydantic==2.14.1
+fpdf2==2.9.0
+# Pinned below 13, whose wheels no longer carry the manylinux2014 tag deploy.sh builds the Lambda for.
+pillow==12.2.0
+uharfbuzz==0.57.0

@@ -16,11 +16,14 @@ from dataclasses import asdict
 from datetime import date, timedelta
 from urllib.parse import unquote
 
+import boto3
+
 from common import access
 from common.engine import Action, AlreadyHandled, Choice, Engine, MessageFailed
 from common.files import Files
 from common.log import get_logger
 from common.model import api_key_from_ssm, build_model
+from common.notify import Mailer
 from common.store import Store
 from common.webapi import response
 
@@ -86,7 +89,16 @@ def _files():
 
 def _engine(store):
     lambda_timeout = timedelta(seconds=int(os.environ["LAMBDA_TIMEOUT_SECONDS"]))
-    return Engine(store, _LazyModel(), _files(), _config(), lambda_timeout, os.environ["LLM_MODEL"])
+    mailer = Mailer(boto3.client("ses"), os.environ["SES_SENDER"])
+    return Engine(
+        store,
+        _LazyModel(),
+        _files(),
+        mailer,
+        _config(),
+        lambda_timeout,
+        os.environ["LLM_MODEL"],
+    )
 
 
 def _chat(engine, user, query):

@@ -8,8 +8,9 @@ each meter's closing reading and writes only on that card's answer. The close's 
 closing readings. While a meter has no reading to close with, the item is parked at the waiting
 step: it shows no card, and the next saved reading of that apartment resumes it. Asking to close
 that apartment again shows the waiting close as a card whose only option cancels it; the next photo
-parks it again, so the photo's own card is not queued behind it. Also here: the list of apartments
-the daily greeting names.
+parks it again, so the photo's own card is not queued behind it. A close marks its period for a
+report, so the final figures reach the owner however the close was reached. Also here: the list of
+apartments the daily greeting names.
 """
 
 from datetime import date
@@ -149,6 +150,7 @@ def _close(engine, user, item, apartment, period, closing) -> list[Reply]:
             opens_period=next_start,
         )
     engine.store.update_period(user.account, apartment["id"], period["start"], closed_on=closed_on)
+    engine.report_due(apartment["id"], period["start"])
     if next_start is not None:
         put_period(engine, user, apartment["id"], next_start, period["months"])
     reply = texts.closed(

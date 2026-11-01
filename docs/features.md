@@ -84,6 +84,18 @@ when another card is shown first, and a tap scrolls to the card asking for them.
 A tap on a line scrolls the chat to that photo and highlights it for a moment. The sections follow
 the chat with no reload. With neither section, the panel says `לא נקראו מונים היום`.
 
+## Report email
+
+- After a confirmed reading that has a previous one, and after a close, the owner gets one email
+  with a PDF of the apartment's period attached. A meter's first reading sends nothing.
+- Every report of one apartment has the subject `[<property> / <apartment>] קריאות מונים`, so
+  Gmail groups them into one conversation; the date and the total are in the body.
+- The PDF shows the property, the apartment, the period and the date of the latest reading, then
+  a table with a column per meter: opening reading, closing or latest reading, units, outlook,
+  price and cost. A total closes it, marked as final or as an outlook. A meter with no reading in
+  the period is named as such, and a total that cannot be calculated says so.
+- After a re-close, the body and the top of the PDF name the date of the report to ignore.
+
 ## Account menu
 
 The header shows the app's name and a menu button. The menu holds the signed-in address and a

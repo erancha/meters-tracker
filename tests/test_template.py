@@ -103,6 +103,16 @@ def test_api_function_environment_names_the_bucket_and_model(app):
     assert "Default" not in app["Parameters"]["LlmModel"]
 
 
+def test_api_function_may_send_reports_from_the_deployed_sender(app):
+    function = app["Resources"]["ApiFunction"]["Properties"]
+    assert function["Environment"]["Variables"]["SES_SENDER"] == "SesSender"
+    assert "Default" not in app["Parameters"]["SesSender"]
+    statements = [s for p in function["Policies"] if "Statement" in p for s in p["Statement"]]
+    [send] = [s for s in statements if s["Action"] == "ses:SendRawEmail"]
+    # SES also checks the recipient's identity while the account is in its sandbox.
+    assert send["Resource"].endswith(":identity/*")
+
+
 def test_set_model_key_script_takes_the_providers_the_template_accepts(app):
     pattern = app["Parameters"]["LlmModel"]["AllowedPattern"]
     providers = re.fullmatch(r"\^\((.+)\):\.\+\$", pattern).group(1)

@@ -5,8 +5,10 @@
 # LLM_MODEL: the model that reads photos and classifies messages, as provider:model with an
 # anthropic or openai provider; it must take image input. The provider's API key is not a deploy
 # parameter; store it with scripts/set-model-key.sh before deploying.
+# SES_SENDER: From address of every mail the app sends; must be a verified SES identity.
 export GOOGLE_CLIENT_ID="<google-oauth-client-id>"
 export GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
 export LLM_MODEL="anthropic:claude-opus-5-5"
+export SES_SENDER="<verified-ses-identity>"
 # The OpenAI alternative: as of 2026-11, gpt-6.1-sol's token prices are half of claude-opus-5-5's.
 # export LLM_MODEL="openai:gpt-6.1-sol"

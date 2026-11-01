@@ -87,7 +87,8 @@ deploy_main() {  # frontend-url
     --stack-name "$APP" --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
     --no-fail-on-empty-changeset \
     --parameter-overrides AllowedOrigins="$origins" UserPoolId="$user_pool_id" \
-      UserPoolClientId="$user_pool_client_id" LlmModel="$LLM_MODEL" LlmKeyParam="$KEY_PARAM"
+      UserPoolClientId="$user_pool_client_id" LlmModel="$LLM_MODEL" LlmKeyParam="$KEY_PARAM" \
+      SesSender="$SES_SENDER"
 }
 
 FRONTEND_URL=$(stack_output "$APP" FrontendUrl)

@@ -1,4 +1,4 @@
-"""Every Hebrew string the chat shows. Card texts return (title, lines); replies return one string.
+"""Every Hebrew string the chat and the emailed report show. Card texts return (title, lines); replies return one string.
 Flows pass plain values in (names, numbers, dates) and never build Hebrew themselves, so the
 owner's wording corrections touch this file only."""
 
@@ -22,6 +22,9 @@ OPTION_LABELS = {
 METER_KINDS = {"electricity": "חשמל", "water": "מים"}
 UNITS = {"electricity": "קוט״ש", "water": "קוב"}
 POSITION_NAMES = {"top": "עליון", "bottom": "תחתון"}
+FINAL_LABEL = "חישוב סופי"
+OUTLOOK_LABEL = "צפי לסוף התקופה"
+NO_FIGURE = "—"
 
 
 def number(value) -> str:
@@ -156,8 +159,16 @@ def no_previous_reading() -> str:
     return "אין עדיין קריאה קודמת, ולכן אין צריכה או צפי."
 
 
+def _dated_value(reading) -> str:
+    return f"{number(reading['value'])} ({fmt(parse_iso(reading['date']))})"
+
+
 def _reading_line(label, reading) -> str:
-    return f"{label}: {number(reading['value'])} ({fmt(parse_iso(reading['date']))})"
+    return f"{label}: {_dated_value(reading)}"
+
+
+def _shekels(amount) -> str:
+    return f"{amount:,.2f} ₪"
 
 
 def summary_after_save(
@@ -187,13 +198,66 @@ def summary_after_save(
     if outlook is None:
         lines.append("אין עדיין צפי לסוף התקופה.")
         return "\n".join(lines)
-    label = "חישוב סופי" if final else "צפי לסוף התקופה"
-    lines.append(f"{label}: {number(round(outlook))} {unit}")
+    lines.append(f"{FINAL_LABEL if final else OUTLOOK_LABEL}: {number(round(outlook))} {unit}")
     if amount is None:
         lines.append("אין תעריף בתוקף, ולכן אין חיוב.")
     else:
-        lines.append(f"חיוב: {amount:,.2f} ₪")
+        lines.append(f"חיוב: {_shekels(amount)}")
     return "\n".join(lines)
+
+
+def report_subject(property_name, apartment) -> str:
+    return f"[{property_name} / {apartment}] קריאות מונים"
+
+
+def report_ignore_note(d: date) -> str:
+    return f"דוח מתוקן: יש להתעלם מהדוח מיום {fmt(d)}"
+
+
+def report_heading(property_name, apartment, start: date, end: date, latest: date, final) -> list:
+    return [
+        f"{property_name} / {apartment}",
+        FINAL_LABEL if final else OUTLOOK_LABEL,
+        f"תקופה: {fmt(start)} - {fmt(end)}",
+        f"תאריך הקריאה האחרונה: {fmt(latest)}",
+    ]
+
+
+def report_total(total, final) -> str:
+    amount = "לא ניתן לחשב" if total is None else _shekels(total)
+    return f"סה״כ ({FINAL_LABEL if final else OUTLOOK_LABEL}): {amount}"
+
+
+def _report_column(meter_type, figures) -> list[str]:
+    if figures is None:
+        return ["אין קריאה בתקופה", *[NO_FIGURE] * 5]
+    c, unit = figures.consumption, UNITS[meter_type]
+    outlook = "אין עדיין צפי" if figures.outlook is None else number(round(figures.outlook))
+    amount = NO_FIGURE if figures.amount is None else _shekels(figures.amount)
+    return [
+        _dated_value(c.opening),
+        _dated_value(c.last),
+        f"{number(c.units)} {unit}",
+        outlook if figures.outlook is None else f"{outlook} {unit}",
+        price_text(meter_type, figures.price),
+        amount,
+    ]
+
+
+def report_table(meters: list[tuple[str, str, object]], final) -> list[list[str]]:
+    """The report's rows: a header naming each (type, serial, figures) meter, then one row per
+    figure with a column per meter."""
+    labels = [
+        "קריאת פתיחה",
+        "קריאת סגירה" if final else "קריאה אחרונה",
+        "צריכה",
+        FINAL_LABEL if final else OUTLOOK_LABEL,
+        "תעריף",
+        "עלות",
+    ]
+    columns = [_report_column(t, figures) for t, _, figures in meters]
+    header = ["", *[meter_name(t, serial) for t, serial, _ in meters]]
+    return [header, *[list(row) for row in zip(labels, *columns)]]
 
 
 def link_property(meter_type, serial, property_names):
