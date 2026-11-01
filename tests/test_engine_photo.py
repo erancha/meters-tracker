@@ -257,8 +257,10 @@ def test_option_not_on_the_current_card_is_already_handled(env, ddb):
 def _photo_being_read(kit, seconds_ago):
     started = dates.now() - timedelta(seconds=seconds_ago)
     seq = "2026-10-29T08:00:00.000000_aaaa"
+    kit.store.append_message(USER.email, {"at": seq, "role": "user", "text": None})
     data = {
         "image_key": "owner@x.com/images/a.jpg",
+        "message_at": seq,
         "read_started": started.isoformat(),
         "failed_photos": [],
     }

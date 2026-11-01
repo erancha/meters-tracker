@@ -148,25 +148,50 @@ def test_claim_pending_holds_only_at_the_given_version_and_status(store):
     assert store.pending("u1") == [{**item, "version": 4}]
 
 
-def test_messages_returns_last_n_chronological(store):
+def _message(at, text):
+    return {
+        "at": at,
+        "role": "user",
+        "text": text,
+        "card": None,
+        "image_key": None,
+        "pdf_key": None,
+    }
+
+
+def _two_days(store):
     for i in range(5):
-        store.append_message(
-            "u1",
-            {
-                "at": f"2026-01-01T00:00:0{i}",
-                "role": "user",
-                "text": f"t{i}",
-                "card": None,
-                "image_key": None,
-                "pdf_key": None,
-            },
-        )
+        store.append_message("u1", _message(f"2026-01-01T00:00:0{i}", f"t{i}"))
+    for i in range(2):
+        store.append_message("u1", _message(f"2026-01-02T00:00:0{i}", f"d2-{i}"))
+
+
+def test_messages_returns_one_day_oldest_first(store):
+    _two_days(store)
+    assert [m["text"] for m in store.messages("u1", "2026-01-02")] == ["d2-0", "d2-1"]
+    assert len(store.messages("u1", "2026-01-01")) == 5
+    assert store.messages("u1", "2026-01-03") == []
+
+
+def test_messages_of_a_day_keeps_the_latest_within_the_limit(store):
+    _two_days(store)
     calls = []
     store._tables = {name: _ReadRecorder(t, calls) for name, t in store._tables.items()}
-    assert [m["text"] for m in store.messages("u1", limit=3)] == ["t2", "t3", "t4"]
+    assert [m["text"] for m in store.messages("u1", "2026-01-01", limit=2)] == ["t3", "t4"]
     [call] = calls
-    assert (call["Limit"], call["ScanIndexForward"]) == (3, False)
-    assert len(store.messages("u1")) == 5
+    assert (call["Limit"], call["ScanIndexForward"]) == (2, False)
+
+
+def test_has_messages(store):
+    assert store.has_messages("u2") is False
+    store.append_message("u2", _message("2026-01-01T00:00:00", "t"))
+    assert store.has_messages("u2") is True
+
+
+def test_set_message_reading_adds_the_field(store):
+    store.append_message("u1", _message("2026-01-01T00:00:00", "t"))
+    store.set_message_reading("u1", "2026-01-01T00:00:00", {"state": "saved"})
+    assert store.messages("u1", "2026-01-01")[0]["reading"] == {"state": "saved"}
 
 
 def test_decimals_do_not_leak(store):
@@ -207,7 +232,7 @@ def test_every_read_is_consistent(store):
     store.readings("acc1", "M1")
     store.tariffs("acc1")
     store.pending("u1")
-    store.messages("u1")
+    store.messages("u1", "2026")
     assert len(calls) == 10
     assert all(call["ConsistentRead"] is True for call in calls)
 

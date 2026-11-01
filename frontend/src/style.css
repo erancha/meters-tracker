@@ -1,6 +1,7 @@
 body { margin: 0; background: #f6f8f9; }
 #root {
   min-height: 100dvh; display: flex; flex-direction: column;
+  --head-height: 3.3rem;
   --accent: #1d5b8c; --accent-soft: #e6eff6; --accent-border: #b9cfe0;
   --ink: #1d2a33; --muted: #6b7a84; --hair: #dde4e8; --card: #fff;
   --elec: #a8670c; --elec-soft: #fdf1dc; --water: #1f6fb8; --water-soft: #e3effa;
@@ -65,6 +66,7 @@ body { margin: 0; background: #f6f8f9; }
 #root .msg-failed { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.2rem; color: var(--warn); font-size: 0.8rem; }
 #root .msg-failed button { font: inherit; padding: 0.1rem 0.6rem; border: 1px solid var(--accent-border); border-radius: 999px; background: var(--card); color: var(--accent); cursor: pointer; }
 #root .msg.photo .shots { display: flex; gap: 0.3rem; }
+#root .msg.focused { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 #root .card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; font-weight: 600; margin-bottom: 0.4rem; }
 #root .kind { font-size: 0.75rem; font-weight: 600; border-radius: 999px; padding: 0.05rem 0.55rem; }
@@ -140,12 +142,17 @@ body { margin: 0; background: #f6f8f9; }
   /* margin-inline-start keeps it at the row's end even while the chat has not rendered yet */
   flex: none; width: 15rem; margin-inline-start: auto; border-inline-start: 1px solid var(--hair);
   background: var(--card);
-  padding: 0.8rem; overflow-y: auto; max-height: calc(100dvh - 3.2rem); position: sticky; top: 3.2rem;
+  padding: 0.8rem; box-sizing: border-box; overflow-y: auto; max-height: calc(100dvh - var(--head-height)); position: sticky; top: var(--head-height);
 }
 #root .sidebar h2 { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
-#root .sidebar ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
-#root .sidebar .shot { display: block; padding: 0; border: 0; background: none; cursor: pointer; }
-#root .sidebar img { display: block; width: 100%; height: auto; border-radius: 8px; }
+#root .sidebar details + details { margin-top: 0.6rem; }
+#root .sidebar summary { font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+#root .sidebar ul { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.1rem; }
+#root .sidebar li button { font: inherit; font-size: 0.8rem; width: 100%; padding: 0.2rem 0.3rem; border: 0; border-radius: 6px; background: none; color: var(--ink); text-align: start; cursor: pointer; }
+#root .sidebar li button:hover { background: var(--accent-soft); }
+#root .sidebar p { margin: 0; font-size: 0.8rem; color: var(--muted); }
+#root .sidebar .alert-line { display: block; width: 100%; margin: 0 0 0.6rem; padding: 0; border: 0; background: none; font: inherit; font-size: 0.95rem; font-weight: 600; color: var(--warn); text-align: start; }
+#root .sidebar button.alert-line { cursor: pointer; }
 
 /* narrow windows never scroll sideways */
 #root .text, #root .msg { overflow-wrap: anywhere; }

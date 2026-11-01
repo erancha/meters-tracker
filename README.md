@@ -36,7 +36,8 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
 - Sign-in is with a Google account. Each address has an account of its own, and an address the
   owner delegates works in that owner's account.
 - The chat runs in the browser: sign in with Google, photograph a meter or pick photos, answer a
-  card with a button or type a turn. On wide windows a sidebar lists the photos sent so far.
+  card with a button or type a turn. On wide windows a panel shows the day's saved and waiting
+  readings.
 - Prices are typed in the chat or read from a photo of a previous statement; closing a period
   with no prices on record asks for them.
 - The emailed PDF report, a daily reminder, questions about the data, corrections, managing

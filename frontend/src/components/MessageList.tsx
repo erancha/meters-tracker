@@ -9,19 +9,22 @@
  * line appears, a photo decodes, the window reflows) the page scrolls to its bottom. The
  * composer sticks to the viewport's bottom, so the end is the page's bottom, not the last
  * bubble's edge. The thread places the page itself, so a reload does not restore the browser's
- * remembered position over it.
+ * remembered position over it. A focus scrolls the thread to the message it names and highlights
+ * the message for a moment, and the end is not followed during that moment.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Api } from "../api";
 import { foldChoices } from "../foldChoices";
 import { shownClock, shownTime } from "../messageTime";
 import { texts } from "../texts";
-import type { Card, CardOption, LocalMessage, Snapshot } from "../types";
+import type { Card, CardOption, Focus, LocalMessage, Snapshot } from "../types";
 import { CardView } from "./CardView";
 import { Thumbnail } from "./Thumbnail";
 
+const FOCUS_MS = 1500;
+
 export function MessageList({
-  api, messages, snapshot, onChoose, choosing, thinking, onOpen, onRetry,
+  api, messages, snapshot, onChoose, choosing, thinking, onOpen, onRetry, focus,
 }: {
   api: Api;
   messages: LocalMessage[];
@@ -33,8 +36,11 @@ export function MessageList({
   thinking: boolean;
   onOpen: (src: string) => void;
   onRetry: (message: LocalMessage) => void;
+  focus: Focus | null;
 }) {
   const list = useRef<HTMLUListElement>(null);
+  const focusing = useRef(false);
+  const [focused, setFocused] = useState<string | null>(null);
   const live = snapshot.card;
 
   const entries = foldChoices(messages);
@@ -45,11 +51,25 @@ export function MessageList({
   const working = thinking || (live === null && snapshot.waiting > 0);
   useEffect(() => {
     history.scrollRestoration = "manual";
-    const follow = new ResizeObserver(() =>
-      window.scrollTo({ top: document.documentElement.scrollHeight }));
+    const follow = new ResizeObserver(() => {
+      if (!focusing.current) window.scrollTo({ top: document.documentElement.scrollHeight });
+    });
     follow.observe(list.current!);
     return () => follow.disconnect();
   }, []);
+  useEffect(() => {
+    if (focus === null) return;
+    const target = list.current!.querySelector(`[data-at="${focus.at}"]`);
+    if (target === null) return;
+    focusing.current = true;
+    target.scrollIntoView({ block: "center" });
+    setFocused(focus.at);
+    const clear = setTimeout(() => {
+      focusing.current = false;
+      setFocused(null);
+    }, FOCUS_MS);
+    return () => clearTimeout(clear);
+  }, [focus]);
   const isPhoto = (m: LocalMessage) => m.image_key !== null || m.localUrl !== undefined;
   const bubble = (m: LocalMessage) =>
     `msg ${m.role === "user" ? "user" : "bot"}${isPhoto(m) ? " photo" : ""}`;
@@ -57,7 +77,7 @@ export function MessageList({
   return (
     <ul className="msgs" ref={list}>
       {entries.map(({ message: m, answer }, i) => (
-        <li key={i} className={bubble(m)}>
+        <li key={i} className={`${bubble(m)}${m.at === focused ? " focused" : ""}`} data-at={m.at}>
           {isPhoto(m) && (
             <div className="shots">
               {m.localUrl !== undefined

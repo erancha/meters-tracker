@@ -29,7 +29,7 @@ forecast and charge, with the exact values the code uses. The arithmetic lives i
 | `reclose_days`: 7 | `config/app.json` | Window after a closing reading that offers a re-close |
 | `close_days_before_end`: 7 | `config/app.json` | Days before a period's end that may close it |
 | `file_url_minutes`: 10 | `config/app.json` | Lifetime of a photo's presigned URL |
-| `sidebar_min_width_px`: 900 | `config/app.json` | Narrowest window with the planned sidebar |
+| `sidebar_min_width_px`: 900 | `config/app.json` | Narrowest window with the day panel |
 | 4 MiB, JPEG or PNG | `src/handlers/api.py` | Largest accepted photo, after base64 decoding |
 | 200 | `src/common/store.py` | Messages `GET /chat` returns |
 | Asia/Jerusalem | `src/common/dates.py` | The zone of every date and of "today" |

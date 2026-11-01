@@ -254,11 +254,12 @@ def test_load_greets_once_a_day_for_apartments_past_end(env, ddb):
     kit.today = date(2026, 11, 2)
     messages, snapshot = kit.engine.load(USER)
     greeting = texts.greeting([("עורף", date(2026, 10, 31))])
-    assert [m["text"] for m in messages] == [texts.welcome(), greeting]
+    assert [m["text"] for m in messages] == [greeting]
     assert snapshot.card is None
-    assert len(kit.engine.load(USER)[0]) == 2
+    assert len(kit.engine.load(USER)[0]) == 1
     kit.today = date(2026, 11, 3)
-    assert len(kit.engine.load(USER)[0]) == 3
+    assert len(kit.engine.load(USER)[0]) == 1
+    assert [m["text"] for m in kit.engine.load(USER, "2026-11-02")[0]] == [greeting]
 
 
 def test_load_welcomes_a_new_account_once(env, ddb):
@@ -266,6 +267,34 @@ def test_load_welcomes_a_new_account_once(env, ddb):
     messages, _ = kit.engine.load(USER)
     assert [(m["role"], m["text"]) for m in messages] == [("assistant", texts.welcome())]
     assert len(kit.engine.load(USER)[0]) == 1
+
+
+def test_load_returns_only_the_days_messages(env, ddb):
+    kit = Kit(today=date(2026, 10, 28))
+    kit.model.queue(IntentResult(intent="unknown"))
+    kit.model.queue(IntentResult(intent="unknown"))
+    kit.say("אתמול")
+    kit.today = date(2026, 10, 29)
+    kit.say("היום")
+    messages, _ = kit.engine.load(USER)
+    assert [m["text"] for m in messages if m["role"] == "user"] == ["היום"]
+    earlier, _ = kit.engine.load(USER, "2026-10-28")
+    assert [m["text"] for m in earlier if m["role"] == "user"] == ["אתמול"]
+
+
+def test_a_new_day_with_nothing_due_is_empty_with_no_welcome(env, ddb):
+    kit = Kit(today=date(2026, 10, 20))
+    kit.engine.load(USER)
+    kit.today = date(2026, 10, 21)
+    assert kit.engine.load(USER)[0] == []
+
+
+def test_an_earlier_day_with_no_messages_gets_no_greeting(env, ddb):
+    kit = Kit(today=date(2026, 10, 20))
+    _apartment(kit)
+    kit.engine.load(USER)
+    kit.today = date(2026, 11, 2)
+    assert kit.engine.load(USER, "2026-10-25")[0] == []
 
 
 def test_second_confirm_on_a_vacant_apartment_photo_opens_no_period(env, ddb):

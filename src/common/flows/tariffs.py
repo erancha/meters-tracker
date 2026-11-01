@@ -34,6 +34,7 @@ from common.flows import (
     not_understood,
     price_in,
     price_on,
+    tag_photo,
 )
 from common.model import StatementResult
 from common.periods import charge, consumption, tariff_on
@@ -154,6 +155,7 @@ def from_statement(engine, user, item, statement: StatementResult, effective_dat
     else:
         data["ex_vat"] = read
     _resolve(engine, user, data)
+    tag_photo(engine, user, item, "dropped")
     item.update(kind=KIND, data=data)
     replies = ask(engine, user, item, CONFIRM, card)
     for old in replaced:

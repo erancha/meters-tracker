@@ -36,6 +36,17 @@ function stubPhotoPipeline() {
 describe("Chat", () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+  it("scrolls to the message a focus names and highlights it for a moment", async () => {
+    const api = fakeApi({ messages: history, snapshot: snapshot(null) });
+    render(<Chat api={api} onOpen={vi.fn()} focus={{ at: history[0].at, n: 1 }} />,
+           { wrapper: wrapper().Wrapper });
+
+    const bubble = (await screen.findByText("שלום")).closest("li")!;
+
+    await waitFor(() => expect(bubble).toHaveClass("focused"));
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
   it("shows a card message once, not as text and as card", async () => {
     setup({ messages: [...history, cardMessage()], snapshot: snapshot(card()) });
 

@@ -13,7 +13,7 @@ import binascii
 import json
 import os
 from dataclasses import asdict
-from datetime import timedelta
+from datetime import date, timedelta
 from urllib.parse import unquote
 
 from common import access
@@ -44,7 +44,10 @@ def handler(event, context):
     store = Store.from_env()
     user = access.resolve(store, claims["email"])
     if route == "GET /chat":
-        return _chat(_engine(store), user)
+        try:
+            return _chat(_engine(store), user, event.get("queryStringParameters"))
+        except _Rejected as rejected:
+            return rejected.response
     if route == "POST /turn":
         try:
             return _turn(store, user, event.get("body"))
@@ -86,8 +89,15 @@ def _engine(store):
     return Engine(store, _LazyModel(), _files(), _config(), lambda_timeout, os.environ["LLM_MODEL"])
 
 
-def _chat(engine, user):
-    messages, snapshot = engine.load(user)
+def _chat(engine, user, query):
+    # The HTTP API leaves queryStringParameters out of a request with no query string.
+    day = None if query is None else query["day"]
+    if day is not None:
+        try:
+            date.fromisoformat(day)
+        except ValueError:
+            raise _invalid()
+    messages, snapshot = engine.load(user, day)
     return response(200, {"messages": messages, "snapshot": asdict(snapshot)})
 
 

@@ -26,7 +26,9 @@ export const answer = (c: Card, label: string): Message => ({
   ...message("user", label), choice: { pending: c.pending, version: c.version },
 });
 
-export const snapshot = (c: Card | null, waiting = 0): Snapshot => ({ card: c, waiting });
+export const snapshot = (c: Card | null, waiting = 0, tariffsMissing = false): Snapshot => ({
+  card: c, waiting, tariffs_missing: tariffsMissing,
+});
 
 /** The server's chat; a test that expects the post-turn refetch to differ sets getChat itself. */
 export function fakeApi(chat: { messages: Message[]; snapshot: Snapshot }): Api {

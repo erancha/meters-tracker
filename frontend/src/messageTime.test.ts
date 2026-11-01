@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { jerusalemStamp, shownTime } from "./messageTime";
+import { jerusalemStamp, shownDay, shownTime } from "./messageTime";
+
+describe("shownDay", () => {
+  it("names the day of the week in Hebrew before the date", () => {
+    expect(shownDay("2026-11-01")).toBe("יום ראשון 01/11/2026");
+    expect(shownDay("2026-11-07")).toBe("שבת 07/11/2026");
+  });
+});
 
 describe("shownTime", () => {
   it("shows a stored stamp's wall clock to the minute", () => {

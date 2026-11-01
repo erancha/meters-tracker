@@ -59,7 +59,7 @@ def test_plan_holds_only_the_accounts_own_rows_and_files(env, ddb):
         "readings": 0,
         "tariffs": 0,
         "pending": 2,
-        "messages": len(kit.store.messages(OWNER)),
+        "messages": len(kit.store.messages(OWNER, "2026")),
     }
     assert all(k["pk"] == OWNER for keys in planned.rows.values() for k in keys)
     assert sorted(f["Key"] for f in planned.files) == sorted(kit.photo_keys())
@@ -131,7 +131,7 @@ def test_main_without_yes_prints_the_plan_and_deletes_nothing(env, ddb, monkeypa
 def test_main_with_yes_deletes_the_account(env, ddb, monkeypatch, capsys):
     kit = _seed()
     _run_main(monkeypatch, ddb, OWNER, "--yes")
-    assert kit.store.pending(OWNER) == [] and kit.store.messages(OWNER) == []
+    assert kit.store.pending(OWNER) == [] and kit.store.messages(OWNER, "2026") == []
     assert "Deleted" in capsys.readouterr().out
 
 

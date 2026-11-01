@@ -85,10 +85,13 @@ def card(item) -> dict:
     return make_card(item, item["step"], text(item["data"]), options(item["data"]))
 
 
-def start(engine, user, seq, image_key, image, media_type, note, sent_on) -> list[Reply]:
+def start(
+    engine, user, seq, image_key, image, media_type, note, sent_on, message_at
+) -> list[Reply]:
     close_period.park_waiting(engine, user)
     data = {
         "image_key": image_key,
+        "message_at": message_at,
         "read_started": dates.now().isoformat(),
         "failed_photos": [],
     }
@@ -162,7 +165,7 @@ def _absorb_superseded(engine, user, item):
         )
     engine.store.put_pending(user.email, item)
     for other in absorbed:
-        engine.store.delete_pending(user.email, other["seq"])
+        drop(engine, user, other, [])
 
 
 def _reading_date(engine, note, sent_on) -> str:
@@ -356,4 +359,4 @@ def _done(engine, user, item, reading) -> list[Reply]:
         engine.store.update_meter(
             user.account, meter["serial"], display_choice=display_choice(data)
         )
-    return drop(engine, user, item, [summary(engine, user, meter, reading)])
+    return drop(engine, user, item, [summary(engine, user, meter, reading)], state="saved")

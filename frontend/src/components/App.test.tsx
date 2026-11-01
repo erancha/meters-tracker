@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { fakeApi, message, snapshot, wrapper } from "../testChat";
 import { texts } from "../texts";
 import { App } from "./App";
@@ -34,7 +33,7 @@ describe("App", () => {
     stubScreen(900, 900);
     setup();
 
-    expect(await screen.findByRole("complementary", { name: texts.photosTitle }))
+    expect(await screen.findByRole("complementary", { name: texts.dayTitle }))
       .toBeInTheDocument();
   });
 
@@ -45,19 +44,5 @@ describe("App", () => {
     await screen.findByRole("button", { name: texts.accountMenu });
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("/app.json"));
     expect(screen.queryByRole("complementary")).toBeNull();
-  });
-
-  it("opens a sidebar photo in one lightbox outside the sidebar's stacking context", async () => {
-    stubScreen(900, 900);
-    setup();
-    const sidebar = await screen.findByRole("complementary", { name: texts.photosTitle });
-
-    await userEvent.click(await within(sidebar).findByRole("button", { name: texts.photo }));
-
-    const close = screen.getByRole("button", { name: texts.close });
-    expect(sidebar).not.toContainElement(close);
-    expect(document.querySelectorAll(".lightbox")).toHaveLength(1);
-    await userEvent.click(close);
-    expect(document.querySelector(".lightbox")).toBeNull();
   });
 });

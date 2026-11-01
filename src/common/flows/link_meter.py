@@ -220,4 +220,4 @@ def _link(engine, user, item) -> list[Reply]:
     reading = save_reading(engine, user, item, opens=data["period_start"])
     if data["replaced_serial"] is not None:
         engine.store.update_meter(account, data["replaced_serial"], retired_at=data["reading_date"])
-    return drop(engine, user, item, [summary(engine, user, meter, reading)])
+    return drop(engine, user, item, [summary(engine, user, meter, reading)], state="saved")

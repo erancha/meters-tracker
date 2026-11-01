@@ -214,6 +214,13 @@ def _close_intent():
     return IntentResult(intent="close_period", name="עורף")
 
 
+def test_the_snapshot_says_tariffs_are_missing_until_the_ask_is_answered(env, ddb):
+    kit = Kit([_close_intent(), IntentResult(intent="reject")], today=date(2026, 11, 2))
+    _closable(kit)
+    assert _close(kit).snapshot.tariffs_missing is True
+    assert kit.say("לא עכשיו").snapshot.tariffs_missing is False
+
+
 def test_a_close_without_a_tariff_asks_for_tariffs(env, ddb):
     kit = Kit([_close_intent()], today=date(2026, 11, 2))
     _closable(kit)

@@ -67,13 +67,27 @@ OPEN — not yet implemented (#2): the build's version, a WhatsApp invite and a 
 - Closing a period with no prices on record asks for them; once saved, the reply shows what each
   such period costs.
 
-## Photo sidebar
+## Day panel
 
-On a window at least `sidebar_min_width_px` wide (900 px in `config/app.json`), a sidebar
-beside the chat lists every photo in the history, newest first. A tap opens the same
-full-screen view as in the thread.
+The chat shows one day, today. On a window at least `sidebar_min_width_px` wide (900 px in
+`config/app.json`), a panel beside it, titled with the day's name and date (`היום · יום ראשון
+01/11/2026`), shows that day's meter photos, dated by when they were uploaded, in up to two
+collapsed sections, each only when it has lines:
 
-OPEN — not yet implemented (#1): reaching the sidebar on a narrow screen.
+- `קריאות ממתינות · 2`: photos that still need something. A line is the time and the state:
+  `לאישור` (a card awaits an answer), `לשליחה` (failed, awaiting a retry) or `בקריאה` (the model has
+  not answered yet).
+- `קריאות שבוצעו · 7`: readings saved. A line is the time, the property / apartment and the meter
+  type.
+
+While a request for tariffs is open, the panel also shows `חסרים תעריפים` above the sections, even
+when another card is shown first, and a tap scrolls to the card asking for them.
+
+A tap on a line scrolls the chat to that photo and highlights it for a moment. The sections follow
+the chat with no reload. With neither section, the panel says `לא נקראו מונים היום`.
+
+OPEN — not yet implemented (#1): reaching the panel on a narrow screen.
+OPEN — not yet implemented (#6): paging to earlier days, and reaching a photo that failed on one.
 
 ## Account menu
 

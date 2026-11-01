@@ -1,42 +1,117 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { fakeApi, message, snapshot, wrapper } from "../testChat";
+import { card, message } from "../testChat";
 import { texts } from "../texts";
-import type { Message } from "../types";
+import type { Message, Reading } from "../types";
 import { Sidebar } from "./Sidebar";
 
-const photo = (key: string, at: string): Message => ({
-  ...message("user", ""), text: null, image_key: key, at,
+const photo = (at: string, reading?: Reading, failed?: boolean): Message => ({
+  ...message("user", ""), text: null, image_key: `k-${at}`, at,
+  ...(reading && { reading }), ...(failed && { failed }),
 });
 
-function setup(messages: Message[]) {
-  const api = fakeApi({ messages, snapshot: snapshot(null) });
-  (api.fileUrl as ReturnType<typeof vi.fn>)
-    .mockImplementation(async (key: string) => `https://files/${key}`);
-  const onOpen = vi.fn();
-  render(<Sidebar messages={messages} api={api} onOpen={onOpen} />, { wrapper: wrapper().Wrapper });
-  return onOpen;
+const place = { meter_type: "electricity", apartment: "דירה 3", property: "הרצל 5" } as const;
+const saved = (at: string) => photo(at, { state: "saved", ...place });
+const AT = "2026-11-01T09:47:00.000000_aaaa";
+const LATER = "2026-11-01T10:05:00.000000_bbbb";
+
+const ask: Message = {
+  ...message("assistant", "חסרים תעריפים"), at: AT,
+  card: { ...card(), kind: "tariffs_ask", options: [] },
+};
+
+function setup(messages: Message[], tariffsMissing = false) {
+  const onFocus = vi.fn();
+  render(<Sidebar messages={messages} tariffsMissing={tariffsMissing} onFocus={onFocus}
+                  day="2026-11-01" />);
+  return onFocus;
 }
 
 describe("Sidebar", () => {
-  it("lists only messages with a photo, newest first", async () => {
-    setup([
-      photo("old", "2026-10-01T10:00:00Z"),
-      message("user", "שלום"),
-      photo("new", "2026-10-02T10:00:00Z"),
-    ]);
+  it("titles the panel with today's weekday and date", () => {
+    setup([]);
 
-    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(2));
-    expect(screen.getAllByRole("img").map((i) => i.getAttribute("src")))
-      .toEqual(["https://files/new", "https://files/old"]);
+    expect(screen.getByRole("heading")).toHaveTextContent("היום · יום ראשון 01/11/2026");
   });
 
-  it("opens a thumbnail's photo through onOpen", async () => {
-    const onOpen = setup([photo("a", "2026-10-01T10:00:00Z")]);
+  it("lists the waiting section before the saved one", () => {
+    setup([saved(AT), photo(LATER, { state: "awaiting", ...place })]);
 
-    await userEvent.click(await screen.findByRole("button", { name: texts.photo }));
+    const summaries = screen.getAllByText(/קריאות/).map((e) => e.textContent);
+    expect(summaries).toEqual([texts.heldCount(1), texts.savedCount(1)]);
+  });
 
-    expect(onOpen).toHaveBeenCalledWith("https://files/a");
+  it("shows a section only for a count above zero", () => {
+    setup([saved(AT)]);
+
+    expect(screen.getByText(texts.savedCount(1))).toBeInTheDocument();
+    expect(screen.queryByText(texts.heldCount(0))).toBeNull();
+  });
+
+  it("keeps a section collapsed until its header is tapped", async () => {
+    setup([saved(AT)]);
+    const summary = screen.getByText(texts.savedCount(1));
+
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
+  });
+
+  it("writes a saved line as time, property / apartment and meter type, newest first", () => {
+    setup([saved(AT), saved(LATER)]);
+
+    expect(screen.getAllByRole("button", { hidden: true }).map((b) => b.textContent)).toEqual([
+      "10:05 · הרצל 5 / דירה 3 · חשמל",
+      "09:47 · הרצל 5 / דירה 3 · חשמל",
+    ]);
+  });
+
+  it("writes a held line as time and state only", () => {
+    setup([
+      photo(AT, { state: "awaiting", ...place }),
+      photo(LATER, undefined, true),
+    ]);
+
+    expect(screen.getAllByRole("button", { hidden: true }).map((b) => b.textContent)).toEqual([
+      `10:05 · ${texts.held.failed}`,
+      `09:47 · ${texts.held.awaiting}`,
+    ]);
+  });
+
+  it("calls onFocus with the stamp of the tapped line's message", async () => {
+    const onFocus = setup([saved(AT)]);
+
+    await userEvent.click(screen.getByText(texts.savedCount(1)));
+    await userEvent.click(screen.getByRole("button"));
+
+    expect(onFocus).toHaveBeenCalledWith(AT);
+  });
+
+  it("shows missing tariffs as a line that focuses the card asking for them", async () => {
+    const onFocus = setup([ask], true);
+
+    await userEvent.click(screen.getByRole("button", { name: texts.tariffsMissing }));
+
+    expect(onFocus).toHaveBeenCalledWith(AT);
+  });
+
+  it("shows no tariffs line once none are missing", () => {
+    setup([ask]);
+
+    expect(screen.queryByText(texts.tariffsMissing)).toBeNull();
+  });
+
+  it("still names missing tariffs when the card asking for them was on an earlier day", () => {
+    setup([], true);
+
+    expect(screen.getByText(texts.tariffsMissing)).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("says no meters were read when both lists are empty", () => {
+    setup([message("assistant", "שלום")]);
+
+    expect(screen.getByText(texts.noReadingsToday)).toBeInTheDocument();
   });
 });

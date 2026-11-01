@@ -231,18 +231,28 @@ class Store:
     def delete_pending(self, user, seq):
         self._tables["pending"].delete_item(Key={"pk": user, "sk": seq})
 
-    def messages(self, user, limit=200) -> list:
-        """The latest limit messages, oldest first."""
+    def messages(self, user, day, limit=200) -> list:
+        """The latest limit messages whose stamp starts with day, oldest first."""
         page = self._tables["messages"].query(
-            **self._by_pk(user), ScanIndexForward=False, Limit=limit
+            KeyConditionExpression=Key("pk").eq(user) & Key("sk").begins_with(day),
+            ConsistentRead=True,
+            ScanIndexForward=False,
+            Limit=limit,
         )
         return [_record(item) for item in reversed(page["Items"])]
+
+    def has_messages(self, user) -> bool:
+        page = self._tables["messages"].query(**self._by_pk(user), Limit=1, Select="COUNT")
+        return page["Count"] > 0
 
     def append_message(self, user, message):
         self._put("messages", user, message["at"], message)
 
     def message(self, user, at) -> dict:
         return self._get("messages", {"pk": user, "sk": at})
+
+    def set_message_reading(self, user, at, reading):
+        self._update("messages", user, at, {"reading": reading})
 
     def mark_message_failed(self, user, at):
         self._update("messages", user, at, {"failed": True})

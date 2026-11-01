@@ -10,20 +10,23 @@ import boto3
 import pytest
 from engine_kit import ACCOUNT, Kit, electricity, options, reading
 
+from common import dates
 from handlers import api
 
 USER_EMAIL = ACCOUNT
 TOO_LARGE = 4 * 1024 * 1024 + 1
+EMPTY_SNAPSHOT = {"card": None, "waiting": 0, "tariffs_missing": False}
 
 
-def event(route, body=None, key=None, email=USER_EMAIL, email_verified="true"):
+def event(route, body=None, key=None, email=USER_EMAIL, email_verified="true", query=None):
     claims = {"sub": "s-1", "email": email, "email_verified": email_verified}
-    return {
+    request = {
         "routeKey": route,
         "requestContext": {"authorizer": {"jwt": {"claims": claims}}},
         "pathParameters": None if key is None else {"key": key},
         "body": None if body is None else json.dumps(body),
     }
+    return request if query is None else {**request, "queryStringParameters": query}
 
 
 @pytest.fixture
@@ -74,6 +77,20 @@ def test_get_chat_returns_history_and_snapshot(kit):
     assert body["snapshot"]["waiting"] == 0
 
 
+def test_get_chat_takes_a_day(kit):
+    _seed_known_meter(kit)
+    _post_photo(kit)
+    other = api.handler(event("GET /chat", query={"day": "2026-10-01"}), None)
+    assert _body(other)["messages"] == []
+    today = api.handler(event("GET /chat", query={"day": dates.today().isoformat()}), None)
+    assert _body(today)["messages"][0]["role"] == "user"
+
+
+def test_get_chat_rejects_a_malformed_day(kit):
+    result = api.handler(event("GET /chat", query={"day": "yesterday"}), None)
+    assert (result["statusCode"], _body(result)["error"]) == (400, "invalid_request")
+
+
 def test_post_turn_image_creates_reading_card(kit):
     _seed_known_meter(kit)
     result = _post_photo(kit)
@@ -106,7 +123,7 @@ def test_choice_on_handled_item_is_409(kit):
     api.handler(event("POST /turn", choice), None)
     result = api.handler(event("POST /turn", choice), None)
     assert result["statusCode"] == 409
-    assert _body(result) == {"error": "already_handled", "snapshot": {"card": None, "waiting": 0}}
+    assert _body(result) == {"error": "already_handled", "snapshot": EMPTY_SNAPSHOT}
     assert len(kit.readings("E-392")) == 2
 
 
@@ -228,7 +245,8 @@ def test_option_not_on_the_current_card_is_409(kit):
     card = _body(_post_photo(kit))["snapshot"]["card"]
     result = api.handler(event("POST /turn", _choice(card, "reset")), None)
     assert result["statusCode"] == 409
-    assert _body(result) == {"error": "already_handled", "snapshot": {"card": card, "waiting": 0}}
+    snapshot = {**EMPTY_SNAPSHOT, "card": card}
+    assert _body(result) == {"error": "already_handled", "snapshot": snapshot}
     assert len(kit.readings("E-392")) == 1
 
 

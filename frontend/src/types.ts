@@ -20,6 +20,14 @@ export interface CardRef {
   version: number;
 }
 
+/** Which meter a photo read and where it stands; the place is null until the chat knows it. */
+export interface Reading {
+  state: "awaiting" | "saved" | "dropped";
+  meter_type: "water" | "electricity" | "unknown" | null;
+  apartment: string | null;
+  property: string | null;
+}
+
 export interface Message {
   at: string;
   role: "user" | "assistant";
@@ -33,6 +41,8 @@ export interface Message {
   failed?: boolean;
   /** The stamp of the latest retry, on a message that has had one. */
   retried_at?: string;
+  /** Set on a photo's message once the model has answered. */
+  reading?: Reading;
 }
 
 export interface Reply {
@@ -45,6 +55,8 @@ export interface Reply {
 export interface Snapshot {
   card: Card | null;
   waiting: number;
+  /** A request for tariffs is open, even when another card is shown ahead of it. */
+  tariffs_missing: boolean;
 }
 
 export interface TurnResult {
@@ -61,6 +73,12 @@ export type TurnBody =
   | { image: string; media_type: string; note?: string }
   | { choice: { pending: string; version: number; option: string } }
   | { retry: string };
+
+/** A request to show a message in the thread; n grows so a repeated tap scrolls again. */
+export interface Focus {
+  at: string;
+  n: number;
+}
 
 /** A photo the browser has sent but the server's history does not hold yet; localUrl shows it. */
 export interface LocalMessage extends Message {

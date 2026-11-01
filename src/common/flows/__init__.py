@@ -13,6 +13,7 @@ Building blocks:
 - Action / Choice / Reply / Snapshot / TurnResult: what a turn takes and returns
 - new_item / make_card / ask / drop / decide: a new pending item, card rendering, the pending
   write, reading a choice or text
+- tag_photo: the reading field on a photo's message, kept current by ask and drop
 - classify_context / request_context: what the classifier is given with an answer to a card,
   and with a request no card takes
 - propose / edit_reading: the value a photo proposes and the edits a reading card accepts
@@ -37,6 +38,8 @@ PARKED = "parked"
 STANDBY = "standby"
 POSITIONS = ("top", "bottom")
 FAILURE_FIELDS = ("failed_photos", "model")
+# The flows a meter photo's pending item passes through.
+READING_KINDS = ("meter_photo", "link_meter")
 PRICES = {"electricity": "electricity_per_kwh", "water": "water_per_m3"}
 
 
@@ -78,6 +81,7 @@ class Reply:
 class Snapshot:
     card: dict | None
     waiting: int
+    tariffs_missing: bool
 
 
 @dataclass
@@ -145,12 +149,24 @@ def ask(engine, user, item, step, render) -> list[Reply]:
     """Shows the item's card for step, under a new version."""
     item.update(step=step, status=AWAITING, version=item["version"] + 1)
     engine.store.put_pending(user.email, item)
+    tag_photo(engine, user, item, "awaiting")
     return [card_reply(render(item))]
 
 
-def drop(engine, user, item, replies: list[Reply]) -> list[Reply]:
+def drop(engine, user, item, replies: list[Reply], state="dropped") -> list[Reply]:
+    tag_photo(engine, user, item, state)
     engine.store.delete_pending(user.email, item["seq"])
     return replies
+
+
+def tag_photo(engine, user, item, state):
+    """Records on a meter photo's message what the photo read and where it stands: awaiting,
+    saved or dropped. The meter type and the place are None until the flow knows them."""
+    if item["kind"] not in READING_KINDS:
+        return
+    data = item["data"]
+    reading = {key: data.get(key) for key in ("meter_type", "apartment", "property")}
+    engine.store.set_message_reading(user.email, data["message_at"], {"state": state, **reading})
 
 
 def decide(engine, card, action) -> tuple[str, IntentResult | None]:

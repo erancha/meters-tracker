@@ -15,7 +15,7 @@ def _down(*args):
 
 
 def _user_messages(kit):
-    return [m for m in kit.store.messages(USER.email) if m["role"] == "user"]
+    return [m for m in kit.store.messages(USER.email, "2026") if m["role"] == "user"]
 
 
 def _failed_photo(kit):

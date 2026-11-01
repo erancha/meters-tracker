@@ -12,11 +12,12 @@ failed and a retry handles that same message again, with no second message. A re
 read from its stored copy and keeps the day it was sent as its reading date.
 
 The snapshot is the oldest awaiting item's card, else the oldest standby item's, plus the count of
-items behind it; the browser shows it and never orders the queue itself. A photo still being read
-after the api Lambda's time limit was being read by an invocation that was killed, so the snapshot
-turns it into a retake card and the queue clears. "Today" is the injected clock throughout,
-including the date prefix of every pending seq and message timestamp, so the once-a-day greeting and
-the reading dates agree on what day it is.
+items behind it and whether a request for tariffs is open, even behind other cards; the browser
+shows it and never orders the queue itself. A photo still being read after the api Lambda's time
+limit was being read by an invocation that was killed, so the snapshot turns it into a retake card
+and the queue clears. "Today" is the injected clock throughout, including the date prefix of every
+pending seq and message timestamp, so the once-a-day greeting and the reading dates agree on what
+day it is.
 """
 
 import secrets
@@ -112,6 +113,7 @@ class Engine:
                     action.media_type,
                     action.note,
                     sent_on,
+                    message["at"],
                 ),
             )
             return self._result(user, replies, image_key)
@@ -157,6 +159,7 @@ class Engine:
             media_type,
             message["text"],
             sent_on,
+            message["at"],
         )
 
     def _choose(self, user, action: Action) -> list[Reply]:
@@ -221,20 +224,24 @@ class Engine:
             if item["status"] == READING and meter_photo.stalled(self, item):
                 meter_photo.ask_retake(self, user, item)
         queue = [i for i in pending if i["status"] in (READING, AWAITING, STANDBY)]
+        missing = any(i["kind"] == tariffs.KIND and i["step"] == tariffs.ASK for i in queue)
         shown = [i for i in queue if i["status"] == AWAITING] or [
             i for i in queue if i["status"] == STANDBY
         ]
         if not shown:
-            return Snapshot(None, len(queue))
+            return Snapshot(None, len(queue), missing)
         oldest = shown[0]
-        return Snapshot(FLOWS[oldest["kind"]].card(oldest), len(queue) - 1)
+        return Snapshot(FLOWS[oldest["kind"]].card(oldest), len(queue) - 1, missing)
 
-    def load(self, user) -> tuple[list[dict], Snapshot]:
-        messages = self.store.messages(user.email)
+    def load(self, user, day=None) -> tuple[list[dict], Snapshot]:
+        """The messages of day, today when None, with the snapshot. An address with no message
+        at all gets the welcome, and the first load of today the greeting when a close is due."""
         today = self.clock().isoformat()
-        if not messages:
+        day = today if day is None else day
+        messages = self.store.messages(user.email, day)
+        if not self.store.has_messages(user.email):
             messages.append(self._append(user, "assistant", texts.welcome()))
-        elif not any(m["at"].startswith(today) for m in messages):
+        elif day == today and not messages:
             due = close_period.due_for_close(self, user)
             if due:
                 messages.append(self._append(user, "assistant", texts.greeting(due)))
