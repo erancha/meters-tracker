@@ -3,7 +3,7 @@
  * (its text repeats the card); the snapshot's card gets its buttons on the latest history
  * message carrying it, or at the end when none does. Choice messages are folded into their
  * cards. A photo shows as a thumbnail that opens the full-screen lightbox. A user message shows
- * its date and time.
+ * its date and time, its latest retry's time, and a retry button while it has failed.
  *
  * The thread scrolls to its end as it grows, except when a new live card is already in the
  * history (an earlier photo's card, after the card above it was answered): that card is
@@ -12,13 +12,15 @@
 import { useEffect, useRef } from "react";
 import type { Api } from "../api";
 import { foldChoices } from "../foldChoices";
-import { shownTime } from "../messageTime";
+import { shownClock, shownTime } from "../messageTime";
 import { texts } from "../texts";
 import type { Card, CardOption, LocalMessage, Snapshot } from "../types";
 import { CardView } from "./CardView";
 import { Thumbnail } from "./Thumbnail";
 
-export function MessageList({ api, messages, snapshot, onChoose, choosing, thinking, onOpen }: {
+export function MessageList({
+  api, messages, snapshot, onChoose, choosing, thinking, onOpen, onRetry,
+}: {
   api: Api;
   messages: LocalMessage[];
   snapshot: Snapshot;
@@ -28,6 +30,7 @@ export function MessageList({ api, messages, snapshot, onChoose, choosing, think
   /** A turn is in flight. */
   thinking: boolean;
   onOpen: (src: string) => void;
+  onRetry: (message: LocalMessage) => void;
 }) {
   const end = useRef<HTMLLIElement>(null);
   const liveEntry = useRef<HTMLLIElement>(null);
@@ -69,7 +72,20 @@ export function MessageList({ api, messages, snapshot, onChoose, choosing, think
             ? <CardView card={m.card} answer={answer} disabled={choosing}
                         onChoose={i === liveIndex ? (o) => onChoose(m.card!, o) : undefined} />
             : m.text !== null && <p className="text">{m.text}</p>}
-          {m.role === "user" && <time className="msg-time ltr">{shownTime(m.at)}</time>}
+          {m.role === "user" && (
+            <p className="msg-time">
+              <time className="ltr">{shownTime(m.at)}</time>
+              {m.retried_at !== undefined && (
+                <> · <span>{texts.retried(shownClock(m.retried_at))}</span></>
+              )}
+            </p>
+          )}
+          {(m.failed === true || m.resend !== undefined) && (
+            <div className="msg-failed">
+              <span>{texts.notHandled}</span>
+              <button type="button" onClick={() => onRetry(m)}>{texts.retry}</button>
+            </div>
+          )}
         </li>
       ))}
       {live !== null && liveIndex === -1 && (

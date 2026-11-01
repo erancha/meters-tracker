@@ -10,17 +10,16 @@ import { MessageList } from "./MessageList";
 export function Chat({ api, onOpen }: { api: Api; onOpen: (src: string) => void }) {
   const {
     messages, snapshot, sendText, sendPhotos, choose, choosing, pending, failed, rejected,
-    unavailable, loadFailed,
+    retry, loadFailed,
   } = useChat(api);
   if (loadFailed) return <div className="alert" role="alert">{texts.loadFailed}</div>;
   if (snapshot === undefined) return null;
   return (
     <div className="chat">
       <MessageList api={api} messages={messages} snapshot={snapshot} onChoose={choose}
-                   choosing={choosing} thinking={pending} onOpen={onOpen} />
+                   choosing={choosing} thinking={pending} onOpen={onOpen} onRetry={retry} />
       {failed && <div className="alert" role="alert">{texts.turnFailed}</div>}
       {rejected && <div className="alert" role="alert">{texts.imageRejected}</div>}
-      {unavailable && <div className="alert" role="alert">{texts.modelUnavailable}</div>}
       <Composer onSend={sendText} onPhotos={sendPhotos} />
     </div>
   );

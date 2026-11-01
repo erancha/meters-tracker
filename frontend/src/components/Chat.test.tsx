@@ -220,15 +220,54 @@ describe("Chat", () => {
     expect(screen.getByText("29/10/2026 10:00").closest("li")).toHaveTextContent("שלום");
   });
 
-  it("says the message arrived when the model is unavailable", async () => {
+  it("offers a retry under a failed message, with no notice", async () => {
     const { api } = setup({ messages: history, snapshot: snapshot(null) });
-    (api.postTurn as Mock).mockRejectedValue(new ApiError(503, "503", "model_unavailable"));
+    (api.postTurn as Mock).mockRejectedValue(new ApiError(503, "503", "message_failed"));
+    (api.getChat as Mock).mockResolvedValue({
+      messages: [...history, { ...message("user", "הודעה"), failed: true }],
+      snapshot: snapshot(null),
+    });
 
     const box = await screen.findByPlaceholderText(texts.composerPlaceholder);
-    await userEvent.type(box, "שלום{Enter}");
+    await userEvent.type(box, "הודעה{Enter}");
 
-    expect(await screen.findByText(texts.modelUnavailable)).toBeInTheDocument();
-    expect(screen.queryByText(texts.turnFailed)).toBeNull();
+    expect(await screen.findByRole("button", { name: texts.retry })).toBeInTheDocument();
+    expect(screen.getByText(texts.notHandled)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("retries a failed message in place and hides its button", async () => {
+    const failed = { ...message("user", "הודעה"), failed: true };
+    const { api } = setup({ messages: [failed], snapshot: snapshot(null) });
+    (api.postTurn as Mock).mockReturnValue(new Promise(() => {}));
+
+    await userEvent.click(await screen.findByRole("button", { name: texts.retry }));
+
+    expect(api.postTurn).toHaveBeenCalledWith({ retry: failed.at });
+    expect(screen.queryByRole("button", { name: texts.retry })).toBeNull();
+    expect(screen.getAllByText("הודעה")).toHaveLength(1);
+  });
+
+  it("shows when a message was last retried beside its sent time", async () => {
+    const retried = { ...message("user", "הודעה"), retried_at: "2026-10-30T09:14:02.5_ab12" };
+    setup({ messages: [retried], snapshot: snapshot(null) });
+
+    expect(await screen.findByText("29/10/2026 10:00")).toBeInTheDocument();
+    expect(screen.getByText(texts.retried("09:14"))).toBeInTheDocument();
+  });
+
+  it("keeps a message that never reached the server, with a retry that resends it", async () => {
+    const { api } = setup({ messages: history, snapshot: snapshot(null) });
+    (api.postTurn as Mock).mockRejectedValueOnce(new TypeError("offline"));
+
+    const box = await screen.findByPlaceholderText(texts.composerPlaceholder);
+    await userEvent.type(box, "הודעה{Enter}");
+    await waitFor(() => expect(api.getChat).toHaveBeenCalledTimes(2));
+    (api.postTurn as Mock).mockReturnValue(new Promise(() => {}));
+    await userEvent.click(await screen.findByRole("button", { name: texts.retry }));
+
+    expect(api.postTurn).toHaveBeenLastCalledWith({ text: "הודעה" });
+    expect(screen.getAllByText("הודעה")).toHaveLength(1);
   });
 
   it("shows a placeholder when a photo's link cannot be fetched", async () => {

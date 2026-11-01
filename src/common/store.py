@@ -240,3 +240,22 @@ class Store:
 
     def append_message(self, user, message):
         self._put("messages", user, message["at"], message)
+
+    def message(self, user, at) -> dict:
+        return self._get("messages", {"pk": user, "sk": at})
+
+    def mark_message_failed(self, user, at):
+        self._update("messages", user, at, {"failed": True})
+
+    def claim_failed_message(self, user, at, retried_at) -> bool:
+        """Clears a message's failed mark and records when it was retried, only while the mark is
+        there; False when another request retried it first or the message never failed."""
+        return self._if_condition_holds(
+            "messages",
+            "update_item",
+            Key={"pk": user, "sk": at},
+            UpdateExpression="SET retried_at = :retried_at REMOVE #failed",
+            ConditionExpression="#failed = :failed",
+            ExpressionAttributeNames={"#failed": "failed"},
+            ExpressionAttributeValues={":retried_at": retried_at, ":failed": True},
+        )

@@ -244,32 +244,72 @@ def _provider_down(*args):
     raise anthropic.APIError("credit balance is too low", None, body=None)
 
 
-def _assert_model_unavailable(result, caplog):
+def _assert_message_failed(result, caplog):
     assert result["statusCode"] == 503
-    assert _body(result) == {"error": "model_unavailable"}
+    assert _body(result) == {"error": "message_failed"}
     assert any(r.levelname == "ERROR" and r.exc_info for r in caplog.records)
 
 
-def test_photo_turn_reports_the_model_unavailable_and_keeps_the_message(kit, caplog):
+def _post_failing_photo(kit):
     kit.model.read_meter = _provider_down
+    body = {"image": base64.b64encode(b"photo-0").decode(), "media_type": "image/jpeg"}
+    return api.handler(event("POST /turn", body), None)
 
-    result = api.handler(
-        event(
-            "POST /turn",
-            {"image": base64.b64encode(b"photo-0").decode(), "media_type": "image/jpeg"},
-        ),
-        None,
-    )
 
-    _assert_model_unavailable(result, caplog)
+def _chat_messages():
+    return _body(api.handler(event("GET /chat"), None))["messages"]
+
+
+def test_failed_photo_turn_reports_the_failure_and_marks_the_message(kit, caplog):
+    result = _post_failing_photo(kit)
+
+    _assert_message_failed(result, caplog)
     assert kit.store.pending(USER_EMAIL) == []
-    messages = _body(api.handler(event("GET /chat"), None))["messages"]
-    assert [m["role"] for m in messages if m["image_key"]] == ["user"]
+    [photo] = [m for m in _chat_messages() if m["image_key"]]
+    assert photo["failed"] is True
 
 
-def test_text_turn_reports_the_model_unavailable(kit, caplog):
+def test_failed_text_turn_reports_the_failure(kit, caplog):
     kit.model.classify = _provider_down
 
     result = api.handler(event("POST /turn", {"text": "מה המצב"}), None)
 
-    _assert_model_unavailable(result, caplog)
+    _assert_message_failed(result, caplog)
+
+
+def test_a_turn_failing_for_any_other_reason_reports_the_same_failure(kit, caplog):
+    def crash(*args):
+        raise RuntimeError("crash")
+
+    kit.model.classify = crash
+
+    result = api.handler(event("POST /turn", {"text": "מה המצב"}), None)
+
+    _assert_message_failed(result, caplog)
+
+
+def test_retry_answers_a_failed_photo(kit, caplog):
+    _post_failing_photo(kit)
+    kit.register_photo(b"photo-0", electricity())
+    del kit.model.read_meter
+    [photo] = [m for m in _chat_messages() if m["image_key"]]
+
+    result = api.handler(event("POST /turn", {"retry": photo["at"]}), None)
+
+    assert result["statusCode"] == 200
+    assert _body(result)["snapshot"]["card"] is not None
+
+
+def test_retry_of_a_message_not_failed_is_409_with_the_snapshot(kit):
+    result = api.handler(event("POST /turn", {"retry": "2026-10-29T08:00:00.0_aaaa"}), None)
+
+    assert result["statusCode"] == 409
+    assert _body(result)["error"] == "already_handled"
+    assert "snapshot" in _body(result)
+
+
+def test_retry_naming_no_message_is_invalid(kit):
+    result = api.handler(event("POST /turn", {"retry": 5}), None)
+
+    assert result["statusCode"] == 400
+    assert _body(result) == {"error": "invalid_request"}

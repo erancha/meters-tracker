@@ -61,15 +61,18 @@ graph LR
     greeting when an apartment's period is past its end.
   - `POST /turn` — one user action, exactly one of `{"text"}`, `{"image", "media_type", "note"?}`
     with a base64 JPEG or PNG of at most 4 MiB, or `{"choice": {"pending", "version", "option"}}`
-    naming the card's pending item, its version and one of its options. It returns the replies, the
-    new snapshot, and for a photo its stored key (`image_key`), so the browser can show its own copy
-    as the stored photo. A malformed body is a 400 (`invalid_request`, `invalid_image`,
-    `image_too_large`, `unsupported_image_type`), checked before anything is stored. A choice whose
+    naming the card's pending item, its version and one of its options, or `{"retry"}` naming a
+    failed message by its stamp. It returns the replies, the new snapshot, and for a photo its
+    stored key (`image_key`), so the browser can show its own copy as the stored photo. A malformed
+    body is a 400 (`invalid_request`, `invalid_image`, `image_too_large`,
+    `unsupported_image_type`), checked before anything is stored. A choice whose
     card the item no longer shows, or whose option that card lacks, is a 409 `already_handled`
     carrying the current snapshot; so is the second of two requests answering one card at once.
-    A model provider failure (unreachable, rejected key, no credit) is logged as an error and is
-    a 503 `model_unavailable`; the user's message stays stored and a failed photo leaves no
-    pending item of its own.
+    A text or photo is stored before it is handled. When handling fails for any reason, the cause
+    is logged as an error, the message is marked `failed` and the answer is a 503 `message_failed`.
+    A failed photo leaves no pending item of its own. A retry handles the same message again
+    from its stored copy and records `retried_at`; a message not marked failed is a 409
+    `already_handled`, so two retries of one failure run once.
   - `GET /files/{key+}` — a presigned GET URL, valid for `file_url_minutes`, for a photo whose
     key starts with the caller's account; any other key is a 403.
 
@@ -108,8 +111,9 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
   a refetch of `GET /chat` replaces the local entries with the server's history. A sent photo's
   stored key, from the reply, takes the page's own copy as its link, so it shows with no download. A
   stale choice (409) only replaces the snapshot. A turn lost to the network or a gateway timeout
-  only refetches, since the server may have handled it. A 503 `model_unavailable` shows its own
-  notice and refetches, since the message is stored and only its processing failed; any other
+  only refetches, since the server may have handled it. A 503 `message_failed` only refetches too,
+  which brings the message with its failed mark and retry button; a text or photo whose request
+  never reached the server stays in the page with a resend while the page is open. Any other
   failure shows a notice and refetches. Several photos can be in flight together. While the
   snapshot shows no card, counts waiting items and no turn is in flight, `GET /chat` is polled
   every 5 seconds, so a card saved after the gateway gave up still arrives. With a card shown the
@@ -221,6 +225,8 @@ owns in each table, and a real-model check reads the readings that carry failed 
 - `messages` — pk address, sk timestamp: `role`, `text`, `card`, `image_key`, `pdf_key`,
   `choice`. A choice is recorded as a user message whose `text` is the option's label and whose
   `choice` is `{pending, version}` of the card it answered; on any other message it is null.
+  A text or photo whose handling failed also holds `failed`, until a retry clears it, and a
+  retried one holds `retried_at`, the stamp of its latest retry.
 
 Photos are stored at `<account>/images/<seq>.jpg` (or `.png`) in the files bucket; the account
 prefix is what `GET /files/{key+}` checks. `src/common/store.py` converts numbers to and from

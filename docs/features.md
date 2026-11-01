@@ -13,8 +13,7 @@ the "sign in with Google" button. The toggle swaps the pitch for seven bullets c
 README's overview, and back. Below the card, a link opens the animated demo in a new
 tab. A sign-in whose final step fails shows a banner asking to reload and sign in again.
 
-OPEN — the build's version under the name, a WhatsApp invite link and a link to the source
-repository, as on diet-tracker's landing page.
+OPEN — not yet implemented (#2): the build's version, a WhatsApp invite and a source link.
 
 ## Chat
 
@@ -26,10 +25,12 @@ repository, as on diet-tracker's landing page.
   disabled only while the draft is empty. A typed reply is sent even while the card awaiting
   an answer offers a confirm button; the server reads it with that card as context.
 - A sent text or photo shows at once, before the server answers. A turn the server refused
-  shows a notice that the message was not sent; a turn the model could not process, because
-  its provider is unreachable or out of credit, shows a notice that the message arrived and can
-  be sent again later; a turn whose answer was lost on the way shows no notice, and the chat
-  reloads to show whatever the server did with it.
+  shows a notice that the message was not sent; a turn whose answer was lost on the way shows
+  no notice, and the chat reloads to show whatever the server did with it.
+- A text or photo that could not be handled, for any reason, shows "לא טופל" and a "ניסיון חוזר"
+  button under it, which stays after a reload. A retry handles the same message, with no second
+  bubble and no new photo, and the message shows the time of its latest retry beside its sent
+  time. A message that never reached the server keeps the button only while the page is open.
 - While a message or photo is on its way, or a photo is still being read and no card is shown,
   the end of the thread shows "חושב" with moving dots. Then the chat checks for news every five
   seconds, so the card of a photo that took long to read appears without a reload.
@@ -71,6 +72,8 @@ repository, as on diet-tracker's landing page.
 On a window at least `sidebar_min_width_px` wide (900 px in `config/app.json`), a sidebar
 beside the chat lists every photo in the history, newest first. A tap opens the same
 full-screen view as in the thread.
+
+OPEN — not yet implemented (#1): reaching the sidebar on a narrow screen.
 
 ## Account menu
 

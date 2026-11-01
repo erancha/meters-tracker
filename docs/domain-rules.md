@@ -40,7 +40,7 @@ Each photo is its own turn. The model returns the meter type, the serial, every 
 sees with its position on the display (`top` and `bottom` on a two-number electricity display,
 `single` on a water counter), whether any digit is unreadable, and any handwritten label. A note
 sent with the photo that names a date sets the reading date; otherwise the reading is dated
-today.
+the day the photo was sent, which a retry on a later day keeps.
 
 - **Statement.** A photo with no known meter type and no serial is read again as a previous
   statement; a statement becomes a tariffs card (see [Tariffs](#tariffs)), dated like a reading.

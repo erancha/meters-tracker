@@ -1,5 +1,6 @@
 """HTTP API handler in front of the conversation engine: the chat history with its snapshot, one
-turn (text, photo or card choice), and presigned URLs for the account's own photos.
+turn (text, photo, card choice or retry of a failed message), and presigned URLs for the
+account's own photos.
 
 The caller's identity comes exclusively from the JWT claims the API Gateway authorizer verified;
 the request body never names a user, and an address Google has not verified is refused before it
@@ -16,10 +17,10 @@ from datetime import timedelta
 from urllib.parse import unquote
 
 from common import access
-from common.engine import Action, AlreadyHandled, Choice, Engine
+from common.engine import Action, AlreadyHandled, Choice, Engine, MessageFailed
 from common.files import Files
 from common.log import get_logger
-from common.model import PROVIDER_ERRORS, api_key_from_ssm, build_model
+from common.model import api_key_from_ssm, build_model
 from common.store import Store
 from common.webapi import response
 
@@ -113,9 +114,9 @@ def _turn(store, user, raw_body):
         raise _Rejected(
             409, {"error": "already_handled", "snapshot": asdict(engine.snapshot(user))}
         )
-    except PROVIDER_ERRORS:
-        logger.exception("model provider call failed")
-        raise _Rejected(503, {"error": "model_unavailable"})
+    except MessageFailed:
+        logger.exception("handling a stored message failed")
+        raise _Rejected(503, {"error": "message_failed"})
     return response(200, asdict(result))
 
 
@@ -129,6 +130,8 @@ def _action(body):
         return _image_action(body)
     if keys == {"choice"}:
         return _choice_action(body["choice"])
+    if keys == {"retry"} and _is_str(body["retry"]):
+        return Action(retry=body["retry"])
     raise _invalid()
 
 

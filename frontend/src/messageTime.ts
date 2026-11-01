@@ -17,3 +17,5 @@ export function shownTime(stamp: string) {
   const [, year, month, day, time] = parts;
   return `${day}/${month}/${year} ${time}`;
 }
+
+export const shownClock = (stamp: string) => shownTime(stamp).split(" ")[1];

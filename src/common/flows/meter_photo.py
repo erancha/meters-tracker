@@ -85,7 +85,7 @@ def card(item) -> dict:
     return make_card(item, item["step"], text(item["data"]), options(item["data"]))
 
 
-def start(engine, user, seq, image_key, image, media_type, note) -> list[Reply]:
+def start(engine, user, seq, image_key, image, media_type, note, sent_on) -> list[Reply]:
     close_period.park_waiting(engine, user)
     data = {
         "image_key": image_key,
@@ -99,7 +99,7 @@ def start(engine, user, seq, image_key, image, media_type, note) -> list[Reply]:
         statement = None
         if result.meter_type == "unknown" and result.serial is None:
             statement = engine.model.read_statement(image, media_type)
-        reading_date = _reading_date(engine, note)
+        reading_date = _reading_date(engine, note, sent_on)
     except Exception:
         engine.store.delete_pending(user.email, seq)
         raise
@@ -165,12 +165,13 @@ def _absorb_superseded(engine, user, item):
         engine.store.delete_pending(user.email, other["seq"])
 
 
-def _reading_date(engine, note) -> str:
+def _reading_date(engine, note, sent_on) -> str:
+    """The note's date, else sent_on, since a retry may read a photo days after it was sent."""
     if note is not None:
-        intent = engine.model.classify(note, "", engine.clock())
+        intent = engine.model.classify(note, "", parse_iso(sent_on))
         if intent.intent == "set_date":
             return intent_date(intent)
-    return engine.clock().isoformat()
+    return sent_on
 
 
 def route(engine, user, item) -> list[Reply]:

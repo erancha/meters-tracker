@@ -7,6 +7,10 @@ of them exactly. A standby item (a request for tariffs) waits without
 blocking the queue: text with nothing awaiting is classified with its card as context, and only
 the answers it takes go to it.
 
+A text or photo is stored before it is handled, so when handling fails the message is marked
+failed and a retry handles that same message again, with no second message. A retried photo is
+read from its stored copy and keeps the day it was sent as its reading date.
+
 The snapshot is the oldest awaiting item's card, else the oldest standby item's, plus the count of
 items behind it; the browser shows it and never orders the queue itself. A photo still being read
 after the api Lambda's time limit was being read by an invocation that was killed, so the snapshot
@@ -26,6 +30,7 @@ from common.flows import (
     Action,
     AlreadyHandled,
     Choice,
+    MessageFailed,
     Reply,
     Snapshot,
     TurnResult,
@@ -37,7 +42,16 @@ from common.flows import (
     tariffs,
 )
 
-__all__ = ["Action", "AlreadyHandled", "Choice", "Engine", "Reply", "Snapshot", "TurnResult"]
+__all__ = [
+    "Action",
+    "AlreadyHandled",
+    "Choice",
+    "Engine",
+    "MessageFailed",
+    "Reply",
+    "Snapshot",
+    "TurnResult",
+]
 
 FLOWS = {
     meter_photo.KIND: meter_photo,
@@ -77,27 +91,81 @@ class Engine:
         return f"{self.clock().isoformat()}T{time_of_day}_{secrets.token_hex(2)}"
 
     def turn(self, user, action: Action) -> TurnResult:
-        image_key = None
+        if action.retry is not None:
+            return self._result(user, self._retry(user, action.retry))
+        if action.choice is not None:
+            return self._result(user, self._choose(user, action))
         if action.image is not None:
             seq = self.stamp()
             image_key = self.files.put_image(user.account, seq, action.image, action.media_type)
-            self._append(user, "user", action.note, image_key=image_key)
-            replies = meter_photo.start(
-                self, user, seq, image_key, action.image, action.media_type, action.note
+            message = self._append(user, "user", action.note, image_key=image_key)
+            sent_on = self.clock().isoformat()
+            replies = self._handle(
+                user,
+                message,
+                lambda: meter_photo.start(
+                    self,
+                    user,
+                    seq,
+                    image_key,
+                    action.image,
+                    action.media_type,
+                    action.note,
+                    sent_on,
+                ),
             )
-        else:
-            replies = self._dispatch(user, action)
+            return self._result(user, replies, image_key)
+        message = self._append(user, "user", action.text)
+        return self._result(user, self._handle(user, message, lambda: self._text(user, action)))
+
+    def _result(self, user, replies: list[Reply], image_key=None) -> TurnResult:
         for reply in replies:
             self._append(user, "assistant", reply.text, reply.card, reply.image_key)
         return TurnResult(replies, self.snapshot(user), image_key)
 
-    def _dispatch(self, user, action: Action) -> list[Reply]:
-        if action.choice is not None:
-            item, label = self._claim(user, action.choice)
-            answered = {"pending": action.choice.pending, "version": action.choice.version}
-            self._append(user, "user", label, choice=answered)
-            return FLOWS[item["kind"]].answer(self, user, item, action)
-        self._append(user, "user", action.text)
+    def _handle(self, user, message, handler) -> list[Reply]:
+        """Runs a stored message's handler; any failure marks the message and raises
+        MessageFailed, except AlreadyHandled, which leaves the message as it is."""
+        try:
+            return handler()
+        except AlreadyHandled:
+            raise
+        except Exception as error:
+            self.store.mark_message_failed(user.email, message["at"])
+            raise MessageFailed(message["at"]) from error
+
+    def _retry(self, user, at) -> list[Reply]:
+        """Handles a failed message again; a request that lost the claim is AlreadyHandled."""
+        if not self.store.claim_failed_message(user.email, at, self.stamp()):
+            raise AlreadyHandled(f"message {at} is not marked failed")
+        message = self.store.message(user.email, at)
+        if message["image_key"] is None:
+            return self._handle(
+                user, message, lambda: self._text(user, Action(text=message["text"]))
+            )
+        return self._handle(user, message, lambda: self._photo_again(user, message))
+
+    def _photo_again(self, user, message) -> list[Reply]:
+        image, media_type = self.files.get_image(message["image_key"])
+        sent_on = message["at"][: len("YYYY-MM-DD")]
+        return meter_photo.start(
+            self,
+            user,
+            self.stamp(),
+            message["image_key"],
+            image,
+            media_type,
+            message["text"],
+            sent_on,
+        )
+
+    def _choose(self, user, action: Action) -> list[Reply]:
+        item, label = self._claim(user, action.choice)
+        answered = {"pending": action.choice.pending, "version": action.choice.version}
+        self._append(user, "user", label, choice=answered)
+        return FLOWS[item["kind"]].answer(self, user, item, action)
+
+    def _text(self, user, action: Action) -> list[Reply]:
         awaiting = self._awaiting(user)
         if awaiting:
             item = awaiting[0]

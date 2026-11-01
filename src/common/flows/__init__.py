@@ -41,7 +41,13 @@ PRICES = {"electricity": "electricity_per_kwh", "water": "water_per_m3"}
 
 
 class AlreadyHandled(Exception):
-    """A choice names a card its pending item no longer shows, or an option that card lacks."""
+    """A choice names a card its pending item no longer shows, or an option that card lacks; or
+    a retry names a message that is not marked failed."""
+
+
+class MessageFailed(Exception):
+    """Handling a stored text or photo failed, so the message is marked failed and can be
+    retried. The original exception is the cause."""
 
 
 @dataclass
@@ -58,6 +64,7 @@ class Action:
     media_type: str | None = None
     note: str | None = None
     choice: Choice | None = None
+    retry: str | None = None
 
 
 @dataclass

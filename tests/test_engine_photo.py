@@ -8,7 +8,7 @@ import pytest
 from engine_kit import ACCOUNT, USER, Kit, electricity, options, reading, water
 
 from common import dates, texts
-from common.engine import AlreadyHandled
+from common.engine import AlreadyHandled, MessageFailed
 from common.flows import READING, card_text, new_item
 from common.model import IntentResult, MeterReadingResult, ModelRefused
 
@@ -184,7 +184,7 @@ def test_model_failure_leaves_no_pending(env, ddb):
         raise ModelRefused("refused")
 
     kit.model.read_meter = refuse
-    with pytest.raises(ModelRefused):
+    with pytest.raises(MessageFailed):
         kit.send_photo(water())
     assert kit.store.pending(USER.email) == []
 
@@ -327,7 +327,7 @@ def test_a_crash_while_absorbing_a_card_keeps_its_photo_on_the_new_item(env, ddb
         raise RuntimeError("crash")
 
     monkeypatch.setattr(kit.store, "delete_pending", crash)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(MessageFailed):
         kit.send_photo(water(1250))
     [newer] = [i for i in kit.store.pending(USER.email) if i["seq"] != first["seq"]]
     assert newer["data"]["failed_photos"] == [first["data"]["image_key"]]
