@@ -82,9 +82,11 @@ graph LR
   next photo replaces it.
 - **DynamoDB tables** — nine, described under [Storage](#storage).
 - **Files bucket** — the private S3 bucket holding uploaded meter photos.
-- **SSM parameter** `/meters-tracker/llm/api-key` — the model provider's API key as a
-  SecureString, written by `scripts/set-model-key.sh`. The api Lambda reads it the first time a
-  request needs the model, so `GET /chat` never reads it and replacing the key needs no deploy.
+- **SSM parameters** `/meters-tracker/llm/<provider>/api-key` — one SecureString per model
+  provider, written by `scripts/set-model-key.sh`. `scripts/deploy.sh` passes the api Lambda the
+  parameter of the provider `LLM_MODEL` names, and its role can read only that one. The Lambda
+  reads it the first time a request needs the model, so `GET /chat` never reads it and replacing
+  the key needs no deploy. Changing provider leaves the other provider's key stored.
 - **Frontend bucket and CloudFront distribution** — host the browser app, published by
   `scripts/sync-frontend.sh`: the Vite bundle, `config.js`, `app.json` and the demo page
   `demo.html`. The app is described under [The browser app](#the-browser-app).
@@ -154,7 +156,7 @@ The flows and the rules they enforce are in [Domain rules](domain-rules.md).
 
 The model client (`src/common/model.py`) calls the model that the deploy setting `LLM_MODEL` names
 as `provider:model`, `anthropic:claude-opus-5-5` by default or an OpenAI model, through that
-provider's own SDK ([ADR 0007](adr/0007-model-provider-is-a-deploy-setting.md)). Both
+provider's own SDK ([ADR 0008](adr/0008-one-stored-key-per-model-provider.md)). Both
 implementations ask for an answer shaped to a declared schema (the SDKs call this structured output)
 and parse it into a pydantic model: a meter reading (type, serial, candidate values with their
 display position, unreadable digits, handwritten label), a previous statement's tariffs (whether the

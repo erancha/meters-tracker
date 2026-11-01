@@ -99,13 +99,20 @@ def test_api_function_environment_names_the_bucket_and_model(app):
     assert variables["FILES_BUCKET"] == "FilesBucket"
     assert variables["LLM_MODEL"] == "LlmModel"
     assert variables["LLM_KEY_PARAM"] == "LlmKeyParam"
-    assert app["Parameters"]["LlmKeyParam"]["Default"] == "/meters-tracker/llm/api-key"
+    assert "Default" not in app["Parameters"]["LlmKeyParam"]
     assert "Default" not in app["Parameters"]["LlmModel"]
 
 
-def test_set_model_key_script_writes_the_parameter_the_template_reads(app):
-    default = app["Parameters"]["LlmKeyParam"]["Default"]
-    assert default in (SCRIPTS / "set-model-key.sh").read_text()
+def test_set_model_key_script_takes_the_providers_the_template_accepts(app):
+    pattern = app["Parameters"]["LlmModel"]["AllowedPattern"]
+    providers = re.fullmatch(r"\^\((.+)\):\.\+\$", pattern).group(1)
+    assert f"{providers})" in (SCRIPTS / "set-model-key.sh").read_text()
+
+
+def test_deploy_passes_the_key_parameter_of_the_model_provider():
+    deploy = (SCRIPTS / "deploy.sh").read_text()
+    assert 'KEY_PARAM=$(model_key_param "$PROVIDER")' in deploy
+    assert 'LlmKeyParam="$KEY_PARAM"' in deploy
 
 
 def test_params_example_names_a_model_the_template_accepts(app):

@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
-# Store the model provider's API key in the SSM SecureString parameter the API Lambda reads.
+# Store a model provider's API key in that provider's SSM SecureString parameter.
 #
-#   ./scripts/set-model-key.sh
+#   ./scripts/set-model-key.sh <anthropic|openai>
 #
-# The key belongs to the provider LLM_MODEL names in scripts/params.sh, Anthropic or OpenAI.
-# Prompts for it without echoing (or reads it from stdin when piped), then overwrites
-# /meters-tracker/llm/api-key. The Lambda reads the parameter on each turn, so replacing the
-# value needs no redeploy. The parameter is shared by every stack pair, since it is account-wide.
+# Prompts for the key without echoing (or reads it from stdin when piped), then overwrites
+# /meters-tracker/llm/<provider>/api-key. Each provider keeps its own key, so both can stay stored
+# and deploy.sh passes the API Lambda the one LLM_MODEL names in scripts/params.sh. The Lambda
+# reads the parameter on each turn, so replacing a key needs no redeploy. The parameters are shared
+# by every stack pair, since they are account-wide.
 # Requires scripts/aws-config.sh.
 #
-#   ./scripts/set-model-key.sh < key.txt
+#   ./scripts/set-model-key.sh openai < key.txt
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=common.sh
 source "$ROOT/scripts/common.sh"
 
-case "${1:-}" in -h|--help) print_help; exit 0 ;; "") ;; *) print_help >&2; exit 2 ;; esac
+case "${1:-}" in
+  -h|--help) print_help; exit 0 ;;
+  anthropic|openai) ;;
+  *) print_help >&2; exit 2 ;;
+esac
+[ $# -eq 1 ] || { print_help >&2; exit 2; }
 
 require_aws_config
-PARAM=/meters-tracker/llm/api-key
+PARAM=$(model_key_param "$1")
 
 # A last line without a newline still fills KEY while read returns failure.
 read -rs -p "Model API key: " KEY || [ -n "$KEY" ]

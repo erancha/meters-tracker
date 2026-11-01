@@ -50,6 +50,27 @@ require_params() {
   require_values params.sh GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET LLM_MODEL
 }
 
+# The SSM parameter of a model provider's API key. Each provider has its own, so changing LLM_MODEL
+# leaves the other provider's key stored.
+model_key_param() {  # provider
+  echo "/meters-tracker/llm/$1/api-key"
+}
+
+# Stops unless the provider's key is stored. The lookup reads only the parameter's version, so the
+# key is never decrypted here.
+require_model_key() {  # provider
+  local err
+  if ! err=$(aws ssm get-parameter --name "$(model_key_param "$1")" \
+      --query Parameter.Version --output text 2>&1 >/dev/null); then
+    case "$err" in
+      *ParameterNotFound*)
+        echo "no $1 API key is stored; store it first: ./scripts/set-model-key.sh $1" >&2 ;;
+      *) echo "looking up the $1 API key failed: $err" >&2 ;;
+    esac
+    exit 1
+  fi
+}
+
 # For the scripts taking an optional environment suffix ("dev" targets the isolated stack pair
 # meters-tracker-dev): handles -h and unknown arguments, then sets APP and ENV_SUFFIX.
 parse_env_suffix_arg() {

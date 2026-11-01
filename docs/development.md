@@ -80,9 +80,9 @@ result, its time and its estimated cost; it is the quick check of a single photo
    to overwrite either without `--force`. Fill in the AWS access key pair and region in
    `scripts/aws-config.sh`, and the Google OAuth client id and secret and the model
    (`LLM_MODEL`, as `provider:model`) in `scripts/params.sh`.
-3. Run [`scripts/deploy.sh`](../scripts/deploy.sh), then
-   [`scripts/set-model-key.sh`](../scripts/set-model-key.sh) once to store the key of the
-   provider `LLM_MODEL` names.
+3. Run [`scripts/set-model-key.sh <provider>`](../scripts/set-model-key.sh) once to store the
+   key of the provider `LLM_MODEL` names, then [`scripts/deploy.sh`](../scripts/deploy.sh), which
+   stops with that command when the key is missing.
 
 A bare `aws` command in your own shell has no credentials until it sources
 `scripts/aws-config.sh`; the scripts source it for you.
@@ -117,10 +117,11 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
 - [`delete-stack.sh [env]`](../scripts/delete-stack.sh) — empties the frontend bucket and
   deletes both stacks, leaving the tables and the files bucket in place. Its header explains how
   to import them into a new stack or remove them for good.
-- [`set-model-key.sh`](../scripts/set-model-key.sh) — reads the model provider's API key
-  without echoing it (or from stdin) and overwrites `/meters-tracker/llm/api-key` in SSM. The key
-  never appears in process arguments. The parameter is shared by every stack pair in the
-  account, and the Lambda reads it at run time, so a new key needs no deploy.
+- [`set-model-key.sh`](../scripts/set-model-key.sh) — reads a model provider's API key without
+  echoing it (or from stdin) and overwrites `/meters-tracker/llm/<provider>/api-key` in SSM. The
+  key never appears in process arguments. Each provider keeps its own parameter, so switching
+  `LLM_MODEL` needs only a deploy. The parameters are shared by every stack pair in the account,
+  and the Lambda reads its key at run time, so a new key needs no deploy.
 - [`aws-helper.sh`](../scripts/aws-helper.sh) — finds and tails the deployed functions'
   CloudWatch logs by alias (`api`, `presignup`) or `<stack>:<logical-id>`.
   `./scripts/aws-helper.sh --logs api --errors --since 1d` is the quickest health check.

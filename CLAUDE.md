@@ -13,7 +13,8 @@ deployed by CloudFormation. Layout and parts: docs/architecture.md.
 - `sync-frontend.sh [env]` — builds `frontend/` and publishes it, `config/app.json` and
   `docs/demo/demo.html` to the frontend bucket; a frontend-only change needs only this.
 - `delete-stack.sh [env]` — deletes both stacks; tables and the files bucket are retained.
-- `set-model-key.sh` — writes the model provider's key to SSM `/meters-tracker/llm/api-key`.
+- `set-model-key.sh <anthropic|openai>` — writes that provider's key to SSM
+  `/meters-tracker/llm/<provider>/api-key`.
 - `aws-helper.sh` — CloudWatch logs by target; `--logs api --errors --since 1d` is the health
   check.
 - `read-meter.sh <image>` — one photo through the real model; needs `LLM_MODEL` and

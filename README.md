@@ -49,7 +49,7 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
   tables, a private S3 bucket for photos
 - **Model** — Claude (`claude-opus-5-5`) by default, or an OpenAI model, chosen by one deploy
   setting; each provider's own SDK, each answer parsed into a typed schema, to read photos and
-  classify messages; the API key in SSM Parameter Store
+  classify messages; each provider's API key in SSM Parameter Store
 - **Frontend** — a React and TypeScript single-page app built with Vite, tested with Vitest,
   served from S3 behind CloudFront
 - **Auth** — Cognito with Google as the only sign-in; a pre-sign-up Lambda asks SES to verify
@@ -85,8 +85,8 @@ table, how the conversation engine queues confirmations, and what is not built y
 
 Run the tests with `./scripts/test.sh`; it creates the virtualenv on its first run. To deploy,
 run `./scripts/init-env.sh`, fill in the two settings files it creates, then run
-`./scripts/deploy.sh` and `./scripts/set-model-key.sh`; the deploy ends by publishing the
-browser app and prints its address.
+`./scripts/set-model-key.sh <provider>` and `./scripts/deploy.sh`; the deploy ends by publishing
+the browser app and prints its address.
 [Development](docs/development.md) has the details.
 
 ## Scripts
@@ -95,7 +95,7 @@ browser app and prints its address.
 - `deploy.sh` — builds the Lambda package, deploys both stacks and publishes the frontend
 - `sync-frontend.sh` — builds the frontend and publishes it with the app config and the demo page
 - `delete-stack.sh` — deletes both stacks, keeping the tables and the photos
-- `set-model-key.sh` — stores the model provider's API key in SSM
+- `set-model-key.sh` — stores a model provider's API key in SSM
 - `aws-helper.sh` — finds and tails the deployed functions' logs
 - `test.sh` — shell syntax check, lint, format check and the backend test suite
 - `read-meter.sh` — reads one photo through the model and prints the result

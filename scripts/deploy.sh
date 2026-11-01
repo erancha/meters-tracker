@@ -10,7 +10,8 @@
 # after the app stack's first deploy, so each run converges: it deploys with what is known, then
 # deploys both stacks again with the now-known URL (a no-op when unchanged).
 # It ends by publishing the frontend with sync-frontend.sh.
-# Requires scripts/aws-config.sh and scripts/params.sh (create them with scripts/init-env.sh).
+# Requires scripts/aws-config.sh and scripts/params.sh (create them with scripts/init-env.sh),
+# and the API key of the provider LLM_MODEL names (store it with scripts/set-model-key.sh).
 #
 #   ./scripts/deploy.sh dev
 set -euo pipefail
@@ -21,6 +22,9 @@ source "$ROOT/scripts/common.sh"
 parse_env_suffix_arg "$@"
 require_aws_config
 require_params
+PROVIDER="${LLM_MODEL%%:*}"
+require_model_key "$PROVIDER"
+KEY_PARAM=$(model_key_param "$PROVIDER")
 require_venv
 
 BUILD="$ROOT/build"
@@ -83,7 +87,7 @@ deploy_main() {  # frontend-url
     --stack-name "$APP" --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
     --no-fail-on-empty-changeset \
     --parameter-overrides AllowedOrigins="$origins" UserPoolId="$user_pool_id" \
-      UserPoolClientId="$user_pool_client_id" LlmModel="$LLM_MODEL"
+      UserPoolClientId="$user_pool_client_id" LlmModel="$LLM_MODEL" LlmKeyParam="$KEY_PARAM"
 }
 
 FRONTEND_URL=$(stack_output "$APP" FrontendUrl)

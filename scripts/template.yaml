@@ -22,9 +22,9 @@ Parameters:
       openai model); passed from scripts/params.sh by scripts/deploy.sh
   LlmKeyParam:
     Type: String
-    Default: /meters-tracker/llm/api-key
     Description: SSM SecureString parameter holding the API key of the provider LlmModel names;
-      written by scripts/set-model-key.sh and read by the API on each turn
+      written by scripts/set-model-key.sh, passed by scripts/deploy.sh and read by the API on
+      each turn
 
 Globals:
   Function:

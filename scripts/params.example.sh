@@ -4,7 +4,7 @@
 # GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET: the Google OAuth client the user pool signs in with.
 # LLM_MODEL: the model that reads photos and classifies messages, as provider:model with an
 # anthropic or openai provider; it must take image input. The provider's API key is not a deploy
-# parameter; store it with scripts/set-model-key.sh after deploying.
+# parameter; store it with scripts/set-model-key.sh before deploying.
 export GOOGLE_CLIENT_ID="<google-oauth-client-id>"
 export GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
 export LLM_MODEL="anthropic:claude-opus-5-5"

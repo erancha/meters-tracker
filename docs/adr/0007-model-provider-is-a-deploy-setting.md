@@ -1,6 +1,6 @@
 # 0007. The model provider is a deploy setting, behind one interface
 
-- Status: Accepted
+- Status: Superseded by 0008
 - Date: 2026-10-29
 
 ## Context

@@ -68,6 +68,32 @@ def test_require_output_stops_on_a_failed_lookup(run):
     assert "AccessDenied" in result.stderr
 
 
+def test_model_key_param_is_one_per_provider(run):
+    result = run("model_key_param openai")
+    assert result.stdout == "/meters-tracker/llm/openai/api-key\n"
+
+
+def test_require_model_key_passes_when_the_key_is_stored(run):
+    assert run("require_model_key openai", stdout="3").returncode == 0
+
+
+def test_require_model_key_names_the_fix_for_a_missing_key(run):
+    result = run(
+        "require_model_key openai",
+        stderr="An error occurred (ParameterNotFound) when calling the GetParameter operation",
+        status=254,
+    )
+    assert result.returncode == 1
+    assert "./scripts/set-model-key.sh openai" in result.stderr
+
+
+def test_require_model_key_passes_on_a_failed_lookup(run):
+    result = run("require_model_key openai", stderr="AccessDenied", status=254)
+    assert result.returncode == 1
+    assert "AccessDenied" in result.stderr
+    assert "set-model-key" not in result.stderr
+
+
 def test_require_params_names_the_missing_setting(run, tmp_path):
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "params.sh").write_text(
@@ -118,6 +144,7 @@ SCRIPTS = COMMON.parent
 # Argument lists each script refuses before it reads any settings or calls AWS or the model.
 REFUSED_ARGS = {
     "reset-account.sh": [[], ["dev", "a@x.com", "extra"], ["--force", "a@x.com"]],
+    "set-model-key.sh": [[], ["google"], ["openai", "extra"]],
     "eval-intents.sh": [["extra"], ["--limit", "3"]],
     "replay.sh": [[], ["dev", "a@x.com", "extra"], ["a@x.com", "--open"], ["--bogus", "a@x.com"]],
 }
