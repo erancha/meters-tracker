@@ -46,3 +46,18 @@ export function wrapper() {
     ),
   };
 }
+
+/**
+ * Stands in for the browser's ResizeObserver, which jsdom lacks: grow() reports a size change to
+ * every observer made since the install.
+ */
+export function installResizeObserver(): { grow: () => void } {
+  const callbacks: ResizeObserverCallback[] = [];
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(cb: ResizeObserverCallback) { callbacks.push(cb); }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
+  return { grow: () => callbacks.forEach((cb) => cb([], {} as ResizeObserver)) };
+}

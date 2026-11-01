@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { Api } from "../api";
 import type { TurnResult } from "../types";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "../api";
-import { answer, card, fakeApi, message, snapshot, wrapper } from "../testChat";
+import { answer, card, fakeApi, installResizeObserver, message, snapshot, wrapper } from "../testChat";
 import { texts } from "../texts";
 import { Chat } from "./Chat";
 
@@ -337,29 +337,24 @@ describe("Chat", () => {
     expect(latest.closest("li")).toContainElement(screen.getByRole("button", { name: "אישור" }));
   });
 
-  it("scrolls the next live card into view when it sits above the latest replies", async () => {
-    const first = card({ pending: "p1", title: "קריאה 1" });
-    const next = card({ pending: "p2", title: "קריאה 2" });
-    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
-    const { api } = setup({
-      messages: [cardMessage(first), cardMessage(next)], snapshot: snapshot(first, 1),
-    });
-    post(api, {
-      replies: [{ text: "נשמר", card: null, image_key: null }], snapshot: snapshot(next),
-      image_key: null,
-    });
-    (api.getChat as Mock).mockResolvedValue({
-      messages: [
-        cardMessage(first), cardMessage(next), answer(first, "אישור"), message("assistant", "נשמר"),
-      ],
-      snapshot: snapshot(next),
-    });
+  it("scrolls the page to its very bottom, below the sticky composer, whenever the thread grows", async () => {
+    const { grow } = installResizeObserver();
+    const scrollTo = vi.spyOn(window, "scrollTo");
+    setup({ messages: history, snapshot: snapshot(null) });
+    await screen.findByText("היי, מה נעשה?");
+    scrollTo.mockClear();
 
-    await userEvent.click(await screen.findByRole("button", { name: "אישור" }));
-    await screen.findByText("נשמר");
-    await waitFor(() => expect(api.getChat).toHaveBeenCalledTimes(2));
+    act(grow);
 
-    expect(scroll.mock.contexts.at(-1)).toBe(screen.getByText("קריאה 2").closest("li"));
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: document.documentElement.scrollHeight });
+  });
+
+  it("places the thread itself on a reload instead of the browser's remembered position", async () => {
+    window.history.scrollRestoration = "auto";
+    setup({ messages: [], snapshot: snapshot(null) });
+    await screen.findByPlaceholderText(texts.composerPlaceholder);
+
+    expect(window.history.scrollRestoration).toBe("manual");
   });
 
   it("keeps the live card's buttons enabled while a photo uploads", async () => {

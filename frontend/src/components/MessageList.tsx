@@ -5,9 +5,11 @@
  * cards. A photo shows as a thumbnail that opens the full-screen lightbox. A user message shows
  * its date and time, its latest retry's time, and a retry button while it has failed.
  *
- * The thread scrolls to its end as it grows, except when a new live card is already in the
- * history (an earlier photo's card, after the card above it was answered): that card is
- * scrolled into view instead.
+ * The thread keeps its end in view: whenever the list changes size (a bubble or the thinking
+ * line appears, a photo decodes, the window reflows) the page scrolls to its bottom. The
+ * composer sticks to the viewport's bottom, so the end is the page's bottom, not the last
+ * bubble's edge. The thread places the page itself, so a reload does not restore the browser's
+ * remembered position over it.
  */
 import { useEffect, useRef } from "react";
 import type { Api } from "../api";
@@ -32,33 +34,30 @@ export function MessageList({
   onOpen: (src: string) => void;
   onRetry: (message: LocalMessage) => void;
 }) {
-  const end = useRef<HTMLLIElement>(null);
-  const liveEntry = useRef<HTMLLIElement>(null);
-  const scrolledTo = useRef<string | null>(null);
+  const list = useRef<HTMLUListElement>(null);
   const live = snapshot.card;
 
   const entries = foldChoices(messages);
   const isLive = (c: Card | null) =>
     live !== null && c !== null && c.pending === live.pending && c.version === live.version;
   const liveIndex = entries.map((e) => isLive(e.message.card)).lastIndexOf(true);
-  const liveKey = live === null ? null : `${live.pending}#${live.version}`;
   // With no card shown, every waiting item is a photo the model is still reading.
   const working = thinking || (live === null && snapshot.waiting > 0);
-
   useEffect(() => {
-    const newLiveInHistory = liveKey !== scrolledTo.current && liveEntry.current !== null;
-    scrolledTo.current = liveKey;
-    if (newLiveInHistory) liveEntry.current!.scrollIntoView({ block: "start" });
-    else end.current!.scrollIntoView({ block: "end" });
-  }, [liveKey, entries.length, snapshot.waiting, working]);
+    history.scrollRestoration = "manual";
+    const follow = new ResizeObserver(() =>
+      window.scrollTo({ top: document.documentElement.scrollHeight }));
+    follow.observe(list.current!);
+    return () => follow.disconnect();
+  }, []);
   const isPhoto = (m: LocalMessage) => m.image_key !== null || m.localUrl !== undefined;
   const bubble = (m: LocalMessage) =>
     `msg ${m.role === "user" ? "user" : "bot"}${isPhoto(m) ? " photo" : ""}`;
 
   return (
-    <ul className="msgs">
+    <ul className="msgs" ref={list}>
       {entries.map(({ message: m, answer }, i) => (
-        <li key={i} className={bubble(m)} ref={i === liveIndex ? liveEntry : undefined}>
+        <li key={i} className={bubble(m)}>
           {isPhoto(m) && (
             <div className="shots">
               {m.localUrl !== undefined
@@ -101,7 +100,6 @@ export function MessageList({
           <p className="muted">{texts.thinking}<span className="dots" aria-hidden="true" /></p>
         </li>
       )}
-      <li ref={end} aria-hidden="true" />
     </ul>
   );
 }

@@ -19,7 +19,8 @@ OPEN — not yet implemented (#2): the build's version, a WhatsApp invite and a 
 
 - The thread shows the history, oldest first: the user's texts and photos on one side, the
   app's replies on the other. Each of the user's texts and photos shows its date and time to the
-  minute, in Israel time. The thread scrolls to the latest message as it grows.
+  minute, in Israel time. The thread opens at its bottom and keeps its bottom in view as it
+  grows, so the latest reply and the thinking line sit just above the composer.
 - A new account's thread opens with a welcome that says to start with a meter photo.
 - At the bottom, the composer holds the camera button, the draft and the send button. Send is
   disabled only while the draft is empty. A typed reply is sent even while the card awaiting
@@ -45,7 +46,7 @@ OPEN — not yet implemented (#2): the build's version, a WhatsApp invite and a 
 - A pressed option shows on its card at once, with no bubble of its own. While that answer is
   on its way, the waiting card's buttons are disabled; photo uploads do not disable them.
 - When several photos wait for confirmation, only the oldest card has working buttons. After
-  an answer, the next card may sit above the latest replies; the thread then scrolls to it.
+  an answer, the next card may sit above the latest replies.
 
 ## Photos
 
