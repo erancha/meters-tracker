@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>מונים בפעולה</title>
+<title>מונים AI בפעולה</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <!--
   Client-facing walkthrough of the planned meters-tracker chat, showing the whole product,
@@ -329,7 +329,7 @@ body {
 
 <div class="wrap">
   <header class="masthead">
-    <h1>מונים בפעולה<span>הדמיה של המערכת המתוכננת</span></h1>
+    <h1>מונים AI בפעולה<span>הדמיה של המערכת המתוכננת</span></h1>
     <button type="button" class="about-toggle" id="about-toggle" aria-expanded="false" aria-controls="about">על ההדמיה</button>
   </header>
 
@@ -643,8 +643,8 @@ const DELEGATE_CHAT = [
 /* ═══ Screens ═══════════════════════════════════════════════════════════ */
 function landingHtml() {
   return '<main class="landing">' +
-    '<span class="brand">' + ICONS.gauge + "מונים</span>" +
-    '<p class="pitch">מצלמים את המונה. המערכת מזהה את הדירה, מחשבת צריכה וחיוב, ושולחת דוח.</p>' +
+    '<span class="brand">' + ICONS.gauge + "מונים AI</span>" +
+    '<p class="pitch">מצלמים את המונה. המערכת קוראת אותו, מחשבת צריכה וחיוב, ושולחת דוח.</p>' +
     "<ul><li>מוני מים וחשמל, כל דירה בנפרד</li><li>צפי לסוף התקופה, וחישוב סופי כשהיא נסגרת</li><li>הכול בצ'אט, בעברית</li></ul>" +
     '<div class="signin-wrap"><button class="google" data-t="signin"><span class="g">G</span>התחברות עם Google</button>' +
     '<span class="muted">כניסה רק עם חשבון Google</span></div>' +
@@ -662,7 +662,7 @@ function chatHtml() {
   /* Send stays dimmed only while there is nothing to send. */
   const sendable = state.draft !== "";
   return '<div class="chat">' +
-    '<header class="app-head"><span class="brand">' + ICONS.gauge + 'מונים</span><span class="who">' + who + "</span></header>" +
+    '<header class="app-head"><span class="brand">' + ICONS.gauge + 'מונים AI</span><span class="who">' + who + "</span></header>" +
     '<ul class="msgs">' + messages + "</ul>" +
     '<div class="composer"><span class="glyph" data-t="camera">' + ICONS.camera + "</span>" +
       '<div class="draft' + (state.draft ? "" : " empty") + '" data-t="composer">' + (state.draft || "הודעה, או צילום של מונה") + "</div>" +
@@ -691,7 +691,7 @@ function inboxHtml() {
   const last = MAILS[MAILS.length - 1];
   return '<main class="mail">' + mailHead("<strong>דואר נכנס</strong>") +
     '<ul class="inbox"><li data-t="thread">' +
-      '<span class="from">מונים<span class="count">' + MAILS.length + "</span></span>" +
+      '<span class="from">מונים AI<span class="count">' + MAILS.length + "</span></span>" +
       '<span class="date">' + ltr(dm(last.day)) + " " + ICONS.clip + "</span>" +
       '<span class="subject">' + MAIL_SUBJECT + "</span>" +
       '<span class="snippet">' + mailSnippet() + "</span></li></ul></main>";
@@ -701,7 +701,7 @@ function threadHtml() {
   const items = MAILS.map((m, i) => {
     const latest = i === MAILS.length - 1;
     return '<article class="mail-item' + (latest ? " open" : "") + '">' +
-      "<header><b>מונים</b><span>" + ltr(dmy(m.day)) + "</span></header>" +
+      "<header><b>מונים AI</b><span>" + ltr(dmy(m.day)) + "</span></header>" +
       '<div class="snippet">' + m.text + "</div>" +
       (latest
         ? '<div class="body"><p>קריאות הסגירה של התקופה ' + periodLabel(periodStart(), periodEnd()) + " אושרו.</p>" +

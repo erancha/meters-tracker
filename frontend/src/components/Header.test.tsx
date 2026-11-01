@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -51,5 +52,10 @@ describe("Header", () => {
     await openMenu();
 
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("names the app in the header and the browser tab alike", () => {
+    expect(texts.appTitle).toBe("מונים AI");
+    expect(readFileSync("index.html", "utf8")).toContain(`<title>${texts.appTitle}</title>`);
   });
 });

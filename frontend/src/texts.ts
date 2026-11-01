@@ -1,12 +1,12 @@
 // Every user-visible string of the app. Hebrew lives only in this module.
 
 export const texts = {
-  appTitle: "מונים",
+  appTitle: "מונים AI",
   signIn: "התחברות עם Google",
   // Landing copy. A **phrase** is set in bold. The summary bullets condense the main shipped items
   // of the root README's overview and must stay aligned with it.
   landingCondensed: [
-    "חיוב דירות לפי **מוני מים וחשמל**: **מצלמים את המונה**, והמערכת מזהה את הדירה, מחשבת את **הצריכה**, את **הצפי לסוף התקופה** ואת **החיוב**.",
+    "חיוב דירות לפי **מוני מים וחשמל**: **מצלמים את המונה**, והמערכת קוראת אותו, מחשבת את **הצריכה**, את **הצפי לסוף התקופה** ואת **החיוב**.",
     "הכול ב**צ'אט**, בעברית ובלי טפסים: המערכת מציעה, ומאשרים בכפתור או מתקנים במילים פשוטות.",
     "**תקופות חיוב** לכל דירה, **סגירת תקופה** עם הקריאה האחרונה, ו**תעריפים** שמוקלדים בצ'אט או נקראים מצילום של חשבון קודם.",
   ],
