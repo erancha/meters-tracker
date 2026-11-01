@@ -90,6 +90,16 @@ describe("Landing", () => {
     expect(message.split("\n").at(-1)).toBe(window.location.origin);
   });
 
+  it("marks only the condensed view as the screen-filling hero", async () => {
+    render(<Landing onSignIn={() => {}} />);
+
+    expect(screen.getByRole("main")).toHaveClass("landing-brief");
+
+    await toggle(texts.more);
+
+    expect(screen.getByRole("main")).not.toHaveClass("landing-brief");
+  });
+
   it("invokes onSignIn in both modes", async () => {
     const onSignIn = vi.fn();
     render(<Landing onSignIn={onSignIn} />);

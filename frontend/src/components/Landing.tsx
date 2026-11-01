@@ -20,7 +20,7 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const invite = encodeURIComponent(texts.inviteMessage(window.location.origin));
   return (
-    <main className="landing">
+    <main className={expanded ? "landing" : "landing landing-brief"}>
       <div className="landing-card">
         {/* Outside the heading, so the heading's accessible name stays the app's name. */}
         <div className="landing-heading">
@@ -52,7 +52,7 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
       {/* The hint sits outside the anchor, so the link's accessible name stays the page's own. */}
       <p className="landing-demo">
         <a href={DEMO_PATH} target="_blank" rel="noreferrer">{texts.demo}</a>{" "}
-        <span className="muted">{texts.demoHint}</span>
+        <span className="landing-demo-hint">{texts.demoHint}</span>
       </p>
       <p className="landing-link">
         <a href={`https://wa.me/?text=${invite}`} target="_blank" rel="noreferrer">

@@ -24,7 +24,7 @@ export const texts = {
   more: "יותר",
   less: "פחות",
   demo: "הדגמה",
-  demoHint: "(ניתן לשנות את מהירות ההדגמה; מומלץ לראות במסך מחשב)",
+  demoHint: "(ניתן לשנות את המהירות; מומלץ לראות במסך מחשב)",
   invite: "הזמנת חברים ב-WhatsApp",
   // A landing-page visitor is not the developer, so the invite speaks as a received recommendation.
   // The address closes the message on a line of its own, so WhatsApp renders it as a tappable link.

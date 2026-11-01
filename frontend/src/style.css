@@ -24,38 +24,52 @@ body { margin: 0; background: #f6f8f9; }
 #root .brand .icon { width: 1.3em; height: 1.3em; }
 
 /* landing */
-/* One centered column: a white card holding the pitch and the sign-in button, then the footer links.
-   The page fills the viewport, and two auto margins (above the card and above the link) split its
-   spare height, centering the card while the link rides the bottom edge. Expanded text taller than
-   the viewport leaves no spare height, so the margins collapse and the page scrolls. */
-#root .landing { display: flex; flex-direction: column; width: 100%; max-width: 48rem; min-height: 100dvh; margin-inline: auto; padding: 1rem; box-sizing: border-box; }
-#root .landing-card { display: flex; flex-direction: column; margin-top: auto; background: var(--card); border: 1px solid var(--hair); border-radius: 8px; padding: 1rem; }
-@media (min-width: 48rem) { #root .landing-card { padding: 2rem; } }
-#root .landing-heading { align-self: center; margin-bottom: 1rem; text-align: center; }
-#root .landing .brand { margin: 0; font-size: min(2.6rem, 11vw); }
+/* A reading page, so it sets its own type and neutrals rather than the chat's denser ones. */
+body:has(.landing), #root:has(.landing) { background: #fafafa; }
+#root .landing { display: flex; flex-direction: column; width: 100%; max-width: 50rem; margin-inline: auto; padding: 0.6rem 1rem 1rem; box-sizing: border-box; color: #212121; font-size: 1rem; line-height: normal; }
+#root .landing-card { display: flex; flex-direction: column; background: var(--card); border: 1px solid #ddd; border-radius: 8px; padding: 1rem; }
+/* The condensed view fills the viewport, and two auto margins (above the card and above the demo
+   link) split its spare height, centering the card while the footer links ride the bottom edge.
+   Text taller than the viewport leaves no spare height, so the margins collapse and the page
+   scrolls. The expanded view scrolls anyway, so its footer keeps a fixed gap below the card. */
+#root .landing-brief { min-height: 100dvh; }
+#root .landing-brief .landing-card { margin-top: auto; }
+@media (min-width: 48rem) { #root .landing-brief .landing-card { padding: 2rem; } }
+/* The block hugs the name's width, so the version centers under the name, not across the card. */
+#root .landing-heading { width: fit-content; margin-bottom: 1rem; text-align: center; }
+#root .landing-brief .landing-heading { margin-inline: auto; }
+#root .landing .brand { gap: 0.15em; margin: 0; font-size: min(calc(2.1rem + 2px), 9vw + 2px); }
+#root .landing .brand .icon { width: 1em; height: 1em; }
+#root .landing-brief .brand { font-size: min(2.6rem, 11vw); }
 /* Small and muted, so the build's version reads as a footnote to the name. */
-#root .landing-version { margin: 0.1rem 0 0; font-size: 0.75rem; color: var(--muted); }
+#root .landing-version { margin: 0.1rem 0 0; font-size: 0.75rem; color: #8a8a84; }
 #root .landing-intro, #root .landing-condensed { margin: 0.5em 0 0.6rem; }
 /* The condensed pitch is the page's whole message, so it reads a touch larger than body copy. */
 #root .landing-condensed { font-size: calc(1em + 2px); }
-#root .landing-summary { margin: 0 0 1rem; padding-inline-start: 1.2rem; }
+#root .landing-summary { margin-block: 0; padding-inline-start: 1.2rem; }
+@media (min-width: 48rem) { #root .landing-summary { padding-inline-start: revert; } }
 #root .landing-summary li:not(:last-child) { margin-bottom: 0.6rem; }
 #root .landing button { font: inherit; cursor: pointer; border-radius: 8px; }
-/* The toggle sits at least a rem off both the content and the sign-in button, so the screen's
-   single action does not read as part of the toggle's line. Its triangle points along the reading
-   direction while folded and down once open. */
-#root .landing .more-toggle { align-self: flex-start; margin-block: 1rem; padding: 0; border: 0; background: none; color: var(--accent); font-size: 0.9rem; }
-#root .landing .more-toggle::before { content: "▾ "; }
-#root .landing .more-toggle[aria-expanded="false"]::before { content: "◂ "; }
+/* The toggle sits a rem off both the content and the sign-in button, so the screen's single action
+   does not read as part of the toggle's line. Its triangle points along the reading direction
+   while folded and down once open; the sideways triangle looks lighter, so it is set larger. */
+#root .landing .more-toggle { margin-block: 1rem; padding: 0; border: 1px solid transparent; background: none; color: inherit; font-size: 0.9rem; }
+#root .landing .more-toggle:hover { color: var(--accent); }
+#root .landing .more-toggle::before { content: "▾ "; font-size: calc(0.9em + 1px); }
+#root .landing .more-toggle[aria-expanded="false"]::before { content: "◂ "; font-size: calc(0.9em + 3px); }
 /* Dark text on an outline, the look of a third-party sign-in rather than the app's own actions. */
 #root .landing .sign-in { background: #fff; color: inherit; border: 1px solid #ccc; border-radius: 999px; padding: 0.6rem 2.5rem; font-weight: 600; }
 #root .landing .sign-in:hover { filter: brightness(0.93); }
 #root .landing .sign-in-mark { color: #1f4e8c; font-weight: 700; margin-inline-end: 0.6rem; }
 /* A phone gets a full-width button, the easiest target; across a wider measure the same button
    would read as a banner, so it falls back to its content width on the start edge. */
-@media (min-width: 48rem) { #root .landing .sign-in { align-self: flex-start; } }
-#root .landing-demo { margin-block: auto 0; padding-top: 2.5rem; }
-#root .landing-link { margin: 0.5rem 0 0; }
+@media (min-width: 48rem) { #root .landing button { align-self: flex-start; } }
+/* The landing's column is a flex box, so the footer lines' margins add up rather than collapse. */
+#root .landing-demo { margin-block: 2.5rem 1em; }
+#root .landing-brief .landing-demo { margin-top: auto; padding-top: 2.5rem; }
+#root .landing-link { margin: 0.5rem 0 1em; }
+/* A note about the page the link leads to, not a second link, so it reads as chrome beside it. */
+#root .landing-demo-hint { color: #5f5f5f; font-size: 0.85rem; }
 
 /* chat */
 #root .chat { flex: 1; display: flex; flex-direction: column; }
