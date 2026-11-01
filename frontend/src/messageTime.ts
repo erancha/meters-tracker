@@ -29,5 +29,8 @@ export function shownDay(day: string) {
   return `${texts.weekdays[weekday]} ${shownTime(`${day}T00:00`).split(" ")[0]}`;
 }
 
+/** The day and month, from a stamp's date part (YYYY-MM-DD). */
+export const shownDayMonth = (day: string) => shownTime(`${day}T00:00`).slice(0, 5);
+
 /** Today's date in Jerusalem, as a stamp's date part. */
 export const jerusalemDay = () => jerusalemStamp().slice(0, 10);

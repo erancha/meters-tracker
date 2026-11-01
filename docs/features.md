@@ -91,6 +91,12 @@ the arrow keys while the border has focus. The panel stays at least 192 px wide 
 least 360 px, and the browser brings the chosen width back on the next visit. The page stops at
 72 rem and stays centered in a wider window.
 
+On a narrower window the same day shows as a strip under the header, which stays while the chat
+scrolls: the day as `היום 01/11` (or `חסרים תעריפים` while a request for tariffs is open, tapping
+as above), then a button per section, `ממתינות 2` and `בוצעו 7`, each only when it has lines. A
+tap drops that section's lines over the chat; a tap on the same button, or outside the lines,
+closes them with the chat where it was, and a tap on a line closes them as it scrolls.
+
 ## Report email
 
 - After a confirmed reading that has a previous one, and after a close, the owner gets one email

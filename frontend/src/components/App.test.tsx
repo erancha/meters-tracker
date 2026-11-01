@@ -36,6 +36,7 @@ describe("App", () => {
     expect(await screen.findByRole("complementary", { name: texts.dayTitle }))
       .toBeInTheDocument();
     expect(screen.getByRole("separator", { name: texts.resizePanel })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: texts.dayTitle })).toBeNull();
   });
 
   it("shows no sidebar below the configured width", async () => {
@@ -46,5 +47,22 @@ describe("App", () => {
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("/app.json"));
     expect(screen.queryByRole("complementary")).toBeNull();
     expect(screen.queryByRole("separator")).toBeNull();
+  });
+
+  it("shows the day strip below the configured width", async () => {
+    stubScreen(900, 899);
+    setup();
+
+    expect(await screen.findByRole("region", { name: texts.dayTitle })).toBeInTheDocument();
+  });
+
+  it("shows neither the sidebar nor the strip until the config has loaded", async () => {
+    stubScreen(900, 899);
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    setup();
+
+    await screen.findByRole("button", { name: texts.accountMenu });
+    expect(screen.queryByRole("region", { name: texts.dayTitle })).toBeNull();
+    expect(screen.queryByRole("complementary")).toBeNull();
   });
 });

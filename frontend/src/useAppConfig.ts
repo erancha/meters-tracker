@@ -1,6 +1,6 @@
 /**
  * The shared runtime settings served at /app.json (config/app.json), and the window-width check
- * they drive: wide(minWidthPx) follows the window as it is resized.
+ * they drive: useMinWidth follows the window as it is resized.
  */
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -21,9 +21,9 @@ export function useAppConfig() {
   });
 }
 
-/** Whether the window is at least minWidthPx wide; false while the width is not yet known. */
-export function useMinWidth(minWidthPx: number | undefined): boolean {
-  const [matches, setMatches] = useState(false);
+/** Whether the window is at least minWidthPx wide; null while the width is not yet known. */
+export function useMinWidth(minWidthPx: number | undefined): boolean | null {
+  const [matches, setMatches] = useState<boolean | null>(null);
   useEffect(() => {
     if (minWidthPx === undefined) return;
     const media = window.matchMedia(`(min-width: ${minWidthPx}px)`);

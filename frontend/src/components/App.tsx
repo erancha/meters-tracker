@@ -1,14 +1,15 @@
 /**
  * Signed-in shell: the header above the chat, with the day's sidebar beside the chat once the
- * window is at least the configured width, and a draggable border between them. No sidebar renders
- * until the config has loaded. A line tapped in the sidebar focuses its message in the chat. The
- * full-screen lightbox renders here.
+ * window is at least the configured width and a draggable border between them, or the day strip
+ * above the chat on a narrower window. Neither renders until the config has loaded. A line tapped
+ * in either focuses its message in the chat. The full-screen lightbox renders here.
  */
 import { useState } from "react";
 import type { Api } from "../api";
 import { useAppConfig, useMinWidth } from "../useAppConfig";
 import { useChatQuery } from "../useChat";
 import { Chat } from "./Chat";
+import { DayStrip } from "./DayStrip";
 import { Header } from "./Header";
 import { Lightbox } from "./Lightbox";
 import { PanelResizer, usePanelWidth } from "./PanelResizer";
@@ -23,18 +24,22 @@ export function App({ email, api, onSignOut }: { email: string; api: Api; onSign
   const [opened, setOpened] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
   const panel = usePanelWidth();
+  const dayView = {
+    messages: history.data?.messages ?? [],
+    tariffsMissing: history.data?.snapshot.tariffs_missing ?? false,
+    day: jerusalemDay(),
+    onFocus: (at: string) => setFocus((f) => ({ at, n: (f?.n ?? 0) + 1 })),
+  };
   return (
     <>
       <Header email={email} onSignOut={onSignOut} />
+      {wide === false && <DayStrip {...dayView} />}
       <div className="columns" style={panel.style}>
         <Chat api={api} onOpen={setOpened} focus={focus} />
         {wide && (
           <>
             <PanelResizer width={panel.width} resize={panel.resize} />
-            <Sidebar messages={history.data?.messages ?? []}
-                     tariffsMissing={history.data?.snapshot.tariffs_missing ?? false}
-                     day={jerusalemDay()}
-                     onFocus={(at) => setFocus((f) => ({ at, n: (f?.n ?? 0) + 1 }))} />
+            <Sidebar {...dayView} />
           </>
         )}
       </div>

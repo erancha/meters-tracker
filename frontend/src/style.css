@@ -175,12 +175,33 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 #root .sidebar h2 { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
 #root .sidebar details + details { margin-top: 0.6rem; }
 #root .sidebar summary { font-size: 0.95rem; font-weight: 600; cursor: pointer; }
-#root .sidebar ul { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.1rem; }
-#root .sidebar li button { font: inherit; font-size: 0.8rem; width: 100%; padding: 0.2rem 0.3rem; border: 0; border-radius: 6px; background: none; color: var(--ink); text-align: start; cursor: pointer; }
-#root .sidebar li button:hover { background: var(--accent-soft); }
+#root .day-lines { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.1rem; }
+#root .day-lines button { font: inherit; font-size: 0.8rem; width: 100%; padding: 0.2rem 0.3rem; border: 0; border-radius: 6px; background: none; color: var(--ink); text-align: start; cursor: pointer; }
+#root .day-lines button:hover { background: var(--accent-soft); }
 #root .sidebar p { margin: 0; font-size: 0.8rem; color: var(--muted); }
 #root .sidebar .alert-line { display: block; width: 100%; margin: 0 0 0.6rem; padding: 0; border: 0; background: none; font: inherit; font-size: 0.95rem; font-weight: 600; color: var(--warn); text-align: start; }
-#root .sidebar button.alert-line { cursor: pointer; }
+#root .sidebar button.alert-line, #root .day-strip button.alert-line { cursor: pointer; }
+
+/* day strip: the panel's narrow form. It lifts over the header and the composer only while a list
+   is open, so its shade covers them too and the account menu stays above it otherwise. */
+#root .day-strip { position: sticky; top: var(--head-height); z-index: 4; }
+#root .day-strip.open { z-index: 6; }
+#root .day-strip-row {
+  background: var(--accent-soft); border-bottom: 1px solid var(--accent-border);
+  display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.35rem 0.9rem;
+}
+#root .day-strip .chips { flex-wrap: nowrap; }
+#root .day-strip .chip.held { color: var(--warn); }
+#root .day-strip .chip.saved { color: var(--ok); }
+#root .day-strip .chip[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+#root .day-strip .alert-line { padding: 0; border: 0; background: none; font: inherit; font-size: 0.95rem; font-weight: 600; color: var(--warn); }
+#root .day-strip-shade { position: fixed; inset: 0; z-index: -1; padding: 0; border: 0; background: rgba(29,42,51,0.3); }
+#root .day-strip-list {
+  position: absolute; inset-inline: 0; top: 100%; max-height: 60dvh; overflow-y: auto; padding: 0.3rem 0.9rem 0.6rem;
+  background: var(--card); border-bottom: 1px solid var(--accent-border); box-shadow: 0 6px 18px rgba(29,42,51,0.14);
+}
+#root .day-strip .day-lines { margin: 0; }
+#root .day-strip .day-lines button { font-size: 0.9rem; padding: 0.45rem 0.3rem; }
 
 /* narrow windows never scroll sideways */
 #root .text, #root .msg { overflow-wrap: anywhere; }

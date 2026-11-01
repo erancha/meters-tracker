@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { jerusalemStamp, shownDay, shownTime } from "./messageTime";
+import { jerusalemStamp, shownDay, shownDayMonth, shownTime } from "./messageTime";
 
 describe("shownDay", () => {
   it("names the day of the week in Hebrew before the date", () => {
     expect(shownDay("2026-11-01")).toBe("יום ראשון 01/11/2026");
     expect(shownDay("2026-11-07")).toBe("שבת 07/11/2026");
+  });
+});
+
+describe("shownDayMonth", () => {
+  it("shows the day and month only", () => {
+    expect(shownDayMonth("2026-11-01")).toBe("01/11");
   });
 });
 
