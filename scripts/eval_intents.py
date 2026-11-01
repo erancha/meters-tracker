@@ -93,7 +93,7 @@ CARDS = {
     "propose_close": _card(texts.propose_close(date(2026, 10, 31), TODAY), ["close", "keep_open"]),
     "tariffs_ask": _card(texts.tariffs_ask()),
     "tariffs": _card(
-        texts.tariffs_card(PRICES, TODAY, True, None, None, []),
+        texts.tariffs_card(PRICES, TODAY, True, False, None),
         ["confirm"],
         {"confirm": texts.SAVE_TARIFFS_LABEL},
     ),
