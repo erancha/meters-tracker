@@ -2,6 +2,7 @@
 
 export const texts = {
   appTitle: "מונים AI",
+  appVersion: (version: string, date: string) => `גירסה ${version}, ${date}`,
   signIn: "התחברות עם Google",
   // Landing copy. A **phrase** is set in bold. The summary bullets condense the main shipped items
   // of the root README's overview and must stay aligned with it.
@@ -24,6 +25,17 @@ export const texts = {
   less: "פחות",
   demo: "הדגמה",
   demoHint: "(ניתן לשנות את מהירות ההדגמה; מומלץ לראות במסך מחשב)",
+  invite: "הזמנת חברים ב-WhatsApp",
+  // A landing-page visitor is not the developer, so the invite speaks as a received recommendation.
+  // The address closes the message on a line of its own, so WhatsApp renders it as a tappable link.
+  inviteMessage: (address: string) => [
+    "📟 היי! קיבלתי המלצה על אפליקציה לחיוב דירות לפי מוני מים וחשמל",
+    "📷 מצלמים את המונה בצ'אט, והיא קוראת אותו ומחשבת את הצריכה, הצפי והחיוב",
+    "",
+    "נכנסים עם חשבון Google 👇",
+    address,
+  ].join("\n"),
+  source: "קוד המקור ב-GitHub",
   signInIncomplete: "ההתחברות לא הושלמה — יש לרענן את הדף ולהתחבר מחדש",
   signOut: "התנתקות",
   accountMenu: "תפריט חשבון",

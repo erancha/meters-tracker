@@ -24,7 +24,11 @@ jobs:
       run:
         working-directory: frontend
     steps:
+      # The frontend build reads the version it shows from the release tags, so the checkout
+      # needs the full history rather than the default single commit.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: "22"

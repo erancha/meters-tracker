@@ -8,10 +8,12 @@ the app inside the phone of the [demo](demo/demo.html).
 
 ## Landing page
 
-A signed-out visitor sees one card: the app's name, a three-paragraph pitch, a "more" toggle and
-the "sign in with Google" button. The toggle swaps the pitch for seven bullets condensing the
-README's overview, and back. Below the card, a link opens the animated demo in a new
-tab. A sign-in whose final step fails shows a banner asking to reload and sign in again.
+A signed-out visitor sees one card: the app's name with the build's version and commit date under
+it, a three-paragraph pitch, a "more" toggle and the "sign in with Google" button. The toggle swaps
+the pitch for seven bullets condensing the README's overview, and back. Below the card, one link
+opens the animated demo in a new tab, a second opens WhatsApp with an invite to the app prefilled
+as a received recommendation, and a third opens the source repository on GitHub. A sign-in whose
+final step fails shows a banner asking to reload and sign in again.
 
 ## Chat
 

@@ -24,14 +24,17 @@ body { margin: 0; background: #f6f8f9; }
 #root .brand .icon { width: 1.3em; height: 1.3em; }
 
 /* landing */
-/* One centered column: a white card holding the pitch and the sign-in button, then the demo link.
+/* One centered column: a white card holding the pitch and the sign-in button, then the footer links.
    The page fills the viewport, and two auto margins (above the card and above the link) split its
    spare height, centering the card while the link rides the bottom edge. Expanded text taller than
    the viewport leaves no spare height, so the margins collapse and the page scrolls. */
 #root .landing { display: flex; flex-direction: column; width: 100%; max-width: 48rem; min-height: 100dvh; margin-inline: auto; padding: 1rem; box-sizing: border-box; }
 #root .landing-card { display: flex; flex-direction: column; margin-top: auto; background: var(--card); border: 1px solid var(--hair); border-radius: 8px; padding: 1rem; }
 @media (min-width: 48rem) { #root .landing-card { padding: 2rem; } }
-#root .landing .brand { align-self: center; margin: 0 0 1rem; font-size: min(2.6rem, 11vw); }
+#root .landing-heading { align-self: center; margin-bottom: 1rem; text-align: center; }
+#root .landing .brand { margin: 0; font-size: min(2.6rem, 11vw); }
+/* Small and muted, so the build's version reads as a footnote to the name. */
+#root .landing-version { margin: 0.1rem 0 0; font-size: 0.75rem; color: var(--muted); }
 #root .landing-intro, #root .landing-condensed { margin: 0.5em 0 0.6rem; }
 /* The condensed pitch is the page's whole message, so it reads a touch larger than body copy. */
 #root .landing-condensed { font-size: calc(1em + 2px); }
@@ -51,7 +54,8 @@ body { margin: 0; background: #f6f8f9; }
 /* A phone gets a full-width button, the easiest target; across a wider measure the same button
    would read as a banner, so it falls back to its content width on the start edge. */
 @media (min-width: 48rem) { #root .landing .sign-in { align-self: flex-start; } }
-#root .landing-demo { margin-top: auto; padding-top: 2.5rem; }
+#root .landing-demo { margin-block: auto 0; padding-top: 2.5rem; }
+#root .landing-link { margin: 0.5rem 0 0; }
 
 /* chat */
 #root .chat { flex: 1; display: flex; flex-direction: column; }

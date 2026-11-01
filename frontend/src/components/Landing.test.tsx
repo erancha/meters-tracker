@@ -51,6 +51,45 @@ describe("Landing", () => {
     expect(demo()).toHaveAttribute("href", "demo.html");
   });
 
+  it("names the build's version and commit date under the name, in both modes", async () => {
+    render(<Landing onSignIn={() => {}} />);
+
+    const version = () => screen.getByText(/^גירסה \d+\.\d+\.\d+, \d{2}\/\d{2}\/\d{4}$/);
+    expect(screen.getByRole("heading").nextElementSibling).toBe(version());
+
+    await toggle(texts.more);
+
+    expect(version()).toBeInTheDocument();
+  });
+
+  it("follows the demo link with the invite, then the source link, in both modes", async () => {
+    render(<Landing onSignIn={() => {}} />);
+
+    const links = () => screen.getAllByRole("link").map((link) => link.textContent);
+    expect(links()).toEqual([texts.demo, texts.invite, texts.source]);
+
+    await toggle(texts.more);
+
+    expect(links()).toEqual([texts.demo, texts.invite, texts.source]);
+  });
+
+  it("links to the source repository", () => {
+    render(<Landing onSignIn={() => {}} />);
+
+    expect(screen.getByRole("link", { name: texts.source }))
+      .toHaveAttribute("href", "https://github.com/erancha/meters-tracker");
+  });
+
+  it("prefills the invite as a received recommendation closing on the app's address", () => {
+    render(<Landing onSignIn={() => {}} />);
+
+    const href = screen.getByRole("link", { name: texts.invite }).getAttribute("href")!;
+    expect(href.startsWith("https://wa.me/?text=")).toBe(true);
+    const message = decodeURIComponent(href.slice("https://wa.me/?text=".length));
+    expect(message).toContain("קיבלתי המלצה");
+    expect(message.split("\n").at(-1)).toBe(window.location.origin);
+  });
+
   it("invokes onSignIn in both modes", async () => {
     const onSignIn = vi.fn();
     render(<Landing onSignIn={onSignIn} />);
