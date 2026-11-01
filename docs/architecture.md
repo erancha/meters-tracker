@@ -33,7 +33,7 @@ graph LR
   status, a meter's history, the tariffs in force, resending a report).
 - OPEN — not yet implemented: corrections — editing or deleting a reading, renaming a property
   or apartment, reassigning a meter to another apartment.
-- OPEN — not yet implemented: managing delegates from the chat. Sign-in honors delegate rows,
+- OPEN — not yet implemented (#8): managing delegates from the chat. Sign-in honors delegate rows,
   but nothing writes one yet.
 - OPEN — not yet implemented: a period total per meter type across a retired meter and its
   replacement. Consumption is reported per meter; summing the two is planned with the reports.
