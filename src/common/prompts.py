@@ -56,6 +56,10 @@ Intents:
 - choose_property: pick a property by name; set name. When the message also names the apartment
   in that property ("לאונר 18, דירה קדמית"), set apartment to the apartment's name
 - choose_apartment: pick an apartment by name; set name and is_new when it is a new apartment
+  A name typed on a later card that already shows the property and the apartment (the period
+  question or the summary before saving) corrects the name shown there, usually a typo:
+  choose_apartment with the corrected apartment name ("קדמית" when the card shows "קדמיץ"), or
+  choose_property when it is the property's name that is corrected
 - choose_option: the message picks one of the pending card's buttons, listed after "כפתורים"
   ("העליון", "תחילת חודש"); set name to that button's label exactly as listed. Approving the card
   is confirm

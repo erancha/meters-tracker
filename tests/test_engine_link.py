@@ -43,6 +43,48 @@ def test_asking_what_the_question_means_explains_it_and_repeats_it(env, ddb):
     assert "מהו מזהה הדירה?" in result.snapshot.card["lines"][-1]
 
 
+def test_a_name_typed_on_the_period_question_corrects_the_apartment(env, ddb):
+    kit = Kit(
+        [
+            _choose_property("לאונר 18", True),
+            _choose_apartment("קדמיץ", True),
+            _choose_apartment("קדמית", True),
+        ]
+    )
+    kit.send_photo(electricity())
+    kit.say("לאונר 18")
+    kit.say("קדמיץ")
+    result = kit.say("קדמית")
+    assert result.snapshot.card["kind"] == "period"
+    assert "קדמית בלאונר 18" in result.snapshot.card["title"]
+    kit.choose("start_today")
+    kit.choose("confirm")
+    [apartment] = kit.store.apartments(ACCOUNT)
+    assert apartment["name"] == "קדמית"
+
+
+def test_a_property_name_typed_on_the_summary_corrects_it_and_keeps_the_apartment(env, ddb):
+    kit = Kit(
+        [
+            _choose_property("לאונר 81", True),
+            _choose_apartment("קדמית", True),
+            _choose_property("לאונר 18", True),
+        ]
+    )
+    kit.send_photo(electricity())
+    kit.say("לאונר 81")
+    kit.say("קדמית")
+    kit.choose("start_today")
+    result = kit.say("לאונר 18")
+    assert result.snapshot.card["kind"] == "period"
+    assert "קדמית בלאונר 18" in result.snapshot.card["title"]
+    kit.choose("start_today")
+    kit.choose("confirm")
+    [prop] = kit.store.properties(ACCOUNT)
+    [apartment] = kit.store.apartments(ACCOUNT)
+    assert (prop["name"], apartment["name"]) == ("לאונר 18", "קדמית")
+
+
 def test_new_serial_asks_property_then_apartment_then_period(env, ddb):
     kit = Kit([_choose_property("הגפן 7", True), _choose_apartment("עורף", True)])
     result = kit.send_photo(electricity())

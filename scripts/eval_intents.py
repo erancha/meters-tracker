@@ -62,6 +62,12 @@ CARDS = {
         ["start_today", "start_month"],
         texts.start_labels({"start_today": "2026-10-29", "start_month": "2026-11-01"}),
     ),
+    # The period question after a mistyped apartment name, which the next message corrects.
+    "period_typo": _card(
+        texts.link_period("קדמיץ", PROPERTY, 2),
+        ["start_today", "start_month"],
+        texts.start_labels({"start_today": "2026-10-29", "start_month": "2026-11-01"}),
+    ),
     "link": _card(
         texts.link_confirm(
             "electricity",

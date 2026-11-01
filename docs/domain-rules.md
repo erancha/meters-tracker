@@ -56,17 +56,18 @@ the day the photo was sent, which a retry on a later day keeps.
   later photos propose that position's number directly.
 - **Unknown serial.** A link flow (`src/common/flows/link_meter.py`) asks for the property and then
   the apartment, existing or new by name; an answer naming both ("לאונר 18, דירה קדמית") skips the
-  apartment question. An apartment with no open period also asks for the period's start (buttons for
-  today and for the first of next month, which is left out on the first of a month; a typed date
-  also answers) and length (default `default_period_months`, or the apartment's own length when it
-  exists). A new period that starts before the photo's date dates the opening reading at the start,
-  since the photo then stands for the meter on that day; a later start keeps the photo's date. The
-  final card shows everything that will be created; on confirmation the property, apartment and
-  period are created as needed, the meter is saved, and its reading becomes the period's opening
-  reading. A live meter of the same type in that apartment is retired, dated the new reading's date;
-  each keeps its own consumption ([open item](architecture.md#open-items)). When another photo of
-  the same serial was linked while this one waited, the next answer turns it into an ordinary
-  reading card for that meter.
+  apartment question; a property or apartment name typed on a later question corrects the one
+  given, and the flow resumes from the corrected name. An apartment with no open period also asks
+  for the period's start (buttons for today and for the first of next month, which is left out on
+  the first of a month; a typed date also answers) and length (default `default_period_months`,
+  or the apartment's own length when it exists). A new period that starts before the photo's date
+  dates the opening reading at the start, since the photo then stands for the meter on that day; a
+  later start keeps the photo's date. The final card shows everything that will be created; on
+  confirmation the property, apartment and period are created as needed, the meter is saved, and
+  its reading becomes the period's opening reading. A live meter of the same type in that apartment
+  is retired, dated the new reading's date; each keeps its own consumption
+  ([open item](architecture.md#open-items)). When another photo of the same serial was linked
+  while this one waited, the next answer turns it into an ordinary reading card for that meter.
 - **Known serial.** The card proposes the reading; the user confirms, picks the other number,
   or types a corrected value, a date, or a cancel. Cards carry no reject button: corrections and
   cancels are typed.

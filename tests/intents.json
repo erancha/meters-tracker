@@ -61,6 +61,15 @@
     "intent": "explain"
   },
   {
+    "message": "קדמית",
+    "card": "period_typo",
+    "today": "2026-10-29",
+    "intent": "choose_apartment",
+    "fields": {
+      "name": "קדמית"
+    }
+  },
+  {
     "message": "הקריאה מ-27/8",
     "card": "reading",
     "today": "2026-10-29",

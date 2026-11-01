@@ -2,7 +2,9 @@
 saved as that meter's opening reading.
 
 Steps: property -> apartment -> period (only when the apartment has no open period) -> link. A
-property answer that also names the apartment skips the apartment question.
+property answer that also names the apartment skips the apartment question. A property or
+apartment name typed on a later step corrects the earlier answer and the flow resumes from it,
+so a typo is fixed by typing the name again rather than by cancelling.
 Nothing is written until the final confirm; then the property, apartment and period are created
 as needed, the meter and its opening reading are saved, and a live meter of the same type in the
 apartment is retired as replaced on the reading's date. A serial that another photo linked while
@@ -97,12 +99,16 @@ def answer(engine, user, item, action) -> list[Reply]:
     if engine.store.meter(user.account, data["serial"]) is not None:
         item["kind"] = meter_photo.KIND
         return meter_photo.route(engine, user, item)
-    if step == "property" and key == "choose_property":
+    if key == "choose_property":
         _choose_property(engine, user, item, _name(intent))
         if intent.apartment is not None:
             return _choose_apartment(engine, user, item, intent.apartment)
-        return ask(engine, user, item, "apartment", card)
-    if step == "apartment" and key == "choose_apartment":
+        if step == "property":
+            return ask(engine, user, item, "apartment", card)
+        # A property name typed on a later question corrects the one given; the apartment is
+        # matched again, since it belongs to the corrected property.
+        return _choose_apartment(engine, user, item, data["apartment"])
+    if step != "property" and key == "choose_apartment":
         return _choose_apartment(engine, user, item, _name(intent))
     if step == "period" and key in data["starts"]:
         _start_period(data, data["starts"][key])
