@@ -35,6 +35,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("complementary", { name: texts.dayTitle }))
       .toBeInTheDocument();
+    expect(screen.getByRole("separator", { name: texts.resizePanel })).toBeInTheDocument();
   });
 
   it("shows no sidebar below the configured width", async () => {
@@ -44,5 +45,6 @@ describe("App", () => {
     await screen.findByRole("button", { name: texts.accountMenu });
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("/app.json"));
     expect(screen.queryByRole("complementary")).toBeNull();
+    expect(screen.queryByRole("separator")).toBeNull();
   });
 });

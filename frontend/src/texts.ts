@@ -28,6 +28,7 @@ export const texts = {
   signOut: "התנתקות",
   accountMenu: "תפריט חשבון",
   dayTitle: "היום",
+  resizePanel: "שינוי רוחב חלונית היום",
   weekdays: ["יום ראשון", "יום שני", "יום שלישי", "יום רביעי", "יום חמישי", "יום שישי", "שבת"],
   savedCount: (n: number) => `קריאות שבוצעו · ${n}`,
   heldCount: (n: number) => `קריאות ממתינות · ${n}`,

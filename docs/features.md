@@ -84,6 +84,11 @@ when another card is shown first, and a tap scrolls to the card asking for them.
 A tap on a line scrolls the chat to that photo and highlights it for a moment. The sections follow
 the chat with no reload. With neither section, the panel says `לא נקראו מונים היום`.
 
+The panel opens 18 rem wide. Dragging the border between it and the chat sets its width, and so do
+the arrow keys while the border has focus. The panel stays at least 192 px wide and the chat at
+least 360 px, and the browser brings the chosen width back on the next visit. The page stops at
+72 rem and stays centered in a wider window.
+
 ## Report email
 
 - After a confirmed reading that has a previous one, and after a close, the owner gets one email

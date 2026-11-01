@@ -1,5 +1,7 @@
 body { margin: 0; background: #f6f8f9; }
 #root {
+  /* Stops the chat from stretching far away from the day panel on a wide screen. */
+  max-width: 72rem; margin-inline: auto;
   min-height: 100dvh; display: flex; flex-direction: column;
   --head-height: 3.3rem;
   --accent: #1d5b8c; --accent-soft: #e6eff6; --accent-border: #b9cfe0;
@@ -135,12 +137,20 @@ body { margin: 0; background: #f6f8f9; }
 #root .menu-item { font: inherit; background: none; border: 0; color: var(--ink); text-align: start; padding: 0.4rem 0.6rem; border-radius: 8px; }
 #root .menu-item:hover { background: var(--accent-soft); }
 
-/* layout: one column; the sidebar joins beside the chat when the window is wide enough */
+/* layout: one column; the border and the sidebar join beside the chat when the window is wide
+   enough */
 #root .columns { flex: 1; display: flex; min-width: 0; }
 #root .columns > .chat { min-width: 0; }
+#root .panel-resizer {
+  /* The start margin holds the border and the panel at the row's end even while the chat has not
+     rendered yet. The end margin lays the border over the panel's edge, so it takes no width. */
+  flex: none; width: 6px; margin-inline: auto -6px; position: relative; z-index: 1;
+  cursor: col-resize; touch-action: none;
+}
+#root .panel-resizer:hover, #root .panel-resizer:focus-visible { background: var(--accent-border); }
 #root .sidebar {
-  /* margin-inline-start keeps it at the row's end even while the chat has not rendered yet */
-  flex: none; width: 15rem; margin-inline-start: auto; border-inline-start: 1px solid var(--hair);
+  flex: none; width: var(--panel-width); max-width: calc(100% - var(--chat-min-width));
+  border-inline-start: 1px solid var(--hair);
   background: var(--card);
   padding: 0.8rem; box-sizing: border-box; overflow-y: auto; max-height: calc(100dvh - var(--head-height)); position: sticky; top: var(--head-height);
 }
