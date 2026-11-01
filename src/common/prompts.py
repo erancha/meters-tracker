@@ -31,11 +31,8 @@ include VAT, and leave it unset when they do not. Leave a price null when the st
 that utility.
 
 When a utility has several tariffs, the price is the one billed for the apartment's own meters
-(for water, usually the high tariff). Every other tariff line, such as a lower tariff for yard
-maintenance, goes to ignored, each as the line's own label as written on the statement.
-
-Return the property, the apartment and the end date of the billed period as written, or null when
-the statement does not show them."""
+(for water, usually the high tariff), not another tariff line such as a lower tariff for yard
+maintenance."""
 
 CLASSIFY = """You classify one Hebrew chat message from a property manager into exactly one intent.
 The user writes Hebrew. Fill only the fields the intent needs and leave the rest null. The message

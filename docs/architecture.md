@@ -164,8 +164,8 @@ provider's own SDK ([ADR 0008](adr/0008-one-stored-key-per-model-provider.md)). 
 implementations ask for an answer shaped to a declared schema (the SDKs call this structured output)
 and parse it into a pydantic model: a meter reading (type, serial, candidate values with their
 display position, unreadable digits, handwritten label), a previous statement's tariffs (whether the
-photo is a statement, the electricity and water prices, whether they include VAT, the tariff lines
-left out, and the property, apartment and period end as written), or one intent from a closed list —
+photo is a statement, the electricity and water prices, whether they include VAT), or one intent
+from a closed list —
 `confirm`, `reject`, `correct_field`, `set_date`, `choose_property`, `choose_apartment`,
 `choose_option`, `set_period`, `close_period`, `vacate`, `change_period`, `set_tariffs`, `explain`,
 `unknown`. A photo is read as a statement only when its meter read finds neither a meter type nor a

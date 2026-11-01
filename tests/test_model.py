@@ -119,10 +119,6 @@ def _statement():
         electricity_per_kwh=0.6432,
         water_per_m3=15.62,
         includes_vat=True,
-        ignored=["מים - תחזוקת חצר"],
-        property="הגפן 7",
-        apartment="עורף",
-        period_end="31/08/2026",
     )
 
 

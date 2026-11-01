@@ -52,17 +52,12 @@ class MeterReadingResult(BaseModel):
 
 class StatementResult(BaseModel):
     """The tariffs read from a photo of a previous statement. Prices are per kWh and per m3 in
-    shekels; ignored holds the tariff lines not taken as a price. property, apartment and
-    period_end are as written on the statement."""
+    shekels."""
 
     is_statement: bool
     electricity_per_kwh: float | None
     water_per_m3: float | None
     includes_vat: bool
-    ignored: list[str]
-    property: str | None
-    apartment: str | None
-    period_end: str | None
 
 
 class IntentResult(BaseModel):

@@ -5,9 +5,9 @@ Steps: ask -> confirm. ask follows a close priced without a tariff. It waits on 
 never blocks the queue: its card has no buttons and shows only when no other card awaits, and
 typed text with nothing awaiting reaches it only as prices (moving it to confirm), a cancel or a
 question. A statement photo's card replaces any tariffs item, so at most one waits at a time.
-confirm shows the prices, the VAT note, the ignored statement lines and the effective date
-(naming a date taken from a close as such); typed prices replace the ones shown, a typed date
-moves the effective date, and saving writes the row.
+confirm shows the prices, the VAT note and the effective date (naming a date taken from a close
+as such); typed prices replace the ones shown, a typed date moves the effective date, and saving
+writes the row.
 
 A price not given carries forward from the tariff in force on the effective date, recomputed
 whenever the date or the given prices change; with none in force that meter type stays unpriced
@@ -53,9 +53,8 @@ def card(item) -> dict:
         data["prices"],
         parse_iso(data["effective_date"]),
         data["from_close"],
-        data["statement"],
+        data["source_image_key"] is not None,
         data["ex_vat"],
-        data["ignored"],
     )
     labels = {"confirm": texts.SAVE_TARIFFS_LABEL}
     return make_card(item, KIND, text, _options(data), labels)
@@ -66,17 +65,16 @@ def _options(data) -> list[str]:
     return ["confirm"] if data["ex_vat"] is None and priced else []
 
 
-def _data(effective_date, from_close, image_key=None, statement=None, ignored=()) -> dict:
+def _data(effective_date, from_close, image_key=None) -> dict:
     """from_close marks an effective date taken from a period's closing date, which the card
-    names as the reason, until a typed date replaces it."""
+    names as the reason, until a typed date replaces it. image_key is the statement photo's key,
+    so only a card read from a statement has one."""
     return {
         "given": {meter_type: None for meter_type in PRICES},
         "prices": {},
         "effective_date": effective_date,
         "from_close": from_close,
         "source_image_key": image_key,
-        "statement": statement,
-        "ignored": list(ignored),
         "ex_vat": None,
     }
 
@@ -150,13 +148,7 @@ def from_statement(engine, user, item, statement: StatementResult, effective_dat
         "electricity": statement.electricity_per_kwh,
         "water": statement.water_per_m3,
     }
-    data = _data(
-        effective_date,
-        from_close,
-        item["data"]["image_key"],
-        [statement.property, statement.apartment, statement.period_end],
-        statement.ignored,
-    )
+    data = _data(effective_date, from_close, item["data"]["image_key"])
     if statement.includes_vat:
         _give(data, read)
     else:

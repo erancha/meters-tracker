@@ -63,8 +63,7 @@ OPEN — not yet implemented (#2): the build's version, a WhatsApp invite and a 
 - The owner types the prices of electricity and water in plain words, or photographs a
   previous statement. A card shows the prices, that they include VAT, and the date they apply
   from; "אישור ושמירה" saves them. A typed price or date on the card changes it first.
-- A statement's card names the apartment and period it was issued for, and lists the tariff
-  lines it does not save. A statement whose prices exclude VAT asks for the prices typed.
+- A statement whose prices exclude VAT asks for the prices typed.
 - Closing a period with no prices on record asks for them; once saved, the reply shows what each
   such period costs.
 

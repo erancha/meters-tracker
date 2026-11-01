@@ -171,10 +171,10 @@ the effective date.
 - **Typed.** Typed prices (`set_tariffs`) with no card awaiting show the card, effective today.
   On the card, typed prices replace the ones shown, a typed date moves the effective date, and
   a cancel drops it.
-- **Statement photo.** The card is titled from the statement: the property, apartment and
-  period end it names, the VAT-inclusive prices, and each tariff line it does not save (such as
-  a lower water tariff for yard maintenance). The row keeps the photo's key. Prices that exclude
-  VAT are shown with no save button until prices are typed.
+- **Statement photo.** The card shows the VAT-inclusive prices billed for the apartment's own
+  meters and no other detail of the statement, since tariffs belong to the account rather than
+  to one apartment. The row keeps the photo's key. Prices that exclude VAT are shown with no save
+  button until prices are typed.
 - **Carry-forward.** A price not given is the one in force on the effective date, recomputed
   when the date changes. With none in force the type is saved unpriced (null).
 - **Asking.** A close whose closing readings have no price in force is followed by a

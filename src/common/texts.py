@@ -245,30 +245,21 @@ def tariffs_ask():
 
 
 def tariffs_card(
-    prices: dict, effective: date, from_close: bool, statement, ex_vat: dict | None, ignored
+    prices: dict, effective: date, from_close: bool, from_statement: bool, ex_vat: dict | None
 ):
     """prices and ex_vat map a meter type to its price; from_close marks an effective date taken
-    from a period's closing date; statement is (property, apartment, period end as written) for
-    a card read from a statement photo, else None."""
-    lines = []
-    if statement is not None:
-        prop, apartment, end = statement
-        names = " / ".join(name for name in (prop, apartment) if name is not None)
-        lines.append(
-            "זיהיתי חשבון" + (f" של {names}" if names else "") + (f" עד {end}" if end else "") + "."
-        )
+    from a period's closing date; from_statement marks a card read from a statement photo."""
     if ex_vat is None:
-        lines += [price_text(t, p) for t, p in prices.items()]
+        lines = [price_text(t, p) for t, p in prices.items()]
         lines.append("כולל מע״מ.")
     else:
-        lines += [price_text(t, p) + " (בלי מע״מ)" for t, p in ex_vat.items()]
+        lines = [price_text(t, p) + " (בלי מע״מ)" for t, p in ex_vat.items()]
         lines.append(
             "המחירים בחשבון אינם כוללים מע״מ, ולכן לא יישמרו. אפשר להקליד את התעריפים כולל מע״מ."
         )
-    lines += [f"לא נשמר: {line}" for line in ignored]
     reason = " (תאריך סגירת התקופה)" if from_close else ""
     lines.append(f"בתוקף מ־{fmt(effective)}{reason}")
-    title = "תעריפים" if statement is None else "תעריפים מחשבון קודם"
+    title = "תעריפים מחשבון קודם" if from_statement else "תעריפים"
     return title, lines
 
 

@@ -404,11 +404,9 @@ def test_a_statement_photo_shows_its_tariffs_and_a_cancel_drops_them(env, ddb):
     assert card["kind"] == "tariffs"
     assert card["title"] == "תעריפים מחשבון קודם"
     assert card["lines"] == [
-        "זיהיתי חשבון של הגפן 7 / עורף עד 31/08/2026.",
         "חשמל: ₪ 0.6432 לקוט״ש",
         "מים: ₪ 15.62 לקוב",
         "כולל מע״מ.",
-        "לא נשמר: מים - תחזוקת חצר",
         "בתוקף מ־29/10/2026",
     ]
     result = owner.say(CANCEL, IntentResult(intent="reject"))

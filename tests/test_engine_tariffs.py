@@ -142,10 +142,12 @@ def test_statement_photo_shows_its_tariffs_and_saves_them_with_the_photo(env, dd
     result = kit.send_statement()
     card = result.snapshot.card
     assert card["title"] == "תעריפים מחשבון קודם"
-    assert card["lines"][0] == "זיהיתי חשבון של הגפן 7 / עורף עד 31/08/2026."
-    text = card_text(card)
-    assert "0.6432" in text and "15.62" in text and "כולל מע״מ" in text
-    assert "לא נשמר: מים - תחזוקת חצר" in text
+    assert card["lines"] == [
+        "חשמל: ₪ 0.6432 לקוט״ש",
+        "מים: ₪ 15.62 לקוב",
+        "כולל מע״מ.",
+        "בתוקף מ־29/10/2026",
+    ]
     kit.choose("confirm")
     row = _row(kit)
     assert (row["electricity_per_kwh"], row["water_per_m3"]) == (0.6432, 15.62)

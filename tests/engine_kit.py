@@ -56,16 +56,11 @@ UNKNOWN = MeterReadingResult(
 
 
 def statement(electricity=0.6432, water=15.62, includes_vat=True, is_statement=True):
-    """The example statement: a water line for yard maintenance is the tariff it ignores."""
     return StatementResult(
         is_statement=is_statement,
         electricity_per_kwh=electricity,
         water_per_m3=water,
         includes_vat=includes_vat,
-        ignored=["מים - תחזוקת חצר"],
-        property="הגפן 7",
-        apartment="עורף",
-        period_end="31/08/2026",
     )
 
 

@@ -585,10 +585,9 @@ const OWNER_CHAT = [
 
   s => '<li class="msg user photo" data-t="photo"><div class="stmt-thumb">' + statementHtml(PREVIOUS_STATEMENT) + "</div></li>",
   s => bot('<div class="card-title">תעריפים מחשבון קודם</div>' +
-           "<p>זיהיתי חשבון של " + PROPERTY + " / " + PREVIOUS_STATEMENT.apartment + ", עד " + ltr(dmy(PREVIOUS_STATEMENT.to)) + ".</p>" +
            facts([[kind("elec"), ltr("₪ " + TARIFFS.elec.toFixed(4)) + " ל" + KINDS.elec.unit],
-                  [kind("water"), ltr("₪ " + TARIFFS.water.toFixed(3)) + " ל" + KINDS.water.unit + " (תעריף גבוה)"]]) +
-           '<p class="muted">כולל מע״מ. התעריף הנמוך לתחזוקת חצר לא נשמר, כי אין בחשבון מוני חצר.</p>' +
+                  [kind("water"), ltr("₪ " + TARIFFS.water.toFixed(3)) + " ל" + KINDS.water.unit]]) +
+           '<p class="muted">כולל מע״מ.</p>' +
            confirm("confirm-tariffs", s.tariffsOk, "אישור ושמירה"), "tariff-card"),
   s => bot("<p>התעריפים נשמרו, בתוקף מ־" + ltr(dmy(LINK_DAY)) + ".</p>"),
 
