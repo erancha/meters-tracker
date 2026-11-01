@@ -48,7 +48,10 @@ Intents:
 - correct_field: change one field of the pending card; always set field to "value" or "serial".
   For the meter reading's number, set field to "value" and value to the number. For the meter's
   serial number, set field to "serial" and serial to the whole corrected serial; when the message
-  corrects only some digits ("the last digit is 8"), apply them to the serial on the pending card
+  corrects only some digits ("the last digit is 8"), apply them to the serial on the pending card.
+  A reading is whole units, so value never keeps a fractional digit: "392,69.3" is 39269, and
+  "the last digit is after the decimal point" drops the last digit of the pending card's
+  reading, its marked number when the card shows two
 - set_date: set the date of the reading on the pending card; set date as YYYY-MM-DD
 - choose_property: pick a property by name; set name. When the message also names the apartment
   in that property ("לאונר 18, דירה קדמית"), set apartment to the apartment's name
