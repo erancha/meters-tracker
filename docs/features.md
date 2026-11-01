@@ -13,8 +13,6 @@ the "sign in with Google" button. The toggle swaps the pitch for seven bullets c
 README's overview, and back. Below the card, a link opens the animated demo in a new
 tab. A sign-in whose final step fails shows a banner asking to reload and sign in again.
 
-OPEN — not yet implemented (#2): the build's version, a WhatsApp invite and a source link.
-
 ## Chat
 
 - The thread shows the history, oldest first: the user's texts and photos on one side, the
@@ -85,9 +83,6 @@ when another card is shown first, and a tap scrolls to the card asking for them.
 
 A tap on a line scrolls the chat to that photo and highlights it for a moment. The sections follow
 the chat with no reload. With neither section, the panel says `לא נקראו מונים היום`.
-
-OPEN — not yet implemented (#1): reaching the panel on a narrow screen.
-OPEN — not yet implemented (#6): paging to earlier days, and reaching a photo that failed on one.
 
 ## Account menu
 

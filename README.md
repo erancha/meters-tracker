@@ -40,9 +40,8 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
   readings.
 - Prices are typed in the chat or read from a photo of a previous statement; closing a period
   with no prices on record asks for them.
-- The emailed PDF report, a daily reminder, questions about the data, corrections, managing
-  delegates and a period total across a replaced meter and its successor are planned: see the
-  [open items](docs/architecture.md#open-items).
+- What is planned next, such as the emailed PDF report and a daily reminder, is in the
+  repository's [issues](https://github.com/erancha/meters-tracker/issues).
 
 ## Tech stack
 
@@ -104,8 +103,8 @@ the browser app and prints its address.
 
 ## Details
 
-- [Architecture](docs/architecture.md) — what each part is for, the storage layout, the
-  codebase, and the open items
+- [Architecture](docs/architecture.md) — what each part is for, the storage layout and the
+  codebase
 - [Features](docs/features.md) — what a user sees in the browser app, screen by screen
 - [Domain rules](docs/domain-rules.md) — how readings are checked, how periods open and close,
   and how consumption, forecast and charge are computed

@@ -23,22 +23,6 @@ graph LR
     C --> CF
 ```
 
-## Open items
-
-- OPEN — not yet implemented: the PDF report of an apartment's period and its email, sent as
-  raw MIME through SES under the fixed subject of [ADR 0004](adr/0004-fixed-email-subject.md).
-- OPEN — not yet implemented: the daily period-end reminder Lambda and the scheduler that wakes
-  it.
-- OPEN — not yet implemented: the queries over the data (properties, apartments, an apartment's
-  status, a meter's history, the tariffs in force, resending a report).
-- OPEN — not yet implemented: corrections — editing or deleting a reading, renaming a property
-  or apartment, reassigning a meter to another apartment.
-- OPEN — not yet implemented (#8): managing delegates from the chat. Sign-in honors delegate rows,
-  but nothing writes one yet.
-- OPEN — not yet implemented: a period total per meter type across a retired meter and its
-  replacement. Consumption is reported per meter; summing the two is planned with the reports.
-- OPEN — not yet implemented: a type check (mypy) in `scripts/test.sh`.
-
 ## The parts
 
 - **Cognito user pool** (`scripts/template-cognito.yaml`, its own stack) — Google is the only
