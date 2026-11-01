@@ -1,5 +1,7 @@
 """Runs the shell helpers of scripts/common.sh against a fake aws command that prints a canned
-answer, so the stack lookups' handling of empty, missing and failed results is checked offline."""
+answer, so the stack lookups' handling of empty, missing and failed results is checked offline.
+Also runs the scripts that act on a deployed stack or the real model with --help and with
+arguments they refuse, both of which stop before any settings file or AWS call."""
 
 import subprocess
 from pathlib import Path
@@ -110,3 +112,31 @@ def test_require_aws_config_accepts_real_values(run, tmp_path):
     )
     result = run(f'HOME="{tmp_path}"; ROOT="{tmp_path}"; require_aws_config; echo reached')
     assert (result.returncode, result.stdout) == (0, "reached\n")
+
+
+SCRIPTS = COMMON.parent
+# Argument lists each script refuses before it reads any settings or calls AWS or the model.
+REFUSED_ARGS = {
+    "reset-account.sh": [[], ["dev", "a@x.com", "extra"], ["--force", "a@x.com"]],
+    "eval-intents.sh": [["extra"], ["--limit", "3"]],
+    "replay.sh": [[], ["dev", "a@x.com", "extra"], ["a@x.com", "--open"], ["--bogus", "a@x.com"]],
+}
+
+
+@pytest.mark.parametrize("script", sorted(REFUSED_ARGS))
+def test_help_prints_the_header_and_exits_zero(script):
+    result = subprocess.run(
+        [SCRIPTS / script, "--help"], check=False, capture_output=True, text=True
+    )
+    assert result.returncode == 0
+    assert result.stdout.splitlines()[0] and not result.stdout.startswith("#")
+    assert "set -euo pipefail" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("script", "args"), [(s, a) for s, refused in REFUSED_ARGS.items() for a in refused]
+)
+def test_wrong_arguments_print_the_usage_and_exit_two(script, args):
+    result = subprocess.run([SCRIPTS / script, *args], check=False, capture_output=True, text=True)
+    assert result.returncode == 2
+    assert f"./scripts/{script}" in result.stderr

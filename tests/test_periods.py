@@ -129,8 +129,10 @@ def test_charge_rounds_to_two_decimals():
 
 
 def test_is_closing_candidate():
-    assert not is_closing_candidate(PERIOD, date(2026, 12, 30))
-    assert is_closing_candidate(PERIOD, date(2026, 12, 31))
+    assert not is_closing_candidate(PERIOD, date(2026, 12, 30), 0)
+    assert is_closing_candidate(PERIOD, date(2026, 12, 31), 0)
+    assert not is_closing_candidate(PERIOD, date(2026, 12, 23), 7)
+    assert is_closing_candidate(PERIOD, date(2026, 12, 24), 7)
 
 
 def test_within_reclose_window():

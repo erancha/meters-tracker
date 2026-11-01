@@ -9,7 +9,7 @@ end and the charge.
 **[Walk through the planned chat](docs/demo/demo.html)** — an animated replay of one owner's
 story on a phone screen, from linking an apartment's meters to the closing readings two months
 later; it shows the whole planned product, including the parts not built yet. Open the file in a
-browser.
+browser; a deployment also publishes it at `/demo.html` beside the app.
 
 ## Overview
 
@@ -31,13 +31,16 @@ browser.
   the period so far, the forecast to the period's end, and the charge when prices are on record.
 - Readings that look wrong are questioned: a second reading on the same day, a value lower than
   the last one (misread, or a reset meter), or a late photo near a period's closing reading.
-- On the first visit of a day, the chat names every apartment whose period has ended without
-  closing readings.
+- A new account's chat opens with a welcome that says to start with a meter photo. On the first
+  visit of a day, the chat names every apartment whose period has ended without closing readings.
 - Sign-in is with a Google account. Each address has an account of its own, and an address the
   owner delegates works in that owner's account.
-- What exists today is the backend behind the chat. The browser app, the emailed PDF report, a
-  daily reminder, entering prices, questions about the data, corrections, managing delegates
-  and a period total across a replaced meter and its successor are planned: see the
+- The chat runs in the browser: sign in with Google, photograph a meter or pick photos, answer a
+  card with a button or type a turn. On wide windows a sidebar lists the photos sent so far.
+- Prices are typed in the chat or read from a photo of a previous statement; closing a period
+  with no prices on record asks for them.
+- The emailed PDF report, a daily reminder, questions about the data, corrections, managing
+  delegates and a period total across a replaced meter and its successor are planned: see the
   [open items](docs/architecture.md#open-items).
 
 ## Tech stack
@@ -47,11 +50,14 @@ browser.
 - **Model** — Claude (`claude-opus-5-5`) by default, or an OpenAI model, chosen by one deploy
   setting; each provider's own SDK, each answer parsed into a typed schema, to read photos and
   classify messages; the API key in SSM Parameter Store
+- **Frontend** — a React and TypeScript single-page app built with Vite, tested with Vitest,
+  served from S3 behind CloudFront
 - **Auth** — Cognito with Google as the only sign-in; a pre-sign-up Lambda asks SES to verify
   each new address
 - **Infrastructure** — two CloudFormation stacks deployed by shell scripts; data retained across
-  stack deletes; S3 and CloudFront hosting provisioned for the browser app
-- **Tests** — pytest with moto and a fake model; ruff for lint and format
+  stack deletes; S3 and CloudFront host the browser app
+- **Tests** — pytest with moto and a fake model; ruff for lint and format; Vitest with Testing
+  Library for the frontend; GitHub Actions runs both suites
 
 ## Architecture
 
@@ -62,12 +68,14 @@ and the photos in S3, both kept when a stack is deleted.
 
 ```mermaid
 graph LR
-    C((Chat client)) -->|Google sign-in| COG[Cognito]
+    C((Browser app)) -->|Google sign-in| COG[Cognito]
     C -->|JWT| API[HTTP API]
     API --> L[api Lambda]
     L --> DB[(DynamoDB)]
     L --> S3[(S3 photos)]
     L --> CL[Claude API]
+    CF[CloudFront] --> FB[(S3 app files)]
+    C --> CF
 ```
 
 **[Architecture](docs/architecture.md)** continues from here: the full diagram, each route and
@@ -77,24 +85,27 @@ table, how the conversation engine queues confirmations, and what is not built y
 
 Run the tests with `./scripts/test.sh`; it creates the virtualenv on its first run. To deploy,
 run `./scripts/init-env.sh`, fill in the two settings files it creates, then run
-`./scripts/deploy.sh` and `./scripts/set-model-key.sh`.
+`./scripts/deploy.sh` and `./scripts/set-model-key.sh`; the deploy ends by publishing the
+browser app and prints its address.
 [Development](docs/development.md) has the details.
 
 ## Scripts
 
 - `init-env.sh` — creates the gitignored AWS and deploy settings files from their examples
-- `deploy.sh` — builds the Lambda package and deploys both stacks
+- `deploy.sh` — builds the Lambda package, deploys both stacks and publishes the frontend
+- `sync-frontend.sh` — builds the frontend and publishes it with the app config and the demo page
 - `delete-stack.sh` — deletes both stacks, keeping the tables and the photos
 - `set-model-key.sh` — stores the model provider's API key in SSM
 - `aws-helper.sh` — finds and tails the deployed functions' logs
-- `test.sh` — lint, format check and the test suite
+- `test.sh` — shell syntax check, lint, format check and the backend test suite
 - `read-meter.sh` — reads one photo through the model and prints the result
-- `eval-readings.sh` — scores a model on the photos the deployed model failed on
+- `reset-account.sh` — deletes everything one account owns in a deployed stack
 
 ## Details
 
 - [Architecture](docs/architecture.md) — what each part is for, the storage layout, the
   codebase, and the open items
+- [Features](docs/features.md) — what a user sees in the browser app, screen by screen
 - [Domain rules](docs/domain-rules.md) — how readings are checked, how periods open and close,
   and how consumption, forecast and charge are computed
 - [Development & deployment](docs/development.md) — local setup, tests, the scripts, and the

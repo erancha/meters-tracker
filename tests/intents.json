@@ -1,0 +1,406 @@
+[
+  {
+    "message": "1/9/2026",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "set_period",
+    "fields": {
+      "date": "2026-09-01"
+    }
+  },
+  {
+    "message": "1/9",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "set_period",
+    "fields": {
+      "date": "2026-09-01"
+    }
+  },
+  {
+    "message": "מ-1/9 לשלושה חודשים",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "set_period",
+    "fields": {
+      "date": "2026-09-01",
+      "months": 3
+    }
+  },
+  {
+    "message": "מ-1/11",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "set_period",
+    "fields": {
+      "date": "2026-11-01"
+    }
+  },
+  {
+    "message": "תחילת חודש",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "choose_option",
+    "fields": {
+      "name": "01/11 (תחילת חודש)"
+    }
+  },
+  {
+    "message": "היום",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "choose_option",
+    "fields": {
+      "name": "29/10 (היום)"
+    }
+  },
+  {
+    "message": "מה זה?",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "explain"
+  },
+  {
+    "message": "הקריאה מ-27/8",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "set_date",
+    "fields": {
+      "date": "2026-08-27"
+    }
+  },
+  {
+    "message": "הקריאה היא 37938",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "correct_field",
+    "fields": {
+      "field": "value",
+      "value": 37938
+    }
+  },
+  {
+    "message": "37938",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "correct_field",
+    "fields": {
+      "field": "value",
+      "value": 37938
+    }
+  },
+  {
+    "message": "כן",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "confirm"
+  },
+  {
+    "message": "אישור",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "confirm"
+  },
+  {
+    "message": "לא",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "reject"
+  },
+  {
+    "message": "בטל",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "reject"
+  },
+  {
+    "message": "לאונר 18, דירה קדמית",
+    "card": "property",
+    "today": "2026-10-29",
+    "intent": "choose_property",
+    "fields": {
+      "name": "לאונר 18",
+      "apartment": "דירה קדמית"
+    }
+  },
+  {
+    "message": "לאונר 18",
+    "card": "property",
+    "today": "2026-10-29",
+    "intent": "choose_property",
+    "fields": {
+      "name": "לאונר 18",
+      "apartment": null
+    }
+  },
+  {
+    "message": "לאונר 18, דירה קדמית",
+    "card": "property_existing",
+    "today": "2026-10-29",
+    "intent": "choose_property",
+    "fields": {
+      "name": "לאונר 18",
+      "apartment": "דירה קדמית"
+    }
+  },
+  {
+    "message": "מה זה?",
+    "card": "property",
+    "today": "2026-10-29",
+    "intent": "explain"
+  },
+  {
+    "message": "דירה 3",
+    "card": "apartment",
+    "today": "2026-10-29",
+    "intent": "choose_apartment",
+    "fields": {
+      "name": "דירה 3"
+    }
+  },
+  {
+    "message": "דירה קדמית",
+    "card": "apartment",
+    "today": "2026-10-29",
+    "intent": "choose_apartment",
+    "fields": {
+      "name": "דירה קדמית"
+    }
+  },
+  {
+    "message": "אני לא מבין מה זה מזהה דירה",
+    "card": "apartment",
+    "today": "2026-10-29",
+    "intent": "explain"
+  },
+  {
+    "message": "מה זה?",
+    "card": "apartment",
+    "today": "2026-10-29",
+    "intent": "explain"
+  },
+  {
+    "message": "הספרה האחרונה במספר המונה שגויה - הספרה היא 8",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "correct_field",
+    "fields": {
+      "field": "serial",
+      "serial": "2721058"
+    }
+  },
+  {
+    "message": "המספר הסידורי הוא 2721058",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "correct_field",
+    "fields": {
+      "field": "serial",
+      "serial": "2721058"
+    }
+  },
+  {
+    "message": "הקריאה היא 37938",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "correct_field",
+    "fields": {
+      "field": "value",
+      "value": 37938
+    }
+  },
+  {
+    "message": "העליון",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "choose_option",
+    "fields": {
+      "name": "המספר העליון"
+    }
+  },
+  {
+    "message": "התחתון",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "choose_option",
+    "fields": {
+      "name": "המספר התחתון"
+    }
+  },
+  {
+    "message": "אישור",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "confirm"
+  },
+  {
+    "message": "בטל",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "reject"
+  },
+  {
+    "message": "הדירה ריקה",
+    "card": "propose_close",
+    "today": "2026-10-29",
+    "intent": "vacate"
+  },
+  {
+    "message": "לא לסגור",
+    "card": "propose_close",
+    "today": "2026-10-29",
+    "intent": "choose_option",
+    "fields": {
+      "name": "קריאה רגילה, בלי סגירה"
+    }
+  },
+  {
+    "message": "חשמל 0.6432, מים 15.62",
+    "card": "tariffs_ask",
+    "today": "2026-10-29",
+    "intent": "set_tariffs",
+    "fields": {
+      "electricity_price": 0.6432,
+      "water_price": 15.62
+    },
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "המים 16 שקל לקוב",
+    "card": "tariffs_ask",
+    "today": "2026-10-29",
+    "intent": "set_tariffs",
+    "fields": {
+      "water_price": 16,
+      "electricity_price": null
+    },
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "מה זה?",
+    "card": "tariffs_ask",
+    "today": "2026-10-29",
+    "intent": "explain",
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "בטל",
+    "card": "tariffs_ask",
+    "today": "2026-10-29",
+    "intent": "reject",
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "חשמל 0.6432, מים 15.62",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "set_tariffs",
+    "fields": {
+      "electricity_price": 0.6432,
+      "water_price": 15.62
+    },
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "בתוקף מ-1/11",
+    "card": "tariffs",
+    "today": "2026-10-29",
+    "intent": "set_date",
+    "fields": {
+      "date": "2026-11-01"
+    }
+  },
+  {
+    "message": "המים 16 שקל לקוב",
+    "card": "tariffs",
+    "today": "2026-10-29",
+    "intent": "set_tariffs",
+    "fields": {
+      "water_price": 16
+    }
+  },
+  {
+    "message": "סגור את התקופה של קדמית",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "close_period",
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ],
+    "fields": {
+      "name": "דירה קדמית"
+    }
+  },
+  {
+    "message": "הדירה ריקה",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "vacate",
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "הדירה ריקה",
+    "card": "close",
+    "today": "2026-11-15",
+    "intent": "vacate"
+  },
+  {
+    "message": "השוכר החדש מ-15/3",
+    "card": null,
+    "today": "2026-03-10",
+    "intent": "change_period",
+    "fields": {
+      "date": "2026-03-15"
+    },
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "התקופה של קדמית תהיה 3 חודשים",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "change_period",
+    "fields": {
+      "months": 3,
+      "name": "דירה קדמית"
+    },
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  },
+  {
+    "message": "סגור את התקופה של מרתף",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "close_period",
+    "fields": {
+      "name": "מרתף"
+    },
+    "apartments": [
+      "דירה קדמית",
+      "עורף"
+    ]
+  }
+]

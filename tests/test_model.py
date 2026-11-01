@@ -3,6 +3,7 @@ shape and refusal handling against a stubbed SDK client."""
 
 import base64
 import hashlib
+from datetime import date
 from types import SimpleNamespace
 
 import anthropic
@@ -17,6 +18,7 @@ from common.model import (
     MeterReadingResult,
     ModelRefused,
     OpenAIModel,
+    StatementResult,
     Usage,
     build_model,
     model_from_env,
@@ -111,14 +113,27 @@ def test_model_from_env_builds_the_named_model(monkeypatch):
     assert isinstance(model_from_env(), OpenAIModel)
 
 
+def _statement():
+    return StatementResult(
+        is_statement=True,
+        electricity_per_kwh=0.6432,
+        water_per_m3=15.62,
+        includes_vat=True,
+        ignored=["מים - תחזוקת חצר"],
+        property="הגפן 7",
+        apartment="עורף",
+        period_end="31/08/2026",
+    )
+
+
 def test_fake_model_returns_by_image_hash():
     reading = _reading()
     fake = FakeModel({hashlib.sha256(IMAGE).hexdigest(): reading}, [IntentResult(intent="confirm")])
     assert fake.read_meter(IMAGE, "image/jpeg") is reading
-    assert fake.classify("כן", "card").intent == "confirm"
+    assert fake.classify("כן", "card", date(2026, 10, 29)).intent == "confirm"
     assert fake.classified == [("כן", "card")]
     with pytest.raises(IndexError):
-        fake.classify("עוד", "")
+        fake.classify("עוד", "", date(2026, 10, 29))
 
 
 def test_claude_model_builds_parse_request(monkeypatch):
@@ -141,6 +156,23 @@ def test_claude_model_builds_parse_request(monkeypatch):
         },
     }
     assert text["type"] == "text"
+
+
+@pytest.mark.parametrize("cls, stub", [(ClaudeModel, "anthropic"), (OpenAIModel, "openai")])
+def test_classify_tells_the_model_today_and_the_pending_card(monkeypatch, cls, stub):
+    intent = IntentResult(intent="confirm")
+    response = SimpleNamespace(
+        stop_reason="end_turn",
+        parsed_output=intent,
+        output=[_message(SimpleNamespace(type="output_text"))],
+        output_parsed=intent,
+        usage=USAGE,
+    )
+    calls = (_stub_anthropic if stub == "anthropic" else _stub_openai)(monkeypatch, response)
+    assert cls("key", "m").classify("כן", "כרטיס", date(2026, 10, 29)) is intent
+    _, call = calls
+    content = call["messages"][0]["content"] if stub == "anthropic" else call["input"][1]["content"]
+    assert content == "Today: 2026-10-29\n\nכן\n\nPending card:\nכרטיס"
 
 
 def test_claude_model_raises_on_refusal(monkeypatch):
@@ -176,7 +208,7 @@ def test_openai_model_raises_on_refusal(monkeypatch):
     response = SimpleNamespace(output=[_message(refusal)], output_parsed=None, usage=USAGE)
     _stub_openai(monkeypatch, response)
     with pytest.raises(ModelRefused, match="policy"):
-        OpenAIModel("key", "gpt-6.1-sol").classify("כן", "")
+        OpenAIModel("key", "gpt-6.1-sol").classify("כן", "", date(2026, 10, 29))
 
 
 @pytest.mark.parametrize("cls, stub", [(ClaudeModel, _stub_anthropic), (OpenAIModel, _stub_openai)])
@@ -194,3 +226,52 @@ def test_model_keeps_the_last_calls_usage(monkeypatch, cls, stub):
     assert model.last_usage is None
     model.read_meter(IMAGE, "image/jpeg")
     assert model.last_usage == Usage(1500, 200)
+
+
+def test_fake_model_returns_statements_by_image_hash():
+    statement = _statement()
+    fake = FakeModel({}, [], {hashlib.sha256(IMAGE).hexdigest(): statement})
+    assert fake.read_statement(IMAGE, "image/jpeg") is statement
+
+
+def test_claude_model_builds_statement_request(monkeypatch):
+    statement = _statement()
+    response = SimpleNamespace(stop_reason="end_turn", parsed_output=statement, usage=USAGE)
+    calls = _stub_anthropic(monkeypatch, response)
+    assert ClaudeModel("key", "m").read_statement(IMAGE, "image/png") is statement
+    _, call = calls
+    assert call["system"] == prompts.READ_STATEMENT
+    assert call["output_format"] is StatementResult
+    image, text = call["messages"][0]["content"]
+    assert image["source"]["media_type"] == "image/png"
+    assert text["type"] == "text"
+
+
+def test_openai_model_builds_statement_request(monkeypatch):
+    statement = _statement()
+    response = SimpleNamespace(
+        output=[_message(SimpleNamespace(type="output_text"))],
+        output_parsed=statement,
+        usage=USAGE,
+    )
+    calls = _stub_openai(monkeypatch, response)
+    assert OpenAIModel("key", "m").read_statement(IMAGE, "image/png") is statement
+    _, call = calls
+    assert call["text_format"] is StatementResult
+    system, user = call["input"]
+    assert system == {"role": "system", "content": prompts.READ_STATEMENT}
+    image, text = user["content"]
+    data = base64.standard_b64encode(IMAGE).decode()
+    assert image == {"type": "input_image", "image_url": f"data:image/png;base64,{data}"}
+    assert text["type"] == "input_text"
+
+
+def test_statement_prompt_ties_includes_vat_to_the_reported_prices():
+    prompt = " ".join(prompts.READ_STATEMENT.split())
+    assert "Set includes_vat when the prices you report include VAT" in prompt
+
+
+def test_set_tariffs_intent_carries_both_prices():
+    intent = IntentResult(intent="set_tariffs", electricity_price=0.6432, water_price=None)
+    assert (intent.electricity_price, intent.water_price) == (0.6432, None)
+    assert "set_tariffs" in prompts.CLASSIFY

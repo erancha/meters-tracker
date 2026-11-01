@@ -4,11 +4,10 @@ owner's wording corrections touch this file only."""
 
 from datetime import date
 
-from common.dates import fmt, parse_iso
+from common.dates import fmt, fmt_day_month, parse_iso
 
 OPTION_LABELS = {
     "confirm": "אישור",
-    "reject": "לא נכון",
     "top": "המספר העליון",
     "bottom": "המספר התחתון",
     "misread": "טעות בקריאה",
@@ -41,13 +40,15 @@ def meter_name(meter_type, serial) -> str:
     return f"מונה {METER_KINDS[meter_type]} {serial}"
 
 
-def reading_card(meter_type, serial, apartment, property_name, value, d: date, alternatives):
+def reading_card(
+    meter_type, serial, apartment, property_name, value, d: date, alternatives, position
+):
     title = f"{meter_name(meter_type, serial)} · {property_name} / {apartment}"
     if alternatives is None:
         return title, [f"קריאה: {number(value)} {UNITS[meter_type]}", f"תאריך: {fmt(d)}"]
     choices = [
-        f"{POSITION_NAMES[position]}: {number(v)}" + (" (מסומן)" if v == value else "")
-        for position, v in alternatives.items()
+        f"{POSITION_NAMES[p]}: {number(v)}" + (" (מסומן)" if p == position else "")
+        for p, v in alternatives.items()
     ]
     return title, ["בצג שני מספרים. איזה מהם הקריאה?", *choices, f"תאריך: {fmt(d)}"]
 
@@ -127,7 +128,9 @@ def misread() -> str:
     return "אפשר לצלם שוב, או לכתוב את הקריאה הנכונה."
 
 
-def propose_close(end: date):
+def propose_close(end: date, reading_date: date):
+    if reading_date < end:
+        return (f"התקופה מסתיימת ב־{fmt(end)}, והקריאה קרובה לסופה.", ["לסגור את התקופה איתה?"])
     return (f"זו הקריאה הראשונה אחרי סוף התקופה ({fmt(end)}).", ["לסגור את התקופה איתה?"])
 
 
@@ -196,22 +199,107 @@ def summary_after_save(
 def link_property(meter_type, serial, property_names):
     title = f"{meter_name(meter_type, serial)} עדיין לא מקושר לדירה. לאיזה נכס הוא שייך?"
     if property_names:
-        return title, ["נכסים קיימים: " + ", ".join(property_names), "או שם של נכס חדש."]
-    return title, ["אין עדיין נכסים. מה שם הנכס?"]
+        return title, ["נכסים קיימים: " + ", ".join(property_names), "או כתובת של נכס חדש."]
+    return title, ["אין עדיין נכסים. מהי כתובת הנכס?"]
 
 
 def link_apartment(property_name, apartment_names):
     title = f"לאיזו דירה ב{property_name}?"
     if apartment_names:
-        return title, ["דירות קיימות: " + ", ".join(apartment_names), "או שם של דירה חדשה."]
-    return title, ["אין עדיין דירות בנכס. מה שם הדירה?"]
+        return title, ["דירות קיימות: " + ", ".join(apartment_names), "או מזהה של דירה חדשה."]
+    return title, ["אין עדיין דירות בנכס. מהו מזהה הדירה?"]
 
 
-def link_period(apartment, start: date, months):
+# What a question card asks, for an owner who says they do not understand it; by card kind.
+EXPLANATIONS = {
+    "property": 'כתובת הנכס, למשל "לאונר 18". אם הנכס כבר קיים, אפשר לכתוב את הכתובת שלו.',
+    "apartment": 'מזהה הדירה הוא מספר הדירה, או זיהוי מילולי לפי בחירתך, למשל "דירה קדמית".',
+    "period": (
+        "מהיום הזה מחושבת התקופה הראשונה של הדירה, וממנו נספרים החודשים שלה. "
+        "אפשר לבחור באחד הכפתורים או לכתוב תאריך."
+    ),
+    "tariffs": (
+        "אלה המחירים לקוט״ש חשמל ולקוב מים, כולל מע״מ, שלפיהם יחושב החיוב מהתאריך שבכרטיס. "
+        "אפשר לאשר, להקליד מחיר או תאריך אחרים, או לבטל."
+    ),
+    "tariffs_ask": (
+        "כדי לחשב חיוב בכסף צריך את המחיר לקוט״ש חשמל ולקוב מים, כולל מע״מ. "
+        'אפשר להקליד אותם, למשל "חשמל 0.64, מים 15.6", או לצלם חשבון קודם שהם מופיעים בו.'
+    ),
+}
+
+
+SAVE_TARIFFS_LABEL = "אישור ושמירה"
+
+
+def price_text(meter_type, price) -> str:
+    """A price per unit, with as many decimals as it was given (up to four)."""
+    if price is None:
+        return f"{METER_KINDS[meter_type]}: אין תעריף"
+    shown = f"{price:.4f}".rstrip("0").rstrip(".")
+    return f"{METER_KINDS[meter_type]}: ₪ {shown} ל{UNITS[meter_type]}"
+
+
+def tariffs_ask():
+    return "חסרים תעריפים", ["אפשר להקליד אותם, או לצלם חשבון קודם."]
+
+
+def tariffs_card(
+    prices: dict, effective: date, from_close: bool, statement, ex_vat: dict | None, ignored
+):
+    """prices and ex_vat map a meter type to its price; from_close marks an effective date taken
+    from a period's closing date; statement is (property, apartment, period end as written) for
+    a card read from a statement photo, else None."""
+    lines = []
+    if statement is not None:
+        prop, apartment, end = statement
+        names = " / ".join(name for name in (prop, apartment) if name is not None)
+        lines.append(
+            "זיהיתי חשבון" + (f" של {names}" if names else "") + (f" עד {end}" if end else "") + "."
+        )
+    if ex_vat is None:
+        lines += [price_text(t, p) for t, p in prices.items()]
+        lines.append("כולל מע״מ.")
+    else:
+        lines += [price_text(t, p) + " (בלי מע״מ)" for t, p in ex_vat.items()]
+        lines.append(
+            "המחירים בחשבון אינם כוללים מע״מ, ולכן לא יישמרו. אפשר להקליד את התעריפים כולל מע״מ."
+        )
+    lines += [f"לא נשמר: {line}" for line in ignored]
+    reason = " (תאריך סגירת התקופה)" if from_close else ""
+    lines.append(f"בתוקף מ־{fmt(effective)}{reason}")
+    title = "תעריפים" if statement is None else "תעריפים מחשבון קודם"
+    return title, lines
+
+
+def tariffs_saved(effective: date) -> str:
+    return f"התעריפים נשמרו, בתוקף מ־{fmt(effective)}."
+
+
+def repriced(property_name, apartment, meter_type, start: date, units, amount) -> str:
     return (
-        f"מאיזה תאריך להתחיל את התקופה של {apartment}?",
-        [f"הצעה: מ־{fmt(start)} {months_phrase(months)}", "אפשר לכתוב תאריך או אורך אחרים."],
+        f"{property_name} / {apartment} · {METER_KINDS[meter_type]}, התקופה מ־{fmt(start)}: "
+        f"{number(units)} {UNITS[meter_type]}, חיוב {amount:,.2f} ₪"
     )
+
+
+def tariffs_cancelled() -> str:
+    return "התעריפים לא נשמרו."
+
+
+def link_period(apartment, property_name, months):
+    return (
+        f"מאיזה תאריך להתחיל את התקופה של {apartment} ב{property_name}?",
+        [f"התקופה {months_phrase(months)}.", "אפשר לבחור, או לכתוב תאריך או אורך אחרים."],
+    )
+
+
+START_LABELS = {"start_today": "{} (היום)", "start_month": "{} (תחילת חודש)"}
+
+
+def start_labels(starts: dict[str, str]) -> dict[str, str]:
+    """Labels of the period-start options, keyed like starts (option id -> ISO date)."""
+    return {o: START_LABELS[o].format(fmt_day_month(parse_iso(d))) for o, d in starts.items()}
 
 
 def link_confirm(
@@ -224,12 +312,13 @@ def link_confirm(
     value,
     d: date,
     alternatives,
+    position,
     period_start: date,
     months,
     replaced_serial,
 ):
     title, reading_lines = reading_card(
-        meter_type, serial, apartment, property_name, value, d, alternatives
+        meter_type, serial, apartment, property_name, value, d, alternatives, position
     )
     lines = []
     if property_new:
@@ -251,21 +340,26 @@ def close_waiting(apartment, meters: list[tuple[str, str]]):
     return f"סגירת התקופה של {apartment} ממתינה לצילום", [missing_photos(apartment, meters)]
 
 
+def closing_lines(closing: list[tuple[str, str, int, date]]) -> list[str]:
+    return [
+        f"{meter_name(meter_type, serial)} · קריאת סגירה {number(value)} ({fmt(d)})"
+        for meter_type, serial, value, d in closing
+    ]
+
+
 def close_card(apartment, start: date, closing: list[tuple[str, str, int, date]]):
-    return (
-        f"סגירת התקופה של {apartment} (מ־{fmt(start)})",
-        [
-            f"{meter_name(meter_type, serial)} · קריאת סגירה {number(value)} ({fmt(d)})"
-            for meter_type, serial, value, d in closing
-        ],
-    )
+    return f"סגירת התקופה של {apartment} (מ־{fmt(start)})", closing_lines(closing)
 
 
-def closed(apartment, closed_on: date, next_start: date | None) -> str:
+def closed(
+    apartment, closed_on: date, next_start: date | None, closing: list[tuple[str, str, int, date]]
+) -> str:
     text = f"התקופה של {apartment} נסגרה ב־{fmt(closed_on)}."
     if next_start is None:
-        return text + " הדירה ריקה; תקופה חדשה תיפתח עם הצילום הבא של מונה שלה."
-    return text + f" נפתחה תקופה חדשה מ־{fmt(next_start)}."
+        text += " הדירה ריקה; תקופה חדשה תיפתח עם הצילום הבא של מונה שלה."
+    else:
+        text += f" נפתחה תקופה חדשה מ־{fmt(next_start)}."
+    return "\n".join([text, *closing_lines(closing)])
 
 
 def period_opened(apartment, start: date, months) -> str:
@@ -274,6 +368,13 @@ def period_opened(apartment, start: date, months) -> str:
 
 def period_changed(apartment, start: date, months) -> str:
     return f"התקופה של {apartment} מתחילה עכשיו ב־{fmt(start)}, {months_phrase(months)}."
+
+
+def welcome() -> str:
+    return (
+        "שלום. החשבון חדש ועדיין ריק.\n"
+        "אפשר להתחיל בצילום של מונה מים או חשמל: אזהה אותו ואציע לאיזו דירה לשייך."
+    )
 
 
 def greeting(apartments_past_end: list[tuple[str, date]]) -> str:

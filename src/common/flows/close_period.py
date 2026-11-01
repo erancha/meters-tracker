@@ -1,13 +1,15 @@
 """Close flow: ends an apartment's open period with each live meter's latest reading after its
 opening reading, and by default opens the next period the day after the latest of them, with
 those same readings as its opening readings. A vacated apartment is closed without a next period.
+A close whose closing readings have no tariff in force asks for tariffs after it.
 
-Every close shows its card listing each meter's closing reading and writes only on that card's
-answer. While a meter has no reading to close with, the item is parked at the waiting step: it
-shows no card, and the next saved reading of that apartment resumes it. Asking to close that
-apartment again shows the waiting close as a card whose only option cancels it; the next photo
-parks it again, so the photo's own card is not queued behind it. Also here: the list of
-apartments the daily greeting names.
+A close the owner chose on a reading's card closes at once; any other close shows its card listing
+each meter's closing reading and writes only on that card's answer. The close's reply lists the
+closing readings. While a meter has no reading to close with, the item is parked at the waiting
+step: it shows no card, and the next saved reading of that apartment resumes it. Asking to close
+that apartment again shows the waiting close as a card whose only option cancels it; the next photo
+parks it again, so the photo's own card is not queued behind it. Also here: the list of apartments
+the daily greeting names.
 """
 
 from datetime import date
@@ -29,6 +31,7 @@ from common.flows import (
     not_understood,
     place,
     put_period,
+    tariffs,
     with_apartment,
 )
 from common.periods import apartment_meters, period_end, period_readings
@@ -41,8 +44,8 @@ def card(item) -> dict:
     data = item["data"]
     if item["step"] == WAITING:
         text = texts.close_waiting(data["apartment"], data["missing"])
-        return make_card(item, "close_waiting", text, ["reject"])
-    options = ["vacate", "reject"] if data["vacate"] else ["confirm", "vacate", "reject"]
+        return make_card(item, "close_waiting", text, [])
+    options = ["vacate"] if data["vacate"] else ["confirm", "vacate"]
     text = texts.close_card(
         data["apartment"], parse_iso(data["period_start"]), dated_rows(data["closing"])
     )
@@ -60,13 +63,15 @@ def parked(engine, user, apartment_id) -> dict | None:
     return found[0] if found else None
 
 
-def start(engine, user, apartment_id, vacate) -> list[Reply]:
+def start(engine, user, apartment_id, vacate, at_once=False) -> list[Reply]:
+    """Starts a close, or shows a parked one again. at_once closes without a card, for a close
+    the owner chose on a reading's card; a meter with no closing reading still parks it."""
     item = parked(engine, user, apartment_id)
     asked_again = item is not None
     if item is None:
         item = new_item(engine.stamp(), KIND, AWAITING, "close", {"apartment_id": apartment_id})
     item["data"]["vacate"] = vacate
-    return _advance(engine, user, item, decided=False, offer_cancel=asked_again)
+    return _advance(engine, user, item, decided=False, offer_cancel=asked_again, at_once=at_once)
 
 
 def park_waiting(engine, user):
@@ -91,10 +96,12 @@ def answer(engine, user, item, action) -> list[Reply]:
     if key in ("confirm", "vacate"):
         item["data"]["vacate"] = key == "vacate"
         return _advance(engine, user, item, decided=True)
-    return not_understood(card(item))
+    return not_understood(card(item), key)
 
 
-def _advance(engine, user, item, decided, offer_cancel=False) -> list[Reply]:
+def _advance(engine, user, item, decided, offer_cancel=False, at_once=False) -> list[Reply]:
+    """Closes when the owner decided on the readings shown, or at once; parks while a meter
+    has no closing reading; otherwise shows the close card."""
     data = item["data"]
     apartment, _ = place(engine, user, data["apartment_id"])
     period = current_period(engine, user, apartment["id"])
@@ -109,7 +116,7 @@ def _advance(engine, user, item, decided, offer_cancel=False) -> list[Reply]:
         engine.store.put_pending(user.email, item)
         return [Reply(texts.missing_photos(apartment["name"], missing))]
     shown = [[m["type"], m["serial"], r["value"], r["date"]] for m, r in closing]
-    if decided and shown == data["closing"]:
+    if at_once or (decided and shown == data["closing"]):
         return _close(engine, user, item, apartment, period, closing)
     data.update(apartment=apartment["name"], period_start=period["start"], closing=shown)
     return ask(engine, user, item, "close", card)
@@ -148,8 +155,10 @@ def _close(engine, user, item, apartment, period, closing) -> list[Reply]:
         apartment["name"],
         parse_iso(closed_on),
         None if next_start is None else parse_iso(next_start),
+        [(m["type"], m["serial"], r["value"], parse_iso(r["date"])) for m, r in closing],
     )
-    return drop(engine, user, item, [Reply(reply)])
+    replies = drop(engine, user, item, [Reply(reply)])
+    return [*replies, *tariffs.ask_after_close(engine, user, closing)]
 
 
 def request(engine, user, intent) -> list[Reply]:

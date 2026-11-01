@@ -19,7 +19,7 @@ from common import access
 from common.engine import Action, AlreadyHandled, Choice, Engine
 from common.files import Files
 from common.log import get_logger
-from common.model import api_key_from_ssm, build_model
+from common.model import PROVIDER_ERRORS, api_key_from_ssm, build_model
 from common.store import Store
 from common.webapi import response
 
@@ -49,7 +49,7 @@ def handler(event, context):
             return _turn(store, user, event.get("body"))
         except _Rejected as rejected:
             return rejected.response
-    if route == "GET /files/{key}":
+    if route == "GET /files/{key+}":
         return _file_url(user, unquote(event["pathParameters"]["key"]))
     raise ValueError(f"unhandled route {route!r}")
 
@@ -113,6 +113,9 @@ def _turn(store, user, raw_body):
         raise _Rejected(
             409, {"error": "already_handled", "snapshot": asdict(engine.snapshot(user))}
         )
+    except PROVIDER_ERRORS:
+        logger.exception("model provider call failed")
+        raise _Rejected(503, {"error": "model_unavailable"})
     return response(200, asdict(result))
 
 

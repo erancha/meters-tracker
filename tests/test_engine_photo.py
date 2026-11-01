@@ -37,7 +37,7 @@ def test_known_meter_shows_reading_card_with_saved_choice(env, ddb):
     result = kit.send_photo(electricity())
     card = result.replies[-1].card
     assert card["kind"] == "reading"
-    assert options(card) == ["confirm", "reject"]
+    assert options(card) == ["confirm"]
     text = "\n".join([card["title"], *card["lines"]])
     assert "392,693" in text and "392,691" not in text
     assert "עורף" in text
@@ -73,7 +73,7 @@ def test_not_a_meter_leaves_no_pending(env, ddb):
 
 
 def test_duplicate_same_date_is_offered_not_saved(env, ddb):
-    kit = Kit()
+    kit = Kit([IntentResult(intent="reject")])
     apartment = _electric_apartment(kit, display_choice=0)
     kit.store.put_reading(ACCOUNT, "E-392", reading("2026-10-29", 392691))
     kit.send_photo(electricity())
@@ -81,9 +81,9 @@ def test_duplicate_same_date_is_offered_not_saved(env, ddb):
     card = result.snapshot.card
     assert card["kind"] == "duplicate"
     assert "392,691" in result.replies[-1].text
-    assert options(card) == ["confirm", "reject"]
+    assert options(card) == ["confirm"]
     assert len(kit.readings("E-392")) == 2
-    kit.choose("reject")
+    kit.say("לא")
     assert len(kit.readings("E-392")) == 2
     assert kit.store.pending(USER.email) == []
     assert kit.periods(apartment)[0]["closed_on"] is None
@@ -217,7 +217,7 @@ def test_unreadable_digit_asks_for_retake_or_value(env, ddb):
     _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
     result = kit.send_photo(water(None, unreadable=True))
     assert result.snapshot.card["kind"] == "unreadable"
-    assert options(result.snapshot.card) == ["reject"]
+    assert options(result.snapshot.card) == []
     result = kit.say("1251")
     assert result.snapshot.card["kind"] == "reading"
     kit.choose("confirm")
@@ -276,7 +276,7 @@ def test_photo_read_past_the_lambda_timeout_asks_for_a_retake(env, ddb):
     kit = Kit()
     _photo_being_read(kit, seconds_ago=kit.engine.lambda_timeout.total_seconds() + 1)
     card = kit.card()
-    assert (card["kind"], options(card)) == ("unreadable", ["reject"])
+    assert (card["kind"], options(card)) == ("unreadable", [])
     assert card["title"] == texts.unreadable([texts.UNREADABLE_PHOTO])[0]
     _electric_apartment(kit, display_choice=0)
     kit.send_photo(electricity())
@@ -290,7 +290,7 @@ def test_typed_correction_on_a_reading_card_replaces_the_value(env, ddb):
     kit.send_photo(electricity())
     result = kit.say("הקריאה היא 392650")
     card = result.snapshot.card
-    assert (card["kind"], options(card)) == ("reading", ["confirm", "reject"])
+    assert (card["kind"], options(card)) == ("reading", ["confirm"])
     assert "392,650" in card_text(card)
     kit.choose("confirm")
     assert kit.readings("E-392")[-1]["value"] == 392650
@@ -398,3 +398,18 @@ def test_clean_duplicate_replace_clears_the_replaced_record(env, ddb):
     replaced = kit.readings("W-1250")[-1]
     assert replaced["value"] == 1251
     assert "failed_photos" not in replaced and "model" not in replaced
+
+
+def test_choice_message_names_the_card_it_answered(env, ddb):
+    kit = Kit([IntentResult(intent="unknown")])
+    _electric_apartment(kit, display_choice=0)
+    kit.send_photo(electricity())
+    card = kit.card()
+    kit.choose("confirm")
+    kit.say("שלום")
+    user_messages = [m for m in kit.engine.load(USER)[0] if m["role"] == "user"]
+    assert [m["choice"] for m in user_messages] == [
+        None,
+        {"pending": card["pending"], "version": card["version"]},
+        None,
+    ]

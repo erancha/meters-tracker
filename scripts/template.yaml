@@ -302,7 +302,7 @@ Resources:
           Properties:
             ApiId: !Ref Api
             Method: GET
-            Path: /files/{key}
+            Path: /files/{key+}
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref AccessTable

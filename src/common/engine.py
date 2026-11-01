@@ -1,15 +1,18 @@
 """The conversation engine: one turn in, replies and a snapshot out. It records every user action
 and every reply in the user's message history, then routes the action: a photo starts the meter
 photo flow, a choice goes to the pending item it names once it claims that item, text goes to the
-oldest awaiting item, and text with nothing awaiting is classified into a close, vacate or
-period-change request.
+oldest awaiting item, and text with nothing awaiting is classified into a close, vacate,
+period-change or tariffs request, with the account's apartment names, so the request names one
+of them exactly. A standby item (a request for tariffs) waits without
+blocking the queue: text with nothing awaiting is classified with its card as context, and only
+the answers it takes go to it.
 
-The snapshot is the oldest awaiting item's card plus the count of items behind it; the browser
-shows it and never orders the queue itself. A photo still being read after the api Lambda's time
-limit was being read by an invocation that was killed, so the snapshot turns it into a retake
-card and the queue clears. "Today" is the injected clock throughout, including the date prefix
-of every pending seq and message timestamp, so the once-a-day greeting and the reading dates
-agree on what day it is.
+The snapshot is the oldest awaiting item's card, else the oldest standby item's, plus the count of
+items behind it; the browser shows it and never orders the queue itself. A photo still being read
+after the api Lambda's time limit was being read by an invocation that was killed, so the snapshot
+turns it into a retake card and the queue clears. "Today" is the injected clock throughout,
+including the date prefix of every pending seq and message timestamp, so the once-a-day greeting and
+the reading dates agree on what day it is.
 """
 
 import secrets
@@ -19,6 +22,7 @@ from common import dates, texts
 from common.flows import (
     AWAITING,
     READING,
+    STANDBY,
     Action,
     AlreadyHandled,
     Choice,
@@ -29,6 +33,8 @@ from common.flows import (
     link_meter,
     meter_photo,
     period_change,
+    request_context,
+    tariffs,
 )
 
 __all__ = ["Action", "AlreadyHandled", "Choice", "Engine", "Reply", "Snapshot", "TurnResult"]
@@ -38,6 +44,7 @@ FLOWS = {
     link_meter.KIND: link_meter,
     close_period.KIND: close_period,
     period_change.KIND: period_change,
+    tariffs.KIND: tariffs,
 }
 
 
@@ -70,29 +77,43 @@ class Engine:
         return f"{self.clock().isoformat()}T{time_of_day}_{secrets.token_hex(2)}"
 
     def turn(self, user, action: Action) -> TurnResult:
-        replies = self._dispatch(user, action)
-        for reply in replies:
-            self._append(user, "assistant", reply.text, reply.card, reply.image_key)
-        return TurnResult(replies, self.snapshot(user))
-
-    def _dispatch(self, user, action: Action) -> list[Reply]:
+        image_key = None
         if action.image is not None:
             seq = self.stamp()
-            key = self.files.put_image(user.account, seq, action.image, action.media_type)
-            self._append(user, "user", action.note, image_key=key)
-            return meter_photo.start(
-                self, user, seq, key, action.image, action.media_type, action.note
+            image_key = self.files.put_image(user.account, seq, action.image, action.media_type)
+            self._append(user, "user", action.note, image_key=image_key)
+            replies = meter_photo.start(
+                self, user, seq, image_key, action.image, action.media_type, action.note
             )
+        else:
+            replies = self._dispatch(user, action)
+        for reply in replies:
+            self._append(user, "assistant", reply.text, reply.card, reply.image_key)
+        return TurnResult(replies, self.snapshot(user), image_key)
+
+    def _dispatch(self, user, action: Action) -> list[Reply]:
         if action.choice is not None:
             item, label = self._claim(user, action.choice)
-            self._append(user, "user", label)
+            answered = {"pending": action.choice.pending, "version": action.choice.version}
+            self._append(user, "user", label, choice=answered)
             return FLOWS[item["kind"]].answer(self, user, item, action)
         self._append(user, "user", action.text)
         awaiting = self._awaiting(user)
         if awaiting:
             item = awaiting[0]
             return FLOWS[item["kind"]].answer(self, user, item, action)
-        return self._request(user, action.text)
+        names = sorted(a["name"] for a in self.store.apartments(user.account))
+        standby = self._with_status(user, STANDBY)
+        if not standby:
+            context = request_context(names)
+            return self._request(user, self.model.classify(action.text, context, self.clock()))
+        item = standby[0]
+        flow = FLOWS[item["kind"]]
+        context = request_context(names, flow.card(item))
+        intent = self.model.classify(action.text, context, self.clock())
+        if intent.intent in flow.STANDBY_ANSWERS:
+            return flow.answer_standby(self, user, item, intent)
+        return self._request(user, intent)
 
     def _claim(self, user, choice: Choice) -> tuple[dict, str]:
         """The awaiting item a choice answers, with the chosen option's label. The item is
@@ -111,39 +132,49 @@ class Engine:
         item["version"] += 1
         return item, labels[choice.option]
 
-    def _request(self, user, text) -> list[Reply]:
-        intent = self.model.classify(text, "")
+    def _request(self, user, intent) -> list[Reply]:
         if intent.intent in ("close_period", "vacate"):
             return close_period.request(self, user, intent)
         if intent.intent == "change_period":
             return period_change.change(self, user, intent)
+        if intent.intent == "set_tariffs":
+            return tariffs.request(self, user, intent)
         return [Reply(texts.unknown_intent())]
 
     def _awaiting(self, user) -> list[dict]:
-        return [i for i in self.store.pending(user.email) if i["status"] == AWAITING]
+        return self._with_status(user, AWAITING)
+
+    def _with_status(self, user, status) -> list[dict]:
+        return [i for i in self.store.pending(user.email) if i["status"] == status]
 
     def snapshot(self, user) -> Snapshot:
         pending = self.store.pending(user.email)
         for item in pending:
             if item["status"] == READING and meter_photo.stalled(self, item):
                 meter_photo.ask_retake(self, user, item)
-        queue = [i for i in pending if i["status"] in (READING, AWAITING)]
-        awaiting = [i for i in queue if i["status"] == AWAITING]
-        if not awaiting:
+        queue = [i for i in pending if i["status"] in (READING, AWAITING, STANDBY)]
+        shown = [i for i in queue if i["status"] == AWAITING] or [
+            i for i in queue if i["status"] == STANDBY
+        ]
+        if not shown:
             return Snapshot(None, len(queue))
-        oldest = awaiting[0]
+        oldest = shown[0]
         return Snapshot(FLOWS[oldest["kind"]].card(oldest), len(queue) - 1)
 
     def load(self, user) -> tuple[list[dict], Snapshot]:
         messages = self.store.messages(user.email)
         today = self.clock().isoformat()
-        if not any(m["at"].startswith(today) for m in messages):
+        if not messages:
+            messages.append(self._append(user, "assistant", texts.welcome()))
+        elif not any(m["at"].startswith(today) for m in messages):
             due = close_period.due_for_close(self, user)
             if due:
                 messages.append(self._append(user, "assistant", texts.greeting(due)))
         return messages, self.snapshot(user)
 
-    def _append(self, user, role, text, card=None, image_key=None) -> dict:
+    def _append(self, user, role, text, card=None, image_key=None, choice=None) -> dict:
+        """Records one message. A user's choice is recorded as the chosen option's label, with
+        choice naming the card it answered by pending seq and version."""
         message = {
             "at": self.stamp(),
             "role": role,
@@ -151,6 +182,7 @@ class Engine:
             "card": card,
             "image_key": image_key,
             "pdf_key": None,
+            "choice": choice,
         }
         self.store.append_message(user.email, message)
         return message

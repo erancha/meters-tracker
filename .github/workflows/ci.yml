@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          # Matches the python3.13 Lambda runtime in scripts/template.yaml, so CI proves what ships.
+          python-version: "3.13"
+      # scripts/test.sh is the entry point developers use locally, so CI and local verification
+      # cannot drift. It provisions its own virtualenv.
+      - name: Backend tests
+        run: bash scripts/test.sh
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Frontend tests
+        run: npm test
+      # `npm run build` runs tsc before vite, so this covers both typecheck and production build.
+      - name: Frontend build
+        run: npm run build

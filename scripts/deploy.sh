@@ -9,6 +9,7 @@
 # The Cognito callback URL and the API's CORS origin need the CloudFront URL, which exists only
 # after the app stack's first deploy, so each run converges: it deploys with what is known, then
 # deploys both stacks again with the now-known URL (a no-op when unchanged).
+# It ends by publishing the frontend with sync-frontend.sh.
 # Requires scripts/aws-config.sh and scripts/params.sh (create them with scripts/init-env.sh).
 #
 #   ./scripts/deploy.sh dev
@@ -109,4 +110,5 @@ window.CONFIG = {
 };
 CONFIG
 
+[ -x "$ROOT/scripts/sync-frontend.sh" ] && "$ROOT/scripts/sync-frontend.sh" "${1:-}"
 echo "Deployed. Frontend: ${CONVERGED_URL}"

@@ -1,7 +1,8 @@
 """New-meter flow: a photo of an unknown serial is linked to an apartment before its reading is
 saved as that meter's opening reading.
 
-Steps: property -> apartment -> period (only when the apartment has no open period) -> link.
+Steps: property -> apartment -> period (only when the apartment has no open period) -> link. A
+property answer that also names the apartment skips the apartment question.
 Nothing is written until the final confirm; then the property, apartment and period are created
 as needed, the meter and its opening reading are saved, and a live meter of the same type in the
 apartment is retired as replaced on the reading's date. A serial that another photo linked while
@@ -10,10 +11,11 @@ photo flow as an ordinary reading of that meter.
 """
 
 from common import texts
-from common.dates import parse_iso
+from common.dates import first_of_next_month, parse_iso
 from common.flows import (
     Reply,
     ask,
+    correct_serial,
     current_period,
     decide,
     display_choice,
@@ -43,6 +45,7 @@ def _link_text(d):
         d["value"],
         parse_iso(d["reading_date"]),
         d["alternatives"],
+        d["position"],
         parse_iso(d["period_start"]),
         d["months"],
         d["replaced_serial"],
@@ -52,15 +55,15 @@ def _link_text(d):
 STEPS = {
     "property": (
         lambda d: texts.link_property(d["meter_type"], d["serial"], d["choices"]),
-        lambda d: ["reject"],
+        lambda d: [],
     ),
     "apartment": (
         lambda d: texts.link_apartment(d["property"], d["choices"]),
-        lambda d: ["reject"],
+        lambda d: [],
     ),
     "period": (
-        lambda d: texts.link_period(d["apartment"], parse_iso(d["period_start"]), d["months"]),
-        lambda d: ["confirm", "reject"],
+        lambda d: texts.link_period(d["apartment"], d["property"], d["months"]),
+        lambda d: list(d["starts"]),
     ),
     "link": (_link_text, reading_options),
 }
@@ -70,12 +73,14 @@ def card(item) -> dict:
     data, step = item["data"], item["step"]
     kind = "replaced" if step == "link" and data["replaced_serial"] is not None else step
     text, options = STEPS[step]
-    return make_card(item, kind, text(data), options(data))
+    labels = texts.start_labels(data["starts"]) if step == "period" else None
+    return make_card(item, kind, text(data), options(data), labels)
 
 
 def start(engine, user, item) -> list[Reply]:
     item["kind"] = KIND
     item["data"]["choices"] = [p["name"] for p in engine.store.properties(user.account)]
+    item["data"]["photo_date"] = item["data"]["reading_date"]
     return ask(engine, user, item, "property", card)
 
 
@@ -84,26 +89,45 @@ def answer(engine, user, item, action) -> list[Reply]:
     key, intent = decide(engine, card(item), action)
     if key == "reject":
         return drop(engine, user, item, [Reply(texts.discarded())])
+    if (
+        correct_serial(data, key, intent)
+        and engine.store.meter(user.account, data["serial"]) is None
+    ):
+        return ask(engine, user, item, step, card)
     if engine.store.meter(user.account, data["serial"]) is not None:
         item["kind"] = meter_photo.KIND
         return meter_photo.route(engine, user, item)
     if step == "property" and key == "choose_property":
-        return _choose_property(engine, user, item, _name(intent))
+        _choose_property(engine, user, item, _name(intent))
+        if intent.apartment is not None:
+            return _choose_apartment(engine, user, item, intent.apartment)
+        return ask(engine, user, item, "apartment", card)
     if step == "apartment" and key == "choose_apartment":
         return _choose_apartment(engine, user, item, _name(intent))
-    if step == "period" and key == "set_period":
-        if intent.date is not None:
-            data["period_start"] = intent.date
+    if step == "period" and key in data["starts"]:
+        _start_period(data, data["starts"][key])
+        return ask(engine, user, item, "link", card)
+    # The question asks for a date, so a date read as the reading's own also answers it.
+    if step == "period" and key in ("set_period", "set_date"):
         if intent.months is not None:
             data["months"] = intent.months
-        return ask(engine, user, item, "period", card)
-    if step == "period" and key == "confirm":
+        if intent.date is None:
+            return ask(engine, user, item, "period", card)
+        _start_period(data, intent.date)
         return ask(engine, user, item, "link", card)
     if step == "link" and edit_reading(data, key, intent):
         return ask(engine, user, item, "link", card)
     if step == "link" and key == "confirm":
         return _link(engine, user, item)
-    return not_understood(card(item))
+    return not_understood(card(item), key)
+
+
+def _start_period(data, start):
+    """Sets a new period's start. A start before the photo's date makes the photo stand for the
+    meter on that start, so the opening reading is dated at the start; a later start keeps the
+    photo's date."""
+    data["period_start"] = start
+    data["reading_date"] = min(data["photo_date"], start)
 
 
 def _name(intent) -> str:
@@ -112,7 +136,7 @@ def _name(intent) -> str:
     return intent.name
 
 
-def _choose_property(engine, user, item, name) -> list[Reply]:
+def _choose_property(engine, user, item, name):
     data = item["data"]
     matches = [p for p in engine.store.properties(user.account) if p["name"] == name]
     data.update(property=name, property_new=not matches, property_id=None, choices=[])
@@ -124,7 +148,6 @@ def _choose_property(engine, user, item, name) -> list[Reply]:
             for a in engine.store.apartments(user.account)
             if a["property_id"] == prop["id"]
         ]
-    return ask(engine, user, item, "apartment", card)
 
 
 def _choose_apartment(engine, user, item, name) -> list[Reply]:
@@ -134,11 +157,17 @@ def _choose_apartment(engine, user, item, name) -> list[Reply]:
         for a in engine.store.apartments(user.account)
         if a["property_id"] == data["property_id"] and a["name"] == name
     ]
+    today = engine.clock()
+    # Option id -> the start date it offers; on the first of a month both would be today.
+    starts = {"start_today": today.isoformat()}
+    if today.day != 1:
+        starts["start_month"] = first_of_next_month(today).isoformat()
     data.update(
         apartment=name,
         apartment_new=not matches,
         replaced_serial=None,
-        period_start=engine.clock().isoformat(),
+        period_start=today.isoformat(),
+        starts=starts,
         months=engine.config["default_period_months"],
         period_new=True,
     )

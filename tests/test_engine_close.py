@@ -15,7 +15,9 @@ START = "2026-09-01"
 
 
 def _apartment(kit, water_readings=()):
+    """An apartment with both meters opened at START, priced so a close asks for no tariffs."""
     apartment = kit.apartment(start=START)
+    kit.tariff("2026-01-01", 0.6, 15)
     kit.meter(
         apartment, "E-392", "electricity", [reading(START, 392000, opens=START)], display_choice=0
     )
@@ -34,9 +36,27 @@ def test_reading_past_end_proposes_close(env, ddb):
     result = kit.choose("confirm")
     card = result.snapshot.card
     assert card["kind"] == "propose_close"
-    assert options(card) == ["close", "keep_open", "vacate"]
+    assert options(card) == ["close", "keep_open"]
     assert "31/10/2026" in result.replies[-1].text
     assert len(kit.readings("E-392")) == 1
+
+
+def test_reading_in_the_last_days_before_end_proposes_close(env, ddb):
+    kit = Kit(today=date(2026, 10, 29))
+    _apartment(kit)
+    kit.send_photo(electricity())
+    result = kit.choose("confirm")
+    assert result.snapshot.card["kind"] == "propose_close"
+    assert "31/10/2026" in result.replies[-1].text
+
+
+def test_reading_before_the_close_window_saves_without_proposing(env, ddb):
+    kit = Kit(today=date(2026, 10, 23))
+    _apartment(kit)
+    kit.send_photo(electricity())
+    result = kit.choose("confirm")
+    assert result.snapshot.card is None
+    assert len(kit.readings("E-392")) == 2
 
 
 def test_close_flags_readings_and_reopens_next_day(env, ddb):
@@ -65,17 +85,32 @@ def test_close_flags_readings_and_reopens_next_day(env, ddb):
     ]
 
 
-def test_vacate_closes_without_reopen_and_next_photo_opens_period(env, ddb):
+def test_close_chosen_on_a_reading_closes_at_once(env, ddb):
     kit = Kit(today=date(2026, 11, 2))
     apartment = _apartment(kit, [reading("2026-10-15", 1100)])
     kit.send_photo(electricity())
     kit.choose("confirm")
-    result = kit.choose("vacate")
-    card = result.snapshot.card
-    assert (card["kind"], options(card)) == ("close", ["vacate", "reject"])
-    assert "1,100" in card_text(card)
-    assert kit.periods(apartment)[0]["closed_on"] is None
-    kit.choose("vacate")
+    result = kit.choose("close")
+    assert result.snapshot.card is None
+    assert kit.store.pending(USER.email) == []
+    closed = result.replies[-1].text
+    assert closed.startswith("התקופה של עורף נסגרה ב־02/11/2026.")
+    assert "E-392" in closed and "392,691" in closed and "1,100" in closed
+    assert [(p["start"], p["closed_on"]) for p in kit.periods(apartment)] == [
+        (START, "2026-11-02"),
+        ("2026-11-03", None),
+    ]
+
+
+def test_typed_vacate_closes_without_reopen_and_next_photo_opens_period(env, ddb):
+    kit = Kit([IntentResult(intent="vacate")], today=date(2026, 11, 2))
+    apartment = _apartment(kit, [reading("2026-10-15", 1100)])
+    kit.send_photo(electricity())
+    assert kit.choose("confirm").snapshot.card["kind"] == "propose_close"
+    result = kit.say("הדירה ריקה")
+    assert len(kit.readings("E-392")) == 2
+    assert result.snapshot.card is None
+    assert "1,100" in result.replies[-1].text
     assert [(p["start"], p["closed_on"]) for p in kit.periods(apartment)] == [(START, "2026-11-02")]
     assert _flags(kit, "E-392")[-1] == ("2026-11-02", None, START)
     assert _flags(kit, "W-1250")[-1] == ("2026-10-15", None, START)
@@ -95,6 +130,17 @@ def test_vacate_closes_without_reopen_and_next_photo_opens_period(env, ddb):
     assert kit.store.pending(USER.email) == []
 
 
+def test_vacate_on_the_close_card_closes_without_a_next_period(env, ddb):
+    kit = Kit([IntentResult(intent="close_period")], today=date(2026, 10, 20))
+    apartment = _apartment(kit, [reading("2026-10-15", 1100)])
+    kit.store.put_reading(ACCOUNT, "E-392", reading("2026-10-15", 392500))
+    assert kit.say("סגור את התקופה").snapshot.card["kind"] == "close"
+    result = kit.choose("vacate")
+    assert result.snapshot.card is None
+    assert [(p["start"], p["closed_on"]) for p in kit.periods(apartment)] == [(START, "2026-10-15")]
+    assert _flags(kit, "W-1250")[-1] == ("2026-10-15", None, START)
+
+
 def test_close_period_intent_with_missing_meter_asks_for_photo(env, ddb):
     kit = Kit([IntentResult(intent="close_period")], today=date(2026, 10, 20))
     apartment = _apartment(kit)
@@ -105,7 +151,7 @@ def test_close_period_intent_with_missing_meter_asks_for_photo(env, ddb):
     kit.send_photo(water(1100))
     result = kit.choose("confirm")
     assert result.snapshot.card["kind"] == "close"
-    assert options(result.snapshot.card) == ["confirm", "vacate", "reject"]
+    assert options(result.snapshot.card) == ["confirm", "vacate"]
     kit.choose("confirm")
     assert _flags(kit, "E-392")[-1] == ("2026-10-15", "2026-10-21", START)
     assert _flags(kit, "W-1250")[-1] == ("2026-10-20", "2026-10-21", START)
@@ -175,7 +221,7 @@ def test_change_period_intent_opens_vacant_apartment_on_date(env, ddb):
     apartment = kit.apartment(start=START, closed_on="2026-11-02")
     result = kit.say("השוכר החדש מ-15/12")
     card = result.snapshot.card
-    assert (card["kind"], options(card)) == ("change_period", ["confirm", "reject"])
+    assert (card["kind"], options(card)) == ("change_period", ["confirm"])
     assert "15/12/2026" in card_text(card)
     assert len(kit.periods(apartment)) == 1
     result = kit.choose("confirm")
@@ -204,14 +250,22 @@ def test_change_period_intent_moves_open_period_start(env, ddb):
 def test_load_greets_once_a_day_for_apartments_past_end(env, ddb):
     kit = Kit(today=date(2026, 10, 20))
     _apartment(kit)
-    assert kit.engine.load(USER)[0] == []
+    assert [m["text"] for m in kit.engine.load(USER)[0]] == [texts.welcome()]
     kit.today = date(2026, 11, 2)
     messages, snapshot = kit.engine.load(USER)
-    assert [m["text"] for m in messages] == [texts.greeting([("עורף", date(2026, 10, 31))])]
+    greeting = texts.greeting([("עורף", date(2026, 10, 31))])
+    assert [m["text"] for m in messages] == [texts.welcome(), greeting]
     assert snapshot.card is None
-    assert len(kit.engine.load(USER)[0]) == 1
-    kit.today = date(2026, 11, 3)
     assert len(kit.engine.load(USER)[0]) == 2
+    kit.today = date(2026, 11, 3)
+    assert len(kit.engine.load(USER)[0]) == 3
+
+
+def test_load_welcomes_a_new_account_once(env, ddb):
+    kit = Kit(today=date(2026, 10, 20))
+    messages, _ = kit.engine.load(USER)
+    assert [(m["role"], m["text"]) for m in messages] == [("assistant", texts.welcome())]
+    assert len(kit.engine.load(USER)[0]) == 1
 
 
 def test_second_confirm_on_a_vacant_apartment_photo_opens_no_period(env, ddb):
@@ -236,16 +290,16 @@ def test_second_confirm_on_a_vacant_apartment_photo_opens_no_period(env, ddb):
 
 def test_asking_again_for_a_parked_close_offers_to_cancel_it(env, ddb):
     close = IntentResult(intent="close_period")
-    kit = Kit([close, close], today=date(2026, 10, 20))
+    kit = Kit([close, close, IntentResult(intent="reject")], today=date(2026, 10, 20))
     apartment = _apartment(kit)
     kit.store.put_reading(ACCOUNT, "E-392", reading("2026-10-15", 392500))
     kit.say("סגור את התקופה")
     assert kit.card() is None
     result = kit.say("סגור את התקופה")
     card = result.snapshot.card
-    assert (card["kind"], options(card)) == ("close_waiting", ["reject"])
+    assert (card["kind"], options(card)) == ("close_waiting", [])
     assert "W-1250" in card_text(card)
-    result = kit.choose("reject")
+    result = kit.say("בטל")
     assert result.replies[-1].text == texts.close_cancelled()
     assert kit.store.pending(USER.email) == []
     assert [p["closed_on"] for p in kit.periods(apartment)] == [None]
@@ -253,7 +307,7 @@ def test_asking_again_for_a_parked_close_offers_to_cancel_it(env, ddb):
 
 def test_a_photo_after_the_cancel_offer_still_resumes_the_close(env, ddb):
     close = IntentResult(intent="close_period")
-    kit = Kit([close, close], today=date(2026, 10, 20))
+    kit = Kit([close, close, IntentResult(intent="reject")], today=date(2026, 10, 20))
     _apartment(kit)
     kit.store.put_reading(ACCOUNT, "E-392", reading("2026-10-15", 392500))
     kit.say("סגור את התקופה")
@@ -262,3 +316,19 @@ def test_a_photo_after_the_cancel_offer_still_resumes_the_close(env, ddb):
     assert result.snapshot.card["kind"] == "reading"
     result = kit.choose("confirm")
     assert result.snapshot.card["kind"] == "close"
+
+
+def test_a_typed_request_is_classified_with_the_apartment_names(env, ddb):
+    kit = Kit([IntentResult(intent="close_period", name="עורף")], today=date(2026, 11, 2))
+    _apartment(kit)
+    kit.apartment(name="קדמית", property_name="לאונר 18")
+    kit.say("סגור את התקופה של עורף")
+    assert kit.model.classified[-1] == ("סגור את התקופה של עורף", "דירות: עורף | קדמית")
+
+
+def test_a_typed_name_no_apartment_has_is_not_found(env, ddb):
+    kit = Kit([IntentResult(intent="close_period", name="מרתף")], today=date(2026, 11, 2))
+    _apartment(kit)
+    result = kit.say("סגור את התקופה של המרתף")
+    assert [r.text for r in result.replies] == [texts.unknown_apartment("מרתף")]
+    assert result.snapshot.card is None

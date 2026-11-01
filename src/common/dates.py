@@ -31,5 +31,13 @@ def fmt(d: date) -> str:
     return d.strftime("%d/%m/%Y")
 
 
+def fmt_day_month(d: date) -> str:
+    return d.strftime("%d/%m")
+
+
+def first_of_next_month(d: date) -> date:
+    return add_months(d.replace(day=1), 1)
+
+
 def parse_iso(s: str) -> date:
     return date.fromisoformat(s)

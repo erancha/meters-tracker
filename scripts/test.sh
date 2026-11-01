@@ -6,6 +6,8 @@
 #
 # Creates .venv on the first run and installs requirements-dev.txt into it. Every argument other
 # than -h/--help goes to pytest, e.g. ./scripts/test.sh -q tests/test_api.py
+#
+# It never calls the real model. The checks that do are run by hand only: docs/development.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=common.sh

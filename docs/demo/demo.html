@@ -659,10 +659,8 @@ function chatHtml() {
     ? "<b>" + ltr(OWNER) + "</b>"
     : "<b>" + ltr(DELEGATE) + "</b><br>בחשבון של " + ltr(OWNER);
   const messages = conv.slice(0, shown).map(m => m(state)).join("");
-  /* Send stays dimmed while there is nothing to send, or while the chat waits on a confirm
-     button. */
-  const awaitingButton = messages.includes('class="primary"');
-  const sendable = state.draft !== "" && !awaitingButton;
+  /* Send stays dimmed only while there is nothing to send. */
+  const sendable = state.draft !== "";
   return '<div class="chat">' +
     '<header class="app-head"><span class="brand">' + ICONS.gauge + 'מונים</span><span class="who">' + who + "</span></header>" +
     '<ul class="msgs">' + messages + "</ul>" +

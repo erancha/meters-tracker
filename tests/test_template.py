@@ -122,7 +122,7 @@ def test_api_routes(app):
     routes = {
         (e["Properties"]["Method"], e["Properties"]["Path"]) for e in function["Events"].values()
     }
-    assert routes == {("GET", "/chat"), ("POST", "/turn"), ("GET", "/files/{key}")}
+    assert routes == {("GET", "/chat"), ("POST", "/turn"), ("GET", "/files/{key+}")}
     assert function["Handler"] == "handlers/api.handler"
     assert function["Timeout"] == "ApiTimeoutSeconds"
     assert function["Environment"]["Variables"]["LAMBDA_TIMEOUT_SECONDS"] == "ApiTimeoutSeconds"

@@ -21,10 +21,12 @@ import boto3
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import app_stack
+
 from common.files import Files
 from common.flows import readable
 from common.model import MeterReadingResult, ModelRefused, model_from_env
-from common.store import TABLE_NAMES, Store
+from common.store import Store
 
 
 def score(expected_serial: str, expected_value: int, result: MeterReadingResult) -> dict:
@@ -102,13 +104,10 @@ def report(rows: list[dict]) -> str:
 
 
 def _stack_resources(stack: str) -> tuple[Store, Files]:
-    """The Store and Files over the stack's tables and bucket, by their template logical ids."""
-    resources = boto3.client("cloudformation").describe_stack_resources(StackName=stack)
-    physical = {
-        r["LogicalResourceId"]: r["PhysicalResourceId"] for r in resources["StackResources"]
-    }
-    tables = {name: physical[f"{name.capitalize()}Table"] for name in TABLE_NAMES}
-    return Store(tables, boto3.resource("dynamodb")), Files(physical["FilesBucket"])
+    """The Store and Files over the stack's tables and bucket."""
+    physical = app_stack.physical_ids(stack)
+    store = Store(app_stack.tables(physical), boto3.resource("dynamodb"))
+    return store, Files(physical["FilesBucket"])
 
 
 def fail(message: str) -> None:

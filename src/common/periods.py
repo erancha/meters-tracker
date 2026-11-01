@@ -82,8 +82,10 @@ def charge(units: float, price: float) -> float:
     return round(units * price, 2)
 
 
-def is_closing_candidate(period: dict, reading_date: date) -> bool:
-    return reading_date >= period_end(period)
+def is_closing_candidate(period: dict, reading_date: date, days_before_end: int) -> bool:
+    """True for a reading that may close the period: one dated on or after its last day, or
+    within days_before_end days before it."""
+    return reading_date >= period_end(period) - timedelta(days=days_before_end)
 
 
 def within_reclose_window(closing_date: date, reading_date: date, days: int) -> bool:

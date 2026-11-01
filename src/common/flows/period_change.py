@@ -38,7 +38,7 @@ def card(item) -> dict:
         data["current_start"] is None,
         dated_rows(data["reflag"]),
     )
-    return make_card(item, "change_period", text, ["confirm", "reject"])
+    return make_card(item, "change_period", text, ["confirm"])
 
 
 def answer(engine, user, item, action) -> list[Reply]:
@@ -47,7 +47,7 @@ def answer(engine, user, item, action) -> list[Reply]:
         return drop(engine, user, item, [Reply(texts.change_cancelled())])
     if key == "confirm":
         return _apply_change(engine, user, item)
-    return not_understood(card(item))
+    return not_understood(card(item), key)
 
 
 def change(engine, user, intent) -> list[Reply]:

@@ -1,6 +1,9 @@
 """Meter photo flow: a photo becomes a proposed reading, and a confirmed one becomes a saved
-reading of a known meter. An unknown serial is handed to the link flow; the close or vacate
-option on a reading hands the apartment to the close flow after the reading is saved.
+reading of a known meter. A photo of no known meter family and no serial is read again as a
+previous statement, and one that is a statement is handed to the tariffs flow, dated like a
+reading. An unknown serial is handed to the link flow. On a reading near the period's end, the
+close option or a typed vacate hands the apartment to the close flow after the reading is
+saved.
 
 Steps: unreadable -> reading -> one of duplicate, lower_reading, swap, propose_reclose,
 open_period, propose_close -> saved. A reading is never saved twice for one meter and date. A
@@ -20,6 +23,7 @@ from common.flows import (
     Reply,
     ask,
     close_period,
+    correct_serial,
     current_period,
     decide,
     display_choice,
@@ -39,6 +43,7 @@ from common.flows import (
     reading_text,
     save_reading,
     summary,
+    tariffs,
 )
 from common.model import MeterReadingResult
 from common.periods import apartment_meters, is_closing_candidate, period_end, within_reclose_window
@@ -52,11 +57,11 @@ def _date(data, key):
 
 
 STEPS = {
-    "unreadable": (lambda d: texts.unreadable(d["unreadable"]), lambda d: ["reject"]),
+    "unreadable": (lambda d: texts.unreadable(d["unreadable"]), lambda d: []),
     "reading": (reading_text, reading_options),
     "duplicate": (
         lambda d: texts.duplicate_reading(d["other"]["value"], _date(d, "other")),
-        lambda d: ["confirm", "reject"],
+        lambda d: ["confirm"],
     ),
     "lower_reading": (
         lambda d: texts.lower_reading(d["other"], d["value"]),
@@ -66,11 +71,11 @@ STEPS = {
     "propose_reclose": (lambda d: texts.propose_reclose(_date(d, "other")), lambda d: SWAP_OPTIONS),
     "open_period": (
         lambda d: texts.propose_open(parse_iso(d["reading_date"])),
-        lambda d: ["confirm", "reject"],
+        lambda d: ["confirm"],
     ),
     "propose_close": (
-        lambda d: texts.propose_close(parse_iso(d["period_end"])),
-        lambda d: ["close", "keep_open", "vacate"],
+        lambda d: texts.propose_close(parse_iso(d["period_end"]), parse_iso(d["reading_date"])),
+        lambda d: ["close", "keep_open"],
     ),
 }
 
@@ -91,10 +96,15 @@ def start(engine, user, seq, image_key, image, media_type, note) -> list[Reply]:
     engine.store.put_pending(user.email, item)
     try:
         result = engine.model.read_meter(image, media_type)
+        statement = None
+        if result.meter_type == "unknown" and result.serial is None:
+            statement = engine.model.read_statement(image, media_type)
         reading_date = _reading_date(engine, note)
     except Exception:
         engine.store.delete_pending(user.email, seq)
         raise
+    if statement is not None and statement.is_statement:
+        return tariffs.from_statement(engine, user, item, statement, reading_date)
     _set_read(item, result, reading_date)
     _absorb_superseded(engine, user, item)
     return route(engine, user, item)
@@ -157,7 +167,7 @@ def _absorb_superseded(engine, user, item):
 
 def _reading_date(engine, note) -> str:
     if note is not None:
-        intent = engine.model.classify(note, "")
+        intent = engine.model.classify(note, "", engine.clock())
         if intent.intent == "set_date":
             return intent_date(intent)
     return engine.clock().isoformat()
@@ -202,6 +212,8 @@ def answer(engine, user, item, action) -> list[Reply]:
     key, intent = decide(engine, card(item), action)
     if key == "reject":
         return drop(engine, user, item, [Reply(texts.discarded())])
+    if step in ("reading", "unreadable") and correct_serial(data, key, intent):
+        return route(engine, user, item)
     if step == "unreadable" and edit_reading(data, key, intent):
         return route(engine, user, item)
     if step == "reading" and edit_reading(data, key, intent):
@@ -229,8 +241,11 @@ def answer(engine, user, item, action) -> list[Reply]:
     if step == "propose_close" and key in ("close", "vacate"):
         replies = _save(engine, user, item)
         apartment_id = _meter(engine, user, data)["apartment_id"]
-        return [*replies, *close_period.start(engine, user, apartment_id, vacate=key == "vacate")]
-    return not_understood(card(item))
+        closes = close_period.start(
+            engine, user, apartment_id, vacate=key == "vacate", at_once=True
+        )
+        return [*replies, *closes]
+    return not_understood(card(item), key)
 
 
 def _meter(engine, user, data) -> dict:
@@ -258,24 +273,26 @@ def _check(engine, user, item, lower_checked=False) -> list[Reply]:
     if closings:
         closing = closings[-1]
         [closed] = [p for p in periods if p["start"] == closing["closes_period"]]
-        step = _closing_step(closing, closed, day, engine.config["reclose_days"])
+        step = _closing_step(closing, closed, day, engine.config)
         if step is not None:
             data["other"] = closing
             return ask(engine, user, item, step, card)
     parked = close_period.parked(engine, user, meter["apartment_id"])
-    if parked is None and is_closing_candidate(current, parse_iso(day)):
+    early = engine.config["close_days_before_end"]
+    if parked is None and is_closing_candidate(current, parse_iso(day), early):
         data["period_end"] = period_end(current).isoformat()
         return ask(engine, user, item, "propose_close", card)
     return [*_save(engine, user, item), *close_period.resume(engine, user, parked)]
 
 
-def _closing_step(closing, closed, day, reclose_days) -> str | None:
+def _closing_step(closing, closed, day, config) -> str | None:
     """The step a reading near the meter's latest closing reading calls for: a back-dated one
     that would close the same period earlier offers a swap; one shortly after offers a re-close."""
-    if day < closing["date"] and is_closing_candidate(closed, parse_iso(day)):
+    early = config["close_days_before_end"]
+    if day < closing["date"] and is_closing_candidate(closed, parse_iso(day), early):
         return "swap"
     if closing["date"] < day and within_reclose_window(
-        parse_iso(closing["date"]), parse_iso(day), reclose_days
+        parse_iso(closing["date"]), parse_iso(day), config["reclose_days"]
     ):
         return "propose_reclose"
     return None

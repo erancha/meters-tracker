@@ -15,6 +15,8 @@ absolute paths, so each checkout builds its own.
 
 ## Tests
 
+### Automated: the quality gate
+
 [`scripts/test.sh`](../scripts/test.sh) is the whole quality gate: a bash syntax check of every
 script, `ruff check` and `ruff format --check` over `src/`, `tests/` and `scripts/*.py`, then
 pytest. It creates `.venv` on its first run, installs `requirements-dev.txt` into it on every
@@ -27,6 +29,47 @@ clock the test sets, and seeds properties, apartments, periods, meters and readi
 `tests/test_template.py` checks the CloudFormation templates against the tables and settings
 the code expects, and `tests/test_scripts.py` runs the stack lookups of `scripts/common.sh`
 against a fake `aws` command.
+
+`tests/test_owner_story.py` is the expectation for the owner's whole story, as verified in the
+browser: linking a meter, closing its period from the next reading, pricing the close, a
+statement's tariffs, a water meter after a blurry photo, and a typed close or vacate. It drives
+the engine as the browser does, choosing only on the card the snapshot shows and checking that
+typed text is classified against that card, and asserts every card and reply on the way. The
+story's names, serials, readings and prices live in `scripts/owner_story.py`.
+
+The frontend has its own suite, run in `frontend/` with `npm test` (Vitest over jsdom, with
+Testing Library); `npm run build` runs the TypeScript check before the Vite build. The GitHub
+Actions workflow `.github/workflows/ci.yml` runs `scripts/test.sh` on Python 3.13 and, in
+parallel, `npm ci`, `npm test` and `npm run build` on Node 22.
+
+### By hand only: checks with the real model
+
+The automated suite proves what the code does once the model has answered; it cannot prove how
+the real model answers. Three scripts check that. They call the model named by `LLM_MODEL`
+with the key in `LLM_API_KEY`, every call is billed, and they are never run by `test.sh`, CI,
+or any other automation: the owner runs them by hand, when a prompt or the model changes or
+after a deploy. Each script's header documents it in full.
+
+- [`eval-intents.sh`](../scripts/eval-intents.sh) — classifies the recorded messages in
+  `tests/intents.json` (a message, the card it answers or the account's apartment names, the day
+  it is typed on, and the expected intent and fields) and reports each case that differs. It
+  needs no AWS settings and no recorded data. A message the deployed app misunderstood becomes a
+  new case.
+- [`eval-readings.sh`](../scripts/eval-readings.sh) `[env] [--limit N]` — scores a model on the
+  photos the deployed model failed on (the failed-photos record of
+  [Domain rules](domain-rules.md)), against the serial and value the owner confirmed. It scans
+  every account's readings in the stack, with the owner's own AWS credentials, so it needs
+  real use of the deployed app first: until readings carry failed photos it has nothing to
+  score. A failed photo with no serial is scored against the next photo's reading, which may be
+  of another meter, so its "serial NO" is not always the model's error.
+- [`replay.sh`](../scripts/replay.sh) `[env] <email> --open … --close … [--statement …] --yes`
+  — walks the owner's story through a deployed api Lambda with the real model, as a smoke test
+  after a deploy: it resets the account first (as `reset-account.sh --yes` does), then
+  invokes the Lambda with the JWT claims the sign-in would give the address. Five billed calls,
+  three more with `--statement`. The photos are real meter photos, kept outside the repo.
+
+[`read-meter.sh`](../scripts/read-meter.sh) reads one photo through the model and prints the
+result, its time and its estimated cost; it is the quick check of a single photo.
 
 ## Setup for deployment
 
@@ -44,6 +87,14 @@ against a fake `aws` command.
 A bare `aws` command in your own shell has no credentials until it sources
 `scripts/aws-config.sh`; the scripts source it for you.
 
+## Frontend development
+
+Copy `frontend/config.example.js` to `frontend/public/config.js` and fill in the values from
+the stack outputs (or run `deploy.sh`, which generates the file), then run `npm ci` and
+`npm run dev` in `frontend/`. The dev server listens on port 8000, the callback address the
+Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed API accepts
+`http://localhost:8000` as a CORS origin.
+
 ## Deploy checks
 
 - The user pool refuses a sign-up by password. With the `UserPoolClientId` output of the
@@ -53,11 +104,16 @@ A bare `aws` command in your own shell has no credentials until it sources
 ## Scripts
 
 - [`deploy.sh [env]`](../scripts/deploy.sh) — builds the Lambda package and deploys the Cognito
-  and app stacks, then writes `frontend/public/config.js`. The callback URL and CORS origin need
-  the CloudFront URL, which exists only after the first deploy, so a run deploys both stacks
-  again when that URL changed. An `env` suffix such as `dev` deploys an isolated stack pair
-  beside the default one. It refuses to create the app stack while tables or a files bucket of
-  an earlier stack of the same name remain ([ADR 0006](adr/0006-retain-data-on-delete.md)).
+  and app stacks, writes `frontend/public/config.js`, then runs `sync-frontend.sh`. The callback
+  URL and CORS origin need the CloudFront URL, which exists only after the first deploy, so a
+  run deploys both stacks again when that URL changed. An `env` suffix such as `dev` deploys an
+  isolated stack pair beside the default one. It refuses to create the app stack while tables
+  or a files bucket of an earlier stack of the same name remain
+  ([ADR 0006](adr/0006-retain-data-on-delete.md)).
+- [`sync-frontend.sh [env]`](../scripts/sync-frontend.sh) — builds the frontend and publishes it
+  to the frontend bucket with `app.json` and `docs/demo/demo.html`, then invalidates the
+  CloudFront cache. Run by `deploy.sh`; run it alone after a frontend-only change. It refuses to
+  publish a `config.js` that targets another stack's API.
 - [`delete-stack.sh [env]`](../scripts/delete-stack.sh) — empties the frontend bucket and
   deletes both stacks, leaving the tables and the files bucket in place. Its header explains how
   to import them into a new stack or remove them for good.
@@ -76,11 +132,15 @@ A bare `aws` command in your own shell has no credentials until it sources
   or another model on a real photo; the suite exercises each provider's implementation against
   a stubbed client only, so a real call is a manual check. The logic is in `read_meter.py`
   beside it.
-- [`eval-readings.sh [env] [--limit N]`](../scripts/eval-readings.sh) — runs the model in
-  `LLM_MODEL` over every photo recorded as failed in the named stack, or the first N, and
-  prints whether it got each serial and value right as each photo is scored, then totals. It
-  reads every account's readings and photos in the stack with the owner's credentials. Each
-  photo scored is one billed model call.
+- [`reset-account.sh [env] <email> [--yes]`](../scripts/reset-account.sh) — deletes everything
+  the account owns in the named stack: the rows keyed by its address, or by its address and a
+  `#`, in every app table, and every version of its photos under `<email>/` in the files bucket.
+  Without `--yes` it prints the count per table and of photo versions and deletes nothing. Use
+  it to replay a story from an empty account. A delegate's own rows (its access row, pending
+  items and messages) are keyed by the delegate's address and stay, so a delegate keeps access
+  to the emptied account. The logic is in `reset_account.py` beside it;
+  `app_stack.py` resolves a stack's tables, bucket and api function for the scripts that work
+  on a deployed stack.
 
 `scripts/common.sh` holds the helpers the shell scripts source: the `--help` printer, the
 settings-file checks, the `env` suffix parsing and the stack lookups.

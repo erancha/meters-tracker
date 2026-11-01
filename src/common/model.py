@@ -1,7 +1,9 @@
-"""Typed interface to the vision/language model: reading meter photos and classifying chat text.
+"""Typed interface to the vision/language model: reading meter photos and previous statements,
+and classifying chat text.
 
 Core pieces:
-- MeterReadingResult / IntentResult: pydantic schemas the model's answers are parsed into
+- MeterReadingResult / StatementResult / IntentResult: pydantic schemas the model's answers are
+  parsed into
 - Model: the Protocol the rest of the app depends on (tests use a fake)
 - ClaudeModel / OpenAIModel: one implementation per provider, each asking its API for answers
   shaped to the schema through the provider's own SDK
@@ -14,6 +16,7 @@ Core pieces:
 import base64
 import os
 from dataclasses import dataclass
+from datetime import date
 from typing import Literal, Protocol
 
 import anthropic
@@ -47,6 +50,21 @@ class MeterReadingResult(BaseModel):
     handwritten_label: str | None
 
 
+class StatementResult(BaseModel):
+    """The tariffs read from a photo of a previous statement. Prices are per kWh and per m3 in
+    shekels; ignored holds the tariff lines not taken as a price. property, apartment and
+    period_end are as written on the statement."""
+
+    is_statement: bool
+    electricity_per_kwh: float | None
+    water_per_m3: float | None
+    includes_vat: bool
+    ignored: list[str]
+    property: str | None
+    apartment: str | None
+    period_end: str | None
+
+
 class IntentResult(BaseModel):
     intent: Literal[
         "confirm",
@@ -55,22 +73,34 @@ class IntentResult(BaseModel):
         "set_date",
         "choose_property",
         "choose_apartment",
+        "choose_option",
         "set_period",
         "close_period",
         "vacate",
         "change_period",
+        "set_tariffs",
+        "explain",
         "unknown",
     ]
     field: str | None = None
     value: int | None = None
     date: str | None = None
     name: str | None = None
+    apartment: str | None = None
+    serial: str | None = None
     is_new: bool | None = None
     months: int | None = None
+    electricity_price: float | None = None
+    water_price: float | None = None
 
 
 class ModelRefused(Exception):
     """The model declined to answer."""
+
+
+# What a provider SDK raises when a call fails (unreachable, rejected key, no credit), each with
+# the provider's message.
+PROVIDER_ERRORS = (anthropic.APIError, openai.APIError)
 
 
 @dataclass(frozen=True)
@@ -82,12 +112,22 @@ class Usage:
 
 
 class Model(Protocol):
-    """What the app needs from a model: read one meter photo, classify one chat message given the
-    text describing the pending card (empty when there is none)."""
+    """What the app needs from a model: read one meter photo, read one photo as a previous
+    statement, classify one chat message given the text describing the pending card (empty when
+    there is none)."""
 
     def read_meter(self, image: bytes, media_type: str) -> MeterReadingResult: ...
 
-    def classify(self, text: str, context: str) -> IntentResult: ...
+    def read_statement(self, image: bytes, media_type: str) -> StatementResult: ...
+
+    def classify(self, text: str, context: str, today: date) -> IntentResult: ...
+
+
+def _classify_content(text: str, context: str, today: date) -> str:
+    """The message to classify, after today's date, which resolves dates written without a year,
+    and before the pending card, when there is one."""
+    message = f"Today: {today.isoformat()}\n\n{text}"
+    return f"{message}\n\nPending card:\n{context}" if context else message
 
 
 def api_key_from_ssm(param_name: str) -> str:
@@ -132,7 +172,16 @@ class ClaudeModel(Model):
         self.last_usage: Usage | None = None
 
     def read_meter(self, image: bytes, media_type: str) -> MeterReadingResult:
-        content = [
+        content = self._image_content(image, media_type, "Read this meter.")
+        return self._parse(prompts.READ_METER, content, MeterReadingResult)
+
+    def read_statement(self, image: bytes, media_type: str) -> StatementResult:
+        content = self._image_content(image, media_type, "Read this statement.")
+        return self._parse(prompts.READ_STATEMENT, content, StatementResult)
+
+    @staticmethod
+    def _image_content(image: bytes, media_type: str, instruction: str) -> list:
+        return [
             {
                 "type": "image",
                 "source": {
@@ -141,13 +190,11 @@ class ClaudeModel(Model):
                     "data": base64.standard_b64encode(image).decode(),
                 },
             },
-            {"type": "text", "text": "Read this meter."},
+            {"type": "text", "text": instruction},
         ]
-        return self._parse(prompts.READ_METER, content, MeterReadingResult)
 
-    def classify(self, text: str, context: str) -> IntentResult:
-        content = f"{text}\n\nPending card:\n{context}" if context else text
-        return self._parse(prompts.CLASSIFY, content, IntentResult)
+    def classify(self, text: str, context: str, today: date) -> IntentResult:
+        return self._parse(prompts.CLASSIFY, _classify_content(text, context, today), IntentResult)
 
     # The installed SDK's messages.parse takes no fallbacks/betas; see the claude-api skill,
     # section "Refusal Fallbacks", when upgrading.
@@ -177,16 +224,23 @@ class OpenAIModel(Model):
         self.last_usage: Usage | None = None
 
     def read_meter(self, image: bytes, media_type: str) -> MeterReadingResult:
-        data = base64.standard_b64encode(image).decode()
-        content = [
-            {"type": "input_image", "image_url": f"data:{media_type};base64,{data}"},
-            {"type": "input_text", "text": "Read this meter."},
-        ]
+        content = self._image_content(image, media_type, "Read this meter.")
         return self._parse(prompts.READ_METER, content, MeterReadingResult)
 
-    def classify(self, text: str, context: str) -> IntentResult:
-        content = f"{text}\n\nPending card:\n{context}" if context else text
-        return self._parse(prompts.CLASSIFY, content, IntentResult)
+    def read_statement(self, image: bytes, media_type: str) -> StatementResult:
+        content = self._image_content(image, media_type, "Read this statement.")
+        return self._parse(prompts.READ_STATEMENT, content, StatementResult)
+
+    @staticmethod
+    def _image_content(image: bytes, media_type: str, instruction: str) -> list:
+        data = base64.standard_b64encode(image).decode()
+        return [
+            {"type": "input_image", "image_url": f"data:{media_type};base64,{data}"},
+            {"type": "input_text", "text": instruction},
+        ]
+
+    def classify(self, text: str, context: str, today: date) -> IntentResult:
+        return self._parse(prompts.CLASSIFY, _classify_content(text, context, today), IntentResult)
 
     def _parse(self, system: str, content, text_format):
         response = self._client.responses.parse(

@@ -1,6 +1,6 @@
-"""Shared scaffolding for the engine tests: the example meters, a fake model whose photos are
-registered on the fly, an Engine over the moto store with a settable clock, and seeding helpers
-for properties, apartments, periods, meters and readings."""
+"""Shared scaffolding for the engine tests: the example meters and statement, a fake model whose
+photos are registered on the fly, an Engine over the moto store with a settable clock, and
+seeding helpers for properties, apartments, periods, meters, readings and tariffs."""
 
 import hashlib
 import json
@@ -12,7 +12,7 @@ from fake_model import FakeModel
 from common.access import User
 from common.engine import Action, Choice, Engine
 from common.files import Files
-from common.model import Candidate, MeterReadingResult
+from common.model import Candidate, MeterReadingResult, StatementResult
 from common.store import Store
 
 ACCOUNT = "owner@x.com"
@@ -25,24 +25,51 @@ def candidate(value, position, unit, unreadable=False):
     )
 
 
-def electricity(top=392691, bottom=392693, serial="E-392"):
+def electricity(top=392691, bottom=392693, serial="E-392", label=None):
+    """label is the handwritten label the model reads beside the meter."""
     return MeterReadingResult(
         meter_type="electricity",
         serial=serial,
         serial_unreadable=False,
         candidates=[candidate(top, "top", "kWh"), candidate(bottom, "bottom", "kWh")],
-        handwritten_label=None,
+        handwritten_label=label,
     )
 
 
-def water(value=1250, serial="W-1250", unreadable=False):
+def water(value=1250, serial="W-1250", unreadable=False, label=None):
     return MeterReadingResult(
         meter_type="water",
         serial=serial,
         serial_unreadable=False,
         candidates=[candidate(value, "single", "m3", unreadable)],
-        handwritten_label=None,
+        handwritten_label=label,
     )
+
+
+UNKNOWN = MeterReadingResult(
+    meter_type="unknown",
+    serial=None,
+    serial_unreadable=False,
+    candidates=[],
+    handwritten_label=None,
+)
+
+
+def statement(electricity=0.6432, water=15.62, includes_vat=True, is_statement=True):
+    """The example statement: a water line for yard maintenance is the tariff it ignores."""
+    return StatementResult(
+        is_statement=is_statement,
+        electricity_per_kwh=electricity,
+        water_per_m3=water,
+        includes_vat=includes_vat,
+        ignored=["מים - תחזוקת חצר"],
+        property="הגפן 7",
+        apartment="עורף",
+        period_end="31/08/2026",
+    )
+
+
+NOT_STATEMENT = statement(None, None, is_statement=False)
 
 
 def reading(day, value, opens=None, closes=None):
@@ -63,7 +90,8 @@ class Kit:
         self.today = today
         self.store = Store.from_env()
         self._photos = {}
-        self.model = FakeModel(self._photos, list(intents))
+        self._statements = {}
+        self.model = FakeModel(self._photos, list(intents), self._statements)
         with open("config/app.json") as f:
             config = json.load(f)
         self.engine = Engine(
@@ -76,9 +104,16 @@ class Kit:
             clock=lambda: self.today,
         )
 
-    def send_photo(self, result, note=None):
+    def register_photo(self, image: bytes, result, as_statement=NOT_STATEMENT):
+        """Makes the model read image as result, and as as_statement when result is no meter."""
+        digest = hashlib.sha256(image).hexdigest()
+        self._photos[digest] = result
+        self._statements[digest] = as_statement
+
+    def send_photo(self, result, note=None, as_statement=NOT_STATEMENT):
+        """Sends a photo the model reads as result, and as as_statement when result is no meter."""
         image = f"photo-{len(self._photos)}".encode()
-        self._photos[hashlib.sha256(image).hexdigest()] = result
+        self.register_photo(image, result, as_statement)
         return self.engine.turn(USER, Action(image=image, media_type="image/jpeg", note=note))
 
     def choose(self, option):
@@ -128,6 +163,23 @@ class Kit:
         )
         for r in readings:
             self.store.put_reading(ACCOUNT, serial, r)
+
+    def send_statement(self, result=None, note=None):
+        return self.send_photo(UNKNOWN, note, statement() if result is None else result)
+
+    def tariff(self, effective_date, electricity, water):
+        self.store.put_tariff(
+            ACCOUNT,
+            {
+                "effective_date": effective_date,
+                "electricity_per_kwh": electricity,
+                "water_per_m3": water,
+                "source_image_key": None,
+            },
+        )
+
+    def tariffs(self):
+        return self.store.tariffs(ACCOUNT)
 
     def readings(self, serial):
         return self.store.readings(ACCOUNT, serial)

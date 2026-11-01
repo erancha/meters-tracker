@@ -2,18 +2,22 @@
 
 A flow is a small state machine persisted as a pending item: {seq, kind, status, step, version,
 data}. seq orders the queue of pending items and doubles as the reading's seq once one is saved;
-kind names the flow module; status is "reading" while the model reads the photo, "awaiting" while
-a card waits for the user, "parked" while a close waits for a missing meter's photo and shows no
-card; step is the state within the flow; version grows every time the item shows a card or a
-choice claims it, so a choice names the exact card it answers; data holds the flow's accumulated
-answers, enough to render its card without another store read.
+kind names the flow module; status is "reading" while the model reads the photo, "awaiting" while a
+card waits for the user, "parked" while a close waits for a missing meter's photo and shows no card,
+"standby" while a card waits that shows, and takes typed text, only when no card awaits; step is the
+state within the flow; version grows every time the item shows a card or a choice claims it, so a
+choice names the exact card it answers; data holds the flow's accumulated answers, enough to render
+its card without another store read.
 
 Building blocks:
 - Action / Choice / Reply / Snapshot / TurnResult: what a turn takes and returns
 - new_item / make_card / ask / drop / decide: a new pending item, card rendering, the pending
   write, reading a choice or text
+- classify_context / request_context: what the classifier is given with an answer to a card,
+  and with a request no card takes
 - propose / edit_reading: the value a photo proposes and the edits a reading card accepts
-- save_reading / summary: the reading record and the reply that follows a save
+- save_reading / summary / price_in / price_on: the reading record, the reply that follows a
+  save, and the price it is charged at
 - failed_photos / failure_record: the photos the model failed on, recorded with the reading
 - put_period / flagged / move_period: period rows and the reading flags that point at them
 - with_apartment / dated_rows: resolving a typed apartment name; card rows with parsed dates
@@ -30,6 +34,7 @@ from common.periods import charge, consumption, forecast, open_period, period_re
 READING = "reading"
 AWAITING = "awaiting"
 PARKED = "parked"
+STANDBY = "standby"
 POSITIONS = ("top", "bottom")
 FAILURE_FIELDS = ("failed_photos", "model")
 PRICES = {"electricity": "electricity_per_kwh", "water": "water_per_m3"}
@@ -72,26 +77,57 @@ class Snapshot:
 class TurnResult:
     replies: list[Reply]
     snapshot: Snapshot
+    # The stored key of the photo the turn sent, so the browser can pair it with its own copy.
+    image_key: str | None
 
 
 def new_item(seq, kind, status, step, data) -> dict:
     return {"seq": seq, "kind": kind, "status": status, "step": step, "version": 0, "data": data}
 
 
-def make_card(item, kind, text: tuple[str, list[str]], options: list[str]) -> dict:
+def make_card(
+    item,
+    kind,
+    text: tuple[str, list[str]],
+    options: list[str],
+    labels: dict[str, str] | None = None,
+) -> dict:
+    """labels names the options whose label depends on the item (a date); the rest take their
+    fixed label."""
     title, lines = text
+    labels = {
+        **{o: texts.OPTION_LABELS[o] for o in options if o in texts.OPTION_LABELS},
+        **(labels or {}),
+    }
     return {
         "kind": kind,
         "pending": item["seq"],
         "version": item["version"],
         "title": title,
         "lines": lines,
-        "options": [{"id": option, "label": texts.OPTION_LABELS[option]} for option in options],
+        "options": [{"id": option, "label": labels[option]} for option in options],
     }
 
 
 def card_text(card) -> str:
     return "\n".join([card["title"], *card["lines"]])
+
+
+def classify_context(card) -> str:
+    """The card as the classifier is given it: its text, then its button labels when it has
+    any, so a message can name a button."""
+    labels = [option["label"] for option in card["options"]]
+    context = card_text(card)
+    return context + "\nכפתורים: " + " | ".join(labels) if labels else context
+
+
+def request_context(apartment_names: list[str], standby_card=None) -> str:
+    """The context of typed text no awaiting card takes: the standby card when one waits, then
+    the account's apartment names, so a request names its apartment exactly as stored."""
+    parts = [] if standby_card is None else [classify_context(standby_card)]
+    if apartment_names:
+        parts.append("דירות: " + " | ".join(apartment_names))
+    return "\n".join(parts)
 
 
 def card_reply(card) -> Reply:
@@ -115,12 +151,20 @@ def decide(engine, card, action) -> tuple[str, IntentResult | None]:
     The engine has already checked that a choice's option is on the card."""
     if action.choice is not None:
         return action.choice.option, None
-    intent = engine.model.classify(action.text, card_text(card))
+    labels = {option["label"]: option["id"] for option in card["options"]}
+    intent = engine.model.classify(action.text, classify_context(card), engine.clock())
+    # A typed button label answers as the button does; a label the card lacks is not understood.
+    if intent.intent == "choose_option" and intent.name in labels:
+        return labels[intent.name], None
     return intent.intent, intent
 
 
-def not_understood(card) -> list[Reply]:
-    return [Reply(texts.unknown_intent()), card_reply(card)]
+def not_understood(card, key) -> list[Reply]:
+    """The reply to an answer the card cannot take, then the card again: what the card asks when
+    the owner asked that and the card has an explanation, else the general help."""
+    explain = key == "explain" and card["kind"] in texts.EXPLANATIONS
+    text = texts.EXPLANATIONS[card["kind"]] if explain else texts.unknown_intent()
+    return [Reply(text), card_reply(card)]
 
 
 def readable(candidate) -> bool:
@@ -141,7 +185,8 @@ def propose(data, display_choice) -> bool:
     if len(wanted) == 1:
         data.update(value=values[wanted[0]], position=wanted[0], alternatives=None)
     else:
-        data.update(value=values["top"], position="top", alternatives=values)
+        alternatives = {position: values[position] for position in POSITIONS}
+        data.update(value=values["top"], position="top", alternatives=alternatives)
     return True
 
 
@@ -163,6 +208,18 @@ def edit_reading(data, key, intent) -> bool:
     return True
 
 
+def correct_serial(data, key, intent) -> bool:
+    """Applies a typed serial correction; False when key is not one. The serial the model read
+    is kept as read_serial, so the saved reading records the misread."""
+    if key != "correct_field" or intent.field != "serial":
+        return False
+    if intent.serial is None:
+        raise ValueError("a serial correction came without the serial")
+    data.setdefault("read_serial", data["serial"])
+    data["serial"] = intent.serial
+    return True
+
+
 def intent_date(intent) -> str:
     if intent.date is None:
         raise ValueError("set_date intent came without a date")
@@ -178,12 +235,13 @@ def reading_text(data):
         data["value"],
         parse_iso(data["reading_date"]),
         data["alternatives"],
+        data["position"],
     )
 
 
 def reading_options(data) -> list[str]:
     edits = [] if data["alternatives"] is None else list(POSITIONS)
-    return [*edits, "confirm", "reject"]
+    return [*edits, "confirm"]
 
 
 def by_id(records, record_id) -> dict:
@@ -201,9 +259,11 @@ def current_period(engine, user, apartment_id) -> dict | None:
 
 def failed_photos(data) -> list[str]:
     """The photos the model failed on along the way to this reading: the superseded unreadable
-    ones, then this one when the confirmed value is not among the values it read."""
+    ones, then this one when the confirmed value is not among the values it read or the owner
+    corrected its serial."""
     read_values = [c["value"] for c in data["candidates"] if readable(c)]
-    if data["value"] in read_values:
+    serial_corrected = "read_serial" in data and data["read_serial"] != data["serial"]
+    if data["value"] in read_values and not serial_corrected:
         return data["failed_photos"]
     return [*data["failed_photos"], data["image_key"]]
 
@@ -232,6 +292,17 @@ def save_reading(engine, user, item, opens=None, closes=None) -> dict:
     return reading
 
 
+def price_in(tariffs, meter_type, d) -> float | None:
+    """The price of meter_type in the tariff in force on d; None when no tariff is in force or
+    that tariff leaves the type unpriced."""
+    tariff = tariff_on(tariffs, d)
+    return None if tariff is None else tariff[PRICES[meter_type]]
+
+
+def price_on(engine, user, meter_type, d) -> float | None:
+    return price_in(engine.store.tariffs(user.account), meter_type, d)
+
+
 def summary(engine, user, meter, reading) -> Reply:
     apartment, prop = place(engine, user, meter["apartment_id"])
     readings = engine.store.readings(user.account, meter["serial"])
@@ -251,9 +322,9 @@ def summary(engine, user, meter, reading) -> Reply:
         period_units, final = c.units, c.final
         outlook = c.units if final else forecast(c, period)
         priced_on = parse_iso(c.last["date"]) if final else engine.clock()
-        tariff = tariff_on(engine.store.tariffs(user.account), priced_on)
-        if outlook is not None and tariff is not None:
-            amount = charge(outlook, tariff[PRICES[meter["type"]]])
+        price = price_on(engine, user, meter["type"], priced_on)
+        if outlook is not None and price is not None:
+            amount = charge(outlook, price)
     return Reply(
         texts.summary_after_save(
             prop["name"],

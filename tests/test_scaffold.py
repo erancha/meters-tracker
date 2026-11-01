@@ -25,6 +25,7 @@ def test_app_config_values():
     assert config == {
         "default_period_months": 2,
         "reclose_days": 7,
+        "close_days_before_end": 7,
         "sidebar_min_width_px": 900,
         "file_url_minutes": 10,
     }

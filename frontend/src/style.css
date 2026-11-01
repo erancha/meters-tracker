@@ -1,0 +1,154 @@
+body { margin: 0; background: #f6f8f9; }
+#root {
+  min-height: 100dvh; display: flex; flex-direction: column;
+  --accent: #1d5b8c; --accent-soft: #e6eff6; --accent-border: #b9cfe0;
+  --ink: #1d2a33; --muted: #6b7a84; --hair: #dde4e8; --card: #fff;
+  --elec: #a8670c; --elec-soft: #fdf1dc; --water: #1f6fb8; --water-soft: #e3effa;
+  --warn: #8a4b00; --warn-soft: #fff4e0; --ok: #2c7a3f;
+  --total: #c0392b;
+  font-family: system-ui, "Segoe UI", Arial, sans-serif; color: var(--ink); background: #f6f8f9;
+  font-size: 15px; line-height: 1.45; direction: rtl;
+}
+#root p { margin: 0; }
+#root p + p, #root p + .chips, #root .chips + p, #root dl + p, #root p + dl { margin-top: 0.45rem; }
+/* Inline, not inline-block: an atomic box lets a line break right after an opening parenthesis. */
+#root .ltr { direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
+#root .num { font-variant-numeric: tabular-nums; }
+#root .muted { color: var(--muted); font-size: 0.88em; }
+#root .icon { width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+#root .brand { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--accent); font-weight: 700; }
+#root .brand .icon { width: 1.3em; height: 1.3em; }
+
+/* landing */
+/* One centered column: a white card holding the pitch and the sign-in button, then the demo link.
+   The page fills the viewport, and two auto margins (above the card and above the link) split its
+   spare height, centering the card while the link rides the bottom edge. Expanded text taller than
+   the viewport leaves no spare height, so the margins collapse and the page scrolls. */
+#root .landing { display: flex; flex-direction: column; width: 100%; max-width: 48rem; min-height: 100dvh; margin-inline: auto; padding: 1rem; box-sizing: border-box; }
+#root .landing-card { display: flex; flex-direction: column; margin-top: auto; background: var(--card); border: 1px solid var(--hair); border-radius: 8px; padding: 1rem; }
+@media (min-width: 48rem) { #root .landing-card { padding: 2rem; } }
+#root .landing .brand { align-self: center; margin: 0 0 1rem; font-size: min(2.6rem, 11vw); }
+#root .landing-intro, #root .landing-condensed { margin: 0.5em 0 0.6rem; }
+/* The condensed pitch is the page's whole message, so it reads a touch larger than body copy. */
+#root .landing-condensed { font-size: calc(1em + 2px); }
+#root .landing-summary { margin: 0 0 1rem; padding-inline-start: 1.2rem; }
+#root .landing-summary li:not(:last-child) { margin-bottom: 0.6rem; }
+#root .landing button { font: inherit; cursor: pointer; border-radius: 8px; }
+/* The toggle sits at least a rem off both the content and the sign-in button, so the screen's
+   single action does not read as part of the toggle's line. Its triangle points along the reading
+   direction while folded and down once open. */
+#root .landing .more-toggle { align-self: flex-start; margin-block: 1rem; padding: 0; border: 0; background: none; color: var(--accent); font-size: 0.9rem; }
+#root .landing .more-toggle::before { content: "▾ "; }
+#root .landing .more-toggle[aria-expanded="false"]::before { content: "◂ "; }
+/* Dark text on an outline, the look of a third-party sign-in rather than the app's own actions. */
+#root .landing .sign-in { background: #fff; color: inherit; border: 1px solid #ccc; border-radius: 999px; padding: 0.6rem 2.5rem; font-weight: 600; }
+#root .landing .sign-in:hover { filter: brightness(0.93); }
+#root .landing .sign-in-mark { color: #1f4e8c; font-weight: 700; margin-inline-end: 0.6rem; }
+/* A phone gets a full-width button, the easiest target; across a wider measure the same button
+   would read as a banner, so it falls back to its content width on the start edge. */
+@media (min-width: 48rem) { #root .landing .sign-in { align-self: flex-start; } }
+#root .landing-demo { margin-top: auto; padding-top: 2.5rem; }
+
+/* chat */
+#root .chat { flex: 1; display: flex; flex-direction: column; }
+#root .app-head {
+  position: sticky; top: 0; z-index: 5; background: #eef3f6; border-bottom: 1px solid var(--hair);
+  display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem;
+}
+#root .msgs { list-style: none; margin: 0; padding: 0.8rem 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; flex: 1; }
+#root .msg { max-width: 88%; border-radius: 12px; padding: 0.55rem 0.75rem; }
+#root .msg.user { align-self: flex-start; background: var(--accent-soft); border-end-start-radius: 4px; }
+#root .msg.bot { align-self: flex-end; background: var(--card); border: 1px solid var(--hair); border-end-end-radius: 4px; }
+#root .msg.photo { padding: 0.3rem; background: var(--accent-soft); }
+#root .msg-time { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.72rem; text-align: end; }
+#root .msg.photo .shots { display: flex; gap: 0.3rem; }
+
+#root .card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; font-weight: 600; margin-bottom: 0.4rem; }
+#root .kind { font-size: 0.75rem; font-weight: 600; border-radius: 999px; padding: 0.05rem 0.55rem; }
+#root .kind-elec { color: var(--elec); background: var(--elec-soft); }
+#root .kind-water { color: var(--water); background: var(--water-soft); }
+#root .tag-new { font-size: 0.72rem; color: var(--accent); border: 1px solid var(--accent-border); border-radius: 999px; padding: 0 0.45rem; font-weight: 500; }
+#root dl.facts-list { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.2rem 0.8rem; font-size: 0.92em; }
+#root dl.facts-list dt { color: var(--muted); }
+#root dl.facts-list dd { margin: 0; }
+#root .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+#root .chip {
+  font: inherit; font-size: 0.88rem; background: #fff; color: var(--accent);
+  border: 1px solid var(--accent-border); border-radius: 999px; padding: 0.25rem 0.75rem;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+}
+#root .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+#root .chip.on::before { content: "✓"; }
+#root .actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; align-items: center; }
+#root .primary { font: inherit; font-weight: 600; background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 8px; padding: 0.4rem 1.2rem; }
+#root .secondary { font: inherit; background: #fff; color: var(--accent); border: 1px solid var(--accent-border); border-radius: 8px; padding: 0.4rem 0.9rem; }
+#root .done { color: var(--ok); font-weight: 600; font-size: 0.9rem; }
+#root .sum { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.9em; }
+#root .sum td { padding: 0.2rem 0; border-bottom: 1px solid var(--hair); }
+#root .sum td:not(:first-child) { text-align: end; font-variant-numeric: tabular-nums; }
+#root .sum tr:last-child td { border-bottom: 0; font-weight: 700; }
+
+#root .composer {
+  position: sticky; bottom: 0; z-index: 5; background: #eef3f6; border-top: 1px solid var(--hair);
+  display: flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.7rem;
+}
+#root .glyph { background: #fff; border: 1px solid var(--accent-border); color: var(--accent); border-radius: 50%; width: 2.3rem; height: 2.3rem; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#root .draft { flex: 1; min-width: 0; background: #fff; border: 1px solid #ccd6dc; border-radius: 18px; padding: 0.45rem 0.8rem; min-height: 2.3rem; font-size: 0.92rem; }
+#root .draft.empty { color: #9aa7af; }
+#root .send { font: inherit; font-size: 0.85rem; font-weight: 600; color: #fff; background: var(--accent); border: 0; border-radius: 18px; padding: 0.5rem 0.9rem; flex: none; }
+#root .send:disabled { background: #c5d0d7; color: #f4f7f9; }
+
+#root .viewer { flex: 1; background: #525c63; padding-bottom: 1.5rem; }
+#root .viewer-bar { position: sticky; top: 0; background: #2f373d; color: #fff; padding: 0.6rem 0.9rem; font-size: 0.82rem; display: flex; gap: 0.6rem; align-items: center; }
+
+#root .alert { margin: 1rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--warn-soft); border: 1px solid #f0d6a8; color: var(--warn); }
+#root .text { white-space: pre-line; }
+
+#root .msg.photo .shot { display: block; padding: 0; border: 0; background: none; cursor: pointer; }
+#root .msg.photo img { display: block; width: 168px; height: auto; border-radius: 8px; }
+#root .msg.photo .shots img { width: 128px; }
+#root .lightbox {
+  position: fixed; inset: 0; z-index: 25; background: rgba(8,14,18,0.94);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+#root .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+#root .lightbox-close {
+  position: absolute; top: 0.7rem; left: 0.7rem; width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  border: 0; background: rgba(255,255,255,0.16); color: #fff; font-size: 1.1rem; line-height: 1;
+}
+
+/* account menu */
+#root .app-head .account { position: relative; }
+#root .app-head .glyph { width: 2rem; height: 2rem; }
+#root .account-menu {
+  position: absolute; inset-inline-end: 0; top: calc(100% + 0.3rem); z-index: 10; min-width: 12rem;
+  background: var(--card); border: 1px solid var(--hair); border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(29,42,51,0.14); padding: 0.4rem; display: grid; gap: 0.25rem;
+}
+#root .account-email { padding: 0.3rem 0.6rem; font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
+#root .account-menu [role="menu"] { display: grid; border-top: 1px solid var(--hair); padding-top: 0.25rem; }
+#root .menu-item { font: inherit; background: none; border: 0; color: var(--ink); text-align: start; padding: 0.4rem 0.6rem; border-radius: 8px; }
+#root .menu-item:hover { background: var(--accent-soft); }
+
+/* layout: one column; the sidebar joins beside the chat when the window is wide enough */
+#root .columns { flex: 1; display: flex; min-width: 0; }
+#root .columns > .chat { min-width: 0; }
+#root .sidebar {
+  /* margin-inline-start keeps it at the row's end even while the chat has not rendered yet */
+  flex: none; width: 15rem; margin-inline-start: auto; border-inline-start: 1px solid var(--hair);
+  background: var(--card);
+  padding: 0.8rem; overflow-y: auto; max-height: calc(100dvh - 3.2rem); position: sticky; top: 3.2rem;
+}
+#root .sidebar h2 { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+#root .sidebar ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+#root .sidebar .shot { display: block; padding: 0; border: 0; background: none; cursor: pointer; }
+#root .sidebar img { display: block; width: 100%; height: auto; border-radius: 8px; }
+
+/* narrow windows never scroll sideways */
+#root .text, #root .msg { overflow-wrap: anywhere; }
+#root .msg img { max-width: 100%; }
+
+#root .msg.thinking .dots::after { content: "…"; display: inline-block; animation: thinking 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; width: 0; }
+@keyframes thinking { to { width: 1.2em; } }
+@media (prefers-reduced-motion: reduce) { #root .msg.thinking .dots::after { animation: none; width: auto; } }

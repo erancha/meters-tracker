@@ -2,10 +2,10 @@
 limits, file URL authorization, and the verified-email requirement."""
 
 import base64
-import hashlib
 import json
 from urllib.parse import unquote
 
+import anthropic
 import boto3
 import pytest
 from engine_kit import ACCOUNT, Kit, electricity, options, reading
@@ -38,7 +38,7 @@ def _body(result):
 
 
 def _post_photo(kit, data=b"photo-0", media_type="image/jpeg"):
-    kit._photos[hashlib.sha256(data).hexdigest()] = electricity()
+    kit.register_photo(data, electricity())
     body = {"image": base64.b64encode(data).decode(), "media_type": media_type}
     return api.handler(event("POST /turn", body), None)
 
@@ -79,9 +79,9 @@ def test_post_turn_image_creates_reading_card(kit):
     result = _post_photo(kit)
     assert result["statusCode"] == 200
     body = _body(result)
-    assert options(body["snapshot"]["card"]) == ["confirm", "reject"]
+    assert options(body["snapshot"]["card"]) == ["confirm"]
     assert body["replies"][-1]["card"] == body["snapshot"]["card"]
-    assert len(_stored_keys()) == 1
+    assert _stored_keys() == [body["image_key"]]
 
 
 def test_choice_confirms_the_reading(kit):
@@ -90,7 +90,13 @@ def test_choice_confirms_the_reading(kit):
     result = api.handler(event("POST /turn", _choice(card, "confirm")), None)
     assert result["statusCode"] == 200
     assert _body(result)["snapshot"]["card"] is None
+    assert _body(result)["image_key"] is None
     assert kit.readings("E-392")[-1]["value"] == 392691
+    history = _body(api.handler(event("GET /chat"), None))["messages"]
+    assert [m["choice"] for m in history if m["role"] == "user"] == [
+        None,
+        {"pending": card["pending"], "version": card["version"]},
+    ]
 
 
 def test_choice_on_handled_item_is_409(kit):
@@ -121,13 +127,13 @@ def test_gif_is_400(kit):
 
 
 def test_files_url_of_own_account_is_served(kit):
-    result = api.handler(event("GET /files/{key}", key=f"{ACCOUNT}%2Fimages%2Fa.jpg"), None)
+    result = api.handler(event("GET /files/{key+}", key=f"{ACCOUNT}/images/a.jpg"), None)
     assert result["statusCode"] == 200
     assert f"{ACCOUNT}/images/a.jpg" in unquote(_body(result)["url"])
 
 
 def test_files_url_of_other_account_is_403(kit):
-    result = api.handler(event("GET /files/{key}", key="other%40x.com%2Fimages%2Fa.jpg"), None)
+    result = api.handler(event("GET /files/{key+}", key="other%40x.com/images/a.jpg"), None)
     assert result["statusCode"] == 403
     assert _body(result) == {"error": "forbidden"}
 
@@ -197,7 +203,7 @@ def test_get_chat_does_not_build_the_model(kit, monkeypatch):
     ["owner@x.com.evil%2Fimages%2Fa.jpg", "other%40x.com%2F..%2Fa.jpg", "%2Fowner%40x.com%2Fa.jpg"],
 )
 def test_files_url_with_lookalike_key_is_403(kit, key):
-    result = api.handler(event("GET /files/{key}", key=key), None)
+    result = api.handler(event("GET /files/{key+}", key=key), None)
     assert result["statusCode"] == 403
 
 
@@ -232,3 +238,38 @@ def test_unverified_email_is_403_and_creates_no_account(kit, route):
     assert result["statusCode"] == 403
     assert _body(result) == {"error": "email_unverified"}
     assert kit.store.access_get(USER_EMAIL) is None
+
+
+def _provider_down(*args):
+    raise anthropic.APIError("credit balance is too low", None, body=None)
+
+
+def _assert_model_unavailable(result, caplog):
+    assert result["statusCode"] == 503
+    assert _body(result) == {"error": "model_unavailable"}
+    assert any(r.levelname == "ERROR" and r.exc_info for r in caplog.records)
+
+
+def test_photo_turn_reports_the_model_unavailable_and_keeps_the_message(kit, caplog):
+    kit.model.read_meter = _provider_down
+
+    result = api.handler(
+        event(
+            "POST /turn",
+            {"image": base64.b64encode(b"photo-0").decode(), "media_type": "image/jpeg"},
+        ),
+        None,
+    )
+
+    _assert_model_unavailable(result, caplog)
+    assert kit.store.pending(USER_EMAIL) == []
+    messages = _body(api.handler(event("GET /chat"), None))["messages"]
+    assert [m["role"] for m in messages if m["image_key"]] == ["user"]
+
+
+def test_text_turn_reports_the_model_unavailable(kit, caplog):
+    kit.model.classify = _provider_down
+
+    result = api.handler(event("POST /turn", {"text": "מה המצב"}), None)
+
+    _assert_model_unavailable(result, caplog)
