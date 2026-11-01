@@ -61,7 +61,7 @@ body { margin: 0; background: #f6f8f9; }
 #root .msg.user { align-self: flex-start; background: var(--accent-soft); border-end-start-radius: 4px; }
 #root .msg.bot { align-self: flex-end; background: var(--card); border: 1px solid var(--hair); border-end-end-radius: 4px; }
 #root .msg.photo { padding: 0.3rem; background: var(--accent-soft); }
-#root .msg-time { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.72rem; }
+#root .msg-time { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.66rem; }
 #root .msg-failed { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.2rem; color: var(--warn); font-size: 0.8rem; }
 #root .msg-failed button { font: inherit; padding: 0.1rem 0.6rem; border: 1px solid var(--accent-border); border-radius: 999px; background: var(--card); color: var(--accent); cursor: pointer; }
 #root .msg.photo .shots { display: flex; gap: 0.3rem; }
