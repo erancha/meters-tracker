@@ -8,5 +8,5 @@
 export GOOGLE_CLIENT_ID="<google-oauth-client-id>"
 export GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
 export LLM_MODEL="anthropic:claude-opus-5-5"
-# The OpenAI equivalent: gpt-6.1-sol reads images at a fifth of the flagship gpt-6-astra's price.
+# The OpenAI alternative: as of 2026-11, gpt-6.1-sol's token prices are half of claude-opus-5-5's.
 # export LLM_MODEL="openai:gpt-6.1-sol"
