@@ -1,7 +1,8 @@
 /**
  * The day's activity on a narrow window: a strip under the header that stays while the chat
  * scrolls, naming the day and offering a button per list of the day panel. A tap drops that one
- * list over the chat; a tap outside it closes it. Missing tariffs take the day's place.
+ * list over the chat; a tap outside it closes it. Missing tariffs take the day's place. With no
+ * lines and no missing tariffs the strip does not show.
  */
 import { useState } from "react";
 import { dayLines, tariffsAsk } from "../activity";
@@ -23,6 +24,7 @@ export function DayStrip({ messages, tariffsMissing, onFocus, day }: {
   const lines = dayLines(messages);
   // A list left with no lines shows as closed: its button is gone, so nothing else could close it.
   const shown = open === null ? [] : lines[open];
+  if (!tariffsMissing && lines.held.length === 0 && lines.saved.length === 0) return null;
   const listButton = (list: List, label: string) => (
     <button type="button" className={`chip ${list}`}
             aria-expanded={shown.length > 0 && open === list}
@@ -37,14 +39,10 @@ export function DayStrip({ messages, tariffsMissing, onFocus, day }: {
         {tariffsMissing
           ? <TariffsAlert ask={tariffsAsk(messages)} onFocus={onFocus} />
           : <span className="muted">{texts.dayTitle} {shownDayMonth(day)}</span>}
-        {lines.held.length === 0 && lines.saved.length === 0
-          ? <span className="muted">{texts.noReadingsToday}</span>
-          : (
-            <span className="chips">
-              {lines.held.length > 0 && listButton("held", texts.heldShort(lines.held.length))}
-              {lines.saved.length > 0 && listButton("saved", texts.savedShort(lines.saved.length))}
-            </span>
-          )}
+        <span className="chips">
+          {lines.held.length > 0 && listButton("held", texts.heldShort(lines.held.length))}
+          {lines.saved.length > 0 && listButton("saved", texts.savedShort(lines.saved.length))}
+        </span>
       </div>
       {shown.length > 0 && (
         <>

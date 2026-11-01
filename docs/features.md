@@ -95,7 +95,8 @@ On a narrower window the same day shows as a strip under the header, which stays
 scrolls: the day as `היום 01/11` (or `חסרים תעריפים` while a request for tariffs is open, tapping
 as above), then a button per section, `ממתינות 2` and `בוצעו 7`, each only when it has lines. A
 tap drops that section's lines over the chat; a tap on the same button, or outside the lines,
-closes them with the chat where it was, and a tap on a line closes them as it scrolls.
+closes them with the chat where it was, and a tap on a line closes them as it scrolls. A day with
+no lines and no missing tariffs shows no strip.
 
 ## Report email
 

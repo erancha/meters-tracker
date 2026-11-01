@@ -120,7 +120,8 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
   `activity.ts` derives from the loaded messages, so it needs no request of its own and follows
   every refetch, and from the snapshot's `tariffs_missing`, true while a request for tariffs is
   open, even behind another card. Below that width the same lists sit behind a strip under the
-  header (`DayStrip.tsx`). A tapped line focuses its message in the thread. The border
+  header (`DayStrip.tsx`), present only while a list has lines or tariffs are missing. A tapped
+  line focuses its message in the thread. The border
   between the panel and the chat sets the panel's width (`PanelResizer.tsx`), kept in the browser's
   local storage, and the stylesheet stops the page at a maximum width. One full-screen photo
   viewer, owned by `App.tsx`, serves the thread.

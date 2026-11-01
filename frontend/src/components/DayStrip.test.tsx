@@ -126,9 +126,24 @@ describe("DayStrip", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("says no meters were read when both lists are empty", () => {
+  it("shows nothing when both lists are empty and no tariffs are missing", () => {
     setup([message("assistant", "שלום")]);
 
-    expect(screen.getByText(texts.noReadingsToday)).toBeInTheDocument();
+    expect(screen.queryByRole("region")).toBeNull();
+  });
+
+  it("appears once the first line of the day arrives", () => {
+    const { update } = setup([]);
+
+    update([saved]);
+
+    expect(screen.getByRole("region", { name: texts.dayTitle })).toBeInTheDocument();
+  });
+
+  it("names only missing tariffs when both lists are empty", () => {
+    setup([], true);
+
+    expect(screen.getByRole("region", { name: texts.dayTitle })).toBeInTheDocument();
+    expect(screen.queryByText(texts.noReadingsToday)).toBeNull();
   });
 });
