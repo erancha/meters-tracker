@@ -20,7 +20,7 @@ Resources:
   PreSignupFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../build/lambda
+      CodeUri: ../build/lambda.zip
       Handler: handlers/presignup.handler
       Runtime: python3.13
       Architectures: [arm64]

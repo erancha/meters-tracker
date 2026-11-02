@@ -71,8 +71,9 @@ require_model_key() {  # provider
   fi
 }
 
-# For the scripts taking an optional environment suffix ("dev" targets the isolated stack pair
-# meters-tracker-dev): handles -h and unknown arguments, then sets APP and ENV_SUFFIX.
+# For every script that targets a stack pair: an optional bare environment suffix ("dev" targets
+# the isolated stack pair meters-tracker-dev). Handles -h and unknown arguments, then sets APP and
+# ENV_SUFFIX.
 parse_env_suffix_arg() {
   case "${1:-}" in
     -h|--help) print_help; exit 0 ;;
@@ -83,24 +84,28 @@ parse_env_suffix_arg() {
   APP="meters-tracker${ENV_SUFFIX}"
 }
 
-# A describe-stacks query result; empty when the stack does not exist yet or the query matches
-# nothing. Any other failure (credentials, network, access denied) stops the script. The CLI's
-# stderr is kept apart from the value and passed on, so a warning never becomes part of it.
-stack_query() {  # stack query
+# The text result of a CloudFormation lookup on one stack; empty when the stack does not exist yet
+# or the lookup matches nothing. Any other failure (credentials, network, access denied) stops the
+# script. The CLI's stderr is kept apart from the value and passed on, so a warning never becomes
+# part of it.
+cfn_query() {  # subcommand stack [argument...]
   local out err errors
   errors=$(mktemp)
-  if ! out=$(aws cloudformation describe-stacks --stack-name "$1" --query "$2" \
-      --output text 2>"$errors"); then
+  if ! out=$(aws cloudformation "$1" --stack-name "$2" "${@:3}" --output text 2>"$errors"); then
     err=$(<"$errors")
     rm -f "$errors"
     case "$err" in
       *"does not exist"*) return 0 ;;
-      *) echo "describe-stacks $1 failed: $err" >&2; return 1 ;;
+      *) echo "$1 $2 failed: $err" >&2; return 1 ;;
     esac
   fi
   cat "$errors" >&2
   rm -f "$errors"
   [ "$out" = "None" ] || printf '%s' "$out"
+}
+
+stack_query() {  # stack query
+  cfn_query describe-stacks "$1" --query "$2"
 }
 
 # The value of a stack output; empty when the stack does not exist yet or has no such output.

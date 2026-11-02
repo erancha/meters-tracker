@@ -105,12 +105,13 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
 ## Scripts
 
 - [`deploy.sh [env]`](../scripts/deploy.sh) — builds the Lambda package and deploys the Cognito
-  and app stacks, writes `frontend/public/config.js`, then runs `sync-frontend.sh`. The callback
-  URL and CORS origin need the CloudFront URL, which exists only after the first deploy, so a
-  run deploys both stacks again when that URL changed. An `env` suffix such as `dev` deploys an
-  isolated stack pair beside the default one. It refuses to create the app stack while tables
-  or a files bucket of an earlier stack of the same name remain
-  ([ADR 0006](adr/0006-retain-data-on-delete.md)).
+  and app stacks, writes `frontend/public/config.js`, then runs `sync-frontend.sh`. The package
+  is byte-identical for an unchanged source (`zip_lambda.py` beside it), so CloudFormation leaves
+  the functions alone on such a run. The callback URL and CORS origin need the CloudFront URL,
+  which exists only after the first deploy, so a run deploys both stacks again when that URL
+  changed. An `env` suffix such as `dev` deploys an isolated stack pair beside the default one.
+  It refuses to create the app stack while tables or a files bucket of an earlier stack of the
+  same name remain ([ADR 0006](adr/0006-retain-data-on-delete.md)).
 - [`sync-frontend.sh [env]`](../scripts/sync-frontend.sh) — builds the frontend and publishes it
   to the frontend bucket with `app.json` and `docs/demo/demo.html`, then invalidates the
   CloudFront cache. Run by `deploy.sh`; run it alone after a frontend-only change. It refuses to
@@ -124,7 +125,9 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
   `LLM_MODEL` needs only a deploy. The parameters are shared by every stack pair in the account,
   and the Lambda reads its key at run time, so a new key needs no deploy.
 - [`aws-helper.sh`](../scripts/aws-helper.sh) — finds and tails the deployed functions'
-  CloudWatch logs by alias (`api`, `presignup`) or `<stack>:<logical-id>`.
+  CloudWatch logs by alias (`api`, `presignup`) or `<stack>:<logical-id>`, in the stack pair a
+  bare `env` suffix names, as for `deploy.sh`. A failed lookup stops with one message naming the
+  stack and the fix.
   `./scripts/aws-helper.sh --logs api --errors --since 1d` is the quickest health check.
 - [`test.sh`](../scripts/test.sh) — the quality gate, above.
 - [`init-env.sh`](../scripts/init-env.sh) — creates the two settings files, above.

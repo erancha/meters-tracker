@@ -9,6 +9,8 @@
 # The Cognito callback URL and the API's CORS origin need the CloudFront URL, which exists only
 # after the app stack's first deploy, so each run converges: it deploys with what is known, then
 # deploys both stacks again with the now-known URL (a no-op when unchanged).
+# The Lambda package is byte-identical for an unchanged source (zip_lambda.py), so such a run
+# leaves the functions untouched.
 # It ends by publishing the frontend with sync-frontend.sh.
 # Requires scripts/aws-config.sh and scripts/params.sh (create them with scripts/init-env.sh),
 # and the API key of the provider LLM_MODEL names (store it with scripts/set-model-key.sh).
@@ -60,6 +62,7 @@ mkdir -p "$BUILD/lambda"
 cp -r "$ROOT/src/." "$BUILD/lambda/"
 find "$BUILD/lambda" -type d -name __pycache__ -prune -exec rm -rf {} +
 cp "$ROOT/config/app.json" "$BUILD/lambda/"
+"$ROOT/.venv/bin/python" "$ROOT/scripts/zip_lambda.py" "$BUILD/lambda" "$BUILD/lambda.zip"
 
 deploy_cognito() {  # frontend-url
   local callbacks="http://localhost:8000/"

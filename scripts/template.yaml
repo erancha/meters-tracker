@@ -278,7 +278,7 @@ Resources:
     Properties:
       # CodeUri must sit on each function: cloudformation package rewrites only per-function
       # values and would otherwise upload the template's own directory.
-      CodeUri: ../build/lambda
+      CodeUri: ../build/lambda.zip
       Handler: handlers/api.handler
       # A turn may wait on the model for a photo reading; the invocation outlives the HTTP API's
       # 30s cap on the browser's request, and the app reads the stored answer from the chat.

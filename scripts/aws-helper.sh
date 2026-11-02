@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Tail or locate the CloudWatch logs of the deployed Lambda functions.
 #
-#   ./scripts/aws-helper.sh --logs <target> [--since 1h] [--follow] [--errors | --filter <pattern>]
-#   ./scripts/aws-helper.sh --log-group <target>
-#   ./scripts/aws-helper.sh --functions
+#   ./scripts/aws-helper.sh --logs <target> [env] [--since 1h] [--follow]
+#                           [--errors | --filter <pattern>]
+#   ./scripts/aws-helper.sh --log-group <target> [env]
+#   ./scripts/aws-helper.sh --functions [env]
 #
+# env: optional suffix (e.g. dev) naming the stack pair, as in deploy.sh.
 # CloudFormation appends random suffixes to Lambda names, so a target is resolved to the real
 # resource: an alias (api, presignup) or <stack>:<logical-id> for any Lambda the configured
 # credentials can describe.
@@ -17,21 +19,21 @@
 #   --follow              Keep streaming new log events
 #   --errors              Show only warning and error events (a --filter preset)
 #   --filter <pattern>    CloudWatch filter pattern, e.g. '"reading saved"'
-#   --env <suffix>        Target an isolated stack pair (same suffix as deploy.sh)
 #   -h, --help            Show this usage
 #
 #   ./scripts/aws-helper.sh --logs api --since 1d
 #   ./scripts/aws-helper.sh --logs presignup --errors --since 1d
+#   ./scripts/aws-helper.sh --logs api dev --errors
 #   ./scripts/aws-helper.sh --log-group api
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=common.sh
 source "$ROOT/scripts/common.sh"
 
-ACTION="" TARGET="" SINCE="1h" FOLLOW="" FILTER="" ENV_SUFFIX=""
+ACTION="" TARGET="" SINCE="1h" FOLLOW="" FILTER="" ENV_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --logs|--log-group|--since|--filter|--env)
+    --logs|--log-group|--since|--filter)
       [ $# -ge 2 ] || { print_help >&2; exit 2; } ;;
   esac
   case "$1" in
@@ -42,15 +44,17 @@ while [ $# -gt 0 ]; do
     --follow)    FOLLOW=1; shift ;;
     --errors)    FILTER="?ERROR ?WARNING"; shift ;;
     --filter)    FILTER="$2"; shift 2 ;;
-    --env)       ENV_SUFFIX="-$2"; shift 2 ;;
     -h|--help)   print_help; exit 0 ;;
-    *)           print_help >&2; exit 2 ;;
+    -*)          print_help >&2; exit 2 ;;
+    *)           ENV_ARGS+=("$1"); shift ;;
   esac
 done
 [ -n "$ACTION" ] || { print_help >&2; exit 2; }
+parse_env_suffix_arg "${ENV_ARGS[@]}"
+# The environment as the caller typed it, for the commands the messages suggest.
+ENV_ARG="${ENV_SUFFIX:+ ${ENV_SUFFIX#-}}"
 
 require_aws_config
-APP="meters-tracker${ENV_SUFFIX}"
 
 # Sets STACK and LOGICAL for a target; runs in the parent shell so an unknown target aborts the
 # whole script.
@@ -64,11 +68,14 @@ resolve() {  # target
   esac
 }
 
+# Call it in an assignment of its own, so a failed lookup stops the script.
 log_group() {
-  aws cloudformation describe-stack-resources --stack-name "$STACK" \
-    --logical-resource-id "$LOGICAL" \
-    --query "StackResources[0].PhysicalResourceId" --output text \
-    | sed 's|^|/aws/lambda/|'
+  local name
+  name=$(cfn_query describe-stack-resources "$STACK" --logical-resource-id "$LOGICAL" \
+    --query "StackResources[0].PhysicalResourceId") || return 1
+  [ -n "$name" ] || { echo "no function $LOGICAL in stack $STACK; list the deployed ones:" \
+                           "./scripts/aws-helper.sh --functions$ENV_ARG" >&2; return 1; }
+  echo "/aws/lambda/$name"
 }
 
 case "$ACTION" in
@@ -77,18 +84,22 @@ case "$ACTION" in
     args=(--since "$SINCE" --format short)
     [ -z "$FOLLOW" ] || args+=(--follow)
     [ -z "$FILTER" ] || args+=(--filter-pattern "$FILTER")
-    aws logs tail "$(log_group)" "${args[@]}"
+    group=$(log_group)
+    aws logs tail "$group" "${args[@]}"
     ;;
   log-group)
     resolve "$TARGET"
-    log_group
+    group=$(log_group)
+    echo "$group"
     ;;
   functions)
     for stack in "$APP" "${APP}-cognito"; do
-      aws cloudformation describe-stack-resources --stack-name "$stack" \
+      functions=$(cfn_query describe-stack-resources "$stack" \
         --query "StackResources[?ResourceType=='AWS::Lambda::Function'].\
-[LogicalResourceId,PhysicalResourceId]" \
-        --output text
+[LogicalResourceId,PhysicalResourceId]")
+      [ -n "$functions" ] || { echo "stack $stack has no functions or does not exist; deploy it:" \
+                                    "./scripts/deploy.sh$ENV_ARG" >&2; exit 1; }
+      echo "$functions"
     done
     ;;
 esac

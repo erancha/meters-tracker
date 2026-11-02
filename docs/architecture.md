@@ -175,7 +175,8 @@ standby card, so the model names the apartment exactly as stored. The prompts ar
 
 - **One package for both Lambdas.** `deploy.sh` installs `requirements.txt` for Linux arm64
   into `build/lambda`, copies `src/` and `config/app.json` beside it, and both stacks deploy
-  from that directory. Both functions run Python 3.13 on arm64.
+  a zip of that directory, byte-identical for an unchanged source so such a deploy changes no
+  function. Both functions run Python 3.13 on arm64.
 - **Configuration.** `config/app.json` holds the tunable values (listed in
   [Domain rules](domain-rules.md#values)). The Lambda package carries a copy, found through the
   `APP_CONFIG_PATH` environment variable, so an edit needs `deploy.sh`. Each table's name

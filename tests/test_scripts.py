@@ -1,7 +1,8 @@
-"""Runs the shell helpers of scripts/common.sh against a fake aws command that prints a canned
-answer, so the stack lookups' handling of empty, missing and failed results is checked offline.
-Also runs the scripts that act on a deployed stack or the real model with --help and with
-arguments they refuse, both of which stop before any settings file or AWS call."""
+"""Runs the shell helpers of scripts/common.sh, and aws-helper.sh whole, against a fake aws
+command that prints a canned answer, so the stack lookups' handling of empty, missing and failed
+results is checked offline. Also runs the scripts that act on a deployed stack or the real model
+with --help and with arguments they refuse, both of which stop before any settings file or AWS
+call."""
 
 import subprocess
 from pathlib import Path
@@ -143,6 +144,7 @@ def test_require_aws_config_accepts_real_values(run, tmp_path):
 SCRIPTS = COMMON.parent
 # Argument lists each script refuses before it reads any settings or calls AWS or the model.
 REFUSED_ARGS = {
+    "aws-helper.sh": [[], ["--logs", "api", "dev", "extra"], ["--env", "dev", "--logs", "api"]],
     "reset-account.sh": [[], ["dev", "a@x.com", "extra"], ["--force", "a@x.com"]],
     "set-model-key.sh": [[], ["google"], ["openai", "extra"]],
     "eval-intents.sh": [["extra"], ["--limit", "3"]],
@@ -167,3 +169,92 @@ def test_wrong_arguments_print_the_usage_and_exit_two(script, args):
     result = subprocess.run([SCRIPTS / script, *args], check=False, capture_output=True, text=True)
     assert result.returncode == 2
     assert f"./scripts/{script}" in result.stderr
+
+
+@pytest.fixture
+def helper(tmp_path):
+    """Runs a copy of aws-helper.sh under a temporary root, so it finds stub credentials there
+    and the fake aws command, which records each call, first on its PATH."""
+    (tmp_path / "scripts").mkdir()
+    for name in ("aws-helper.sh", "common.sh"):
+        (tmp_path / "scripts" / name).write_text((SCRIPTS / name).read_text())
+    (tmp_path / "scripts" / "aws-config.sh").write_text(
+        "export AWS_ACCESS_KEY_ID=AKIAEXAMPLE\n"
+        "export AWS_SECRET_ACCESS_KEY=s\nexport AWS_DEFAULT_REGION=eu-central-1\n"
+    )
+    aws = tmp_path / "aws"
+    aws.write_text(FAKE_AWS.replace("printf", 'echo "$*" >> "$AWS_CALLS"\nprintf', 1))
+    aws.chmod(0o755)
+    calls = tmp_path / "calls"
+
+    def run(*args, stdout="", stderr="", status=0):
+        env = {
+            "HOME": str(tmp_path),
+            "PATH": f"{tmp_path}:/usr/bin:/bin",
+            "AWS_CALLS": str(calls),
+            "FAKE_STDOUT": stdout,
+            "FAKE_STDERR": stderr,
+            "FAKE_STATUS": str(status),
+        }
+        script = tmp_path / "scripts" / "aws-helper.sh"
+        return subprocess.run(
+            ["bash", script, *args], check=False, env=env, capture_output=True, text=True
+        )
+
+    run.calls = calls
+    return run
+
+
+def test_helper_takes_the_environment_as_deploy_does(helper):
+    result = helper("--log-group", "api", "dev", stdout="fn-1")
+    assert (result.returncode, result.stdout) == (0, "/aws/lambda/fn-1\n")
+    assert "--stack-name meters-tracker-dev " in helper.calls.read_text()
+
+
+def test_helper_targets_the_default_stack_without_an_environment(helper):
+    helper("--log-group", "presignup", stdout="fn-1")
+    assert "--stack-name meters-tracker-cognito " in helper.calls.read_text()
+
+
+@pytest.mark.parametrize("action", ["--logs", "--log-group"])
+def test_helper_stops_with_one_message_on_a_missing_stack(helper, action):
+    result = helper(
+        action, "api", "dev", stderr="Stack with id meters-tracker-dev does not exist", status=254
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "no function ApiFunction in stack meters-tracker-dev; list the deployed ones:"
+        " ./scripts/aws-helper.sh --functions dev\n"
+    )
+    assert "logs tail" not in helper.calls.read_text()
+
+
+def test_helper_stops_on_a_resource_the_stack_does_not_hold(helper):
+    result = helper("--logs", "api", stdout="None")
+    assert result.returncode == 1
+    assert "--functions\n" in result.stderr
+    assert "logs tail" not in helper.calls.read_text()
+
+
+def test_helper_passes_on_a_failed_lookup(helper):
+    result = helper("--logs", "api", stderr="AccessDenied", status=254)
+    assert result.returncode == 1
+    assert "AccessDenied" in result.stderr
+    assert "--functions" not in result.stderr
+    assert "logs tail" not in helper.calls.read_text()
+
+
+def test_helper_tails_the_resolved_log_group(helper):
+    result = helper("--logs", "api", "--errors", stdout="fn-1")
+    assert result.returncode == 0
+    tail = helper.calls.read_text().splitlines()[-1]
+    assert tail.startswith("logs tail /aws/lambda/fn-1 ")
+
+
+def test_helper_listing_names_the_deploy_for_a_missing_stack(helper):
+    result = helper(
+        "--functions", "dev", stderr="Stack with id meters-tracker-dev does not exist", status=254
+    )
+    assert result.returncode == 1
+    assert "meters-tracker-dev" in result.stderr and "./scripts/deploy.sh dev" in result.stderr

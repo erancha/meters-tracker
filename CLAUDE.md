@@ -8,15 +8,15 @@ deployed by CloudFormation. Layout and parts: docs/architecture.md.
 
 - `test.sh [pytest args]` — bash syntax check, ruff, pytest; creates `.venv` on first run.
 - `init-env.sh [--force]` — creates `aws-config.sh` and `params.sh` from their examples.
-- `deploy.sh [env]` — builds `build/lambda`, deploys the Cognito and app stacks, writes
+- `deploy.sh [env]` — builds `build/lambda.zip`, deploys the Cognito and app stacks, writes
   `frontend/public/config.js` and publishes the frontend.
 - `sync-frontend.sh [env]` — builds `frontend/` and publishes it, `config/app.json` and
   `docs/demo/demo.html` to the frontend bucket; a frontend-only change needs only this.
 - `delete-stack.sh [env]` — deletes both stacks; tables and the files bucket are retained.
 - `set-model-key.sh <anthropic|openai>` — writes that provider's key to SSM
   `/meters-tracker/llm/<provider>/api-key`.
-- `aws-helper.sh` — CloudWatch logs by target; `--logs api --errors --since 1d` is the health
-  check.
+- `aws-helper.sh` — CloudWatch logs by target, with `[env]` as in `deploy.sh`;
+  `--logs api --errors --since 1d` is the health check.
 - `read-meter.sh <image>` — one photo through the real model; needs `LLM_MODEL` and
   `LLM_API_KEY`.
 - `reset-account.sh [env] <email> [--yes]` — deletes the account's rows and photos in the stack;
