@@ -167,20 +167,9 @@ def test_a_tariff_price_names_every_period_of_that_meter_type_and_no_other():
     assert planned.figures[0].after.amount == 1200.0
 
 
-def test_a_period_length_changes_only_the_open_periods_forecast():
+def test_a_period_length_changes_no_figure():
     planned = _plan(_set(f"period|a1|{SECOND}", "months", "3"))
     assert planned.after.periods["a1"][1]["months"] == 3
-    assert [f.start for f in planned.figures] == [SECOND]
-    changed = planned.figures[0]
-    assert changed.after.outlook > changed.before.outlook
-
-
-def test_a_forecast_that_rounds_to_the_same_number_is_not_a_figure_change():
-    before = _account()
-    before.tariffs = []
-    before.readings["W1"][3]["value"] = 1101
-    planned = _plan(_set(f"period|a1|{SECOND}", "months", "1"), before=before)
-    assert len(planned.changes) == 1
     assert planned.figures == []
 
 
@@ -206,13 +195,11 @@ def test_a_plain_field_with_no_figure_sets_its_attribute(target, field, raw, rea
     assert planned.figures == []
 
 
-def test_apartment_months_set_the_open_period_too_and_name_its_forecast():
+def test_apartment_months_set_the_open_period_too():
     planned = _plan(_set("apartment|a1", "months", "6"))
     assert planned.after.apartments[0]["period_months"] == 6
     assert [p["months"] for p in planned.after.periods["a1"]] == [2, 6]
-    assert [(f.serial, f.start) for f in planned.figures] == [("W1", SECOND)]
-    [changed] = planned.figures
-    assert changed.after.outlook > changed.before.outlook
+    assert planned.figures == []
 
 
 def test_apartment_months_with_no_open_period_set_only_the_apartment():
@@ -792,12 +779,11 @@ def test_a_moved_period_start_points_both_flags_at_it():
 
 
 def test_a_moved_period_compares_with_its_own_figures_under_the_old_start():
+    """Moving the start keeps the period's readings, so matched with itself it changes nothing;
+    matched by its new start it would read as one period gone and another added."""
     planned = _plan(_set(f"period|a1|{SECOND}", "start", "2026-08-01"))
     assert planned.refusals == []
-    assert {f.serial for f in planned.figures} == {"W1"}
-    [changed] = planned.figures
-    assert changed.start == "2026-08-01"
-    assert changed.before.outlook != changed.after.outlook
+    assert planned.figures == []
 
 
 def test_a_moved_period_start_lists_the_opening_readings_it_moves():

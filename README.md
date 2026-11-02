@@ -3,8 +3,7 @@
 A Hebrew chat for a building owner who bills each apartment for the water and electricity it
 uses. The owner sends a photo of a meter; the app reads the serial and the counter, proposes the
 reading, and saves it once the owner confirms. It keeps each meter's history and each apartment's
-billing periods, and after every reading reports the consumption, the forecast to the period's
-end and the charge.
+billing periods, and after every reading reports the consumption and the charge.
 
 **[Walk through the planned chat](docs/demo/demo.html)** — an animated replay of one owner's
 story on a phone screen, from linking an apartment's meters to the closing readings two months
@@ -28,7 +27,7 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
   after. The owner can also close early, mark the apartment vacant, or set a new start date for
   a new tenant, all in plain words.
 - After each reading the reply shows the previous reading, the consumption since then and over
-  the period so far, the forecast to the period's end, and the charge when prices are on record.
+  the period so far, and the charge when prices are on record.
 - Readings that look wrong are questioned: a second reading on the same day, a value lower than
   the last one (misread, or a reset meter), or a late photo near a period's closing reading.
 - A new account's chat opens with a welcome that says to start with a meter photo. On the first
@@ -110,7 +109,7 @@ the browser app and prints its address.
   codebase
 - [Features](docs/features.md) — what a user sees in the browser app, screen by screen
 - [Domain rules](docs/domain-rules.md) — how readings are checked, how periods open and close,
-  and how consumption, forecast and charge are computed
+  and how consumption and charge are computed
 - [Development & deployment](docs/development.md) — local setup, tests, the scripts, and the
   environment gotchas
 - [Decision records](docs/adr/) — why the app is built this way, one decision per record

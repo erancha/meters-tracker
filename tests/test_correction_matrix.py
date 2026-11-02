@@ -932,7 +932,7 @@ def _shown_figures(f) -> tuple | None:
         return None
     c = f.consumption
     ends = [(r["date"], r["value"]) for r in (c.opening, c.last)]
-    return (*ends, c.units, c.final, f.outlook, f.price, f.amount)
+    return (*ends, c.units, c.final, f.price, f.amount)
 
 
 def _figures_faults(planned, stored: Account, today) -> list[str]:

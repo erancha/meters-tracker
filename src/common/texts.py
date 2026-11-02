@@ -170,7 +170,7 @@ def propose_open(start: date):
 
 
 def no_previous_reading() -> str:
-    return "אין עדיין קריאה קודמת, ולכן אין צריכה או צפי."
+    return "אין עדיין קריאה קודמת, ולכן אין עדיין צריכה."
 
 
 def dated_value(reading) -> str:
@@ -193,8 +193,6 @@ def summary_after_save(
     current,
     since_previous,
     period_units,
-    outlook,
-    final,
     amount,
 ) -> str:
     unit = UNITS[meter_type]
@@ -209,10 +207,6 @@ def summary_after_save(
     if period_units is None:
         return "\n".join(lines)
     lines.append(f"צריכה מתחילת התקופה: {number(period_units)} {unit}")
-    if outlook is None:
-        lines.append("אין עדיין צפי לסוף התקופה.")
-        return "\n".join(lines)
-    lines.append(f"{FINAL_LABEL if final else OUTLOOK_LABEL}: {number(round(outlook))} {unit}")
     if amount is None:
         lines.append("אין תעריף בתוקף, ולכן אין חיוב.")
     else:
@@ -244,15 +238,13 @@ def report_total(total, final) -> str:
 
 def _report_column(meter_type, figures) -> list[str]:
     if figures is None:
-        return ["אין קריאה בתקופה", *[NO_FIGURE] * 5]
+        return ["אין קריאה בתקופה", *[NO_FIGURE] * 4]
     c, unit = figures.consumption, UNITS[meter_type]
-    outlook = "אין עדיין צפי" if figures.outlook is None else number(round(figures.outlook))
     amount = NO_FIGURE if figures.amount is None else _shekels(figures.amount)
     return [
         dated_value(c.opening),
         dated_value(c.last),
         f"{number(c.units)} {unit}",
-        outlook if figures.outlook is None else f"{outlook} {unit}",
         price_text(meter_type, figures.price),
         amount,
     ]
@@ -265,7 +257,6 @@ def report_table(meters: list[tuple[str, str, object]], final) -> list[list[str]
         "קריאת פתיחה",
         "קריאת סגירה" if final else "קריאה אחרונה",
         "צריכה",
-        FINAL_LABEL if final else OUTLOOK_LABEL,
         "תעריף",
         "עלות",
     ]
@@ -348,10 +339,6 @@ def tariffs_card(
 
 def tariffs_saved(effective: date) -> str:
     return f"התעריפים נשמרו, בתוקף מ־{fmt(effective)}."
-
-
-def forecasts_repriced(count) -> str:
-    return f"החיוב הצפוי של {count} תקופות פתוחות חושב מחדש לפי התעריפים."
 
 
 def tariffs_not_missing() -> str:
@@ -469,16 +456,11 @@ def change_line(record_label, field_label, old, new) -> str:
 
 
 def _figures_text(meter_type, figures) -> str:
-    """A meter's consumption in a period, its forecast while the period runs, and its charge."""
+    """A meter's consumption in a period, final or so far, and its charge."""
     if figures is None:
         return "אין קריאה בתקופה"
     unit = UNITS[meter_type]
     parts = [f"{number(figures.consumption.units)} {unit}"]
-    if not figures.consumption.final:
-        outlook = "אין עדיין צפי"
-        if figures.outlook is not None:
-            outlook = f"{OUTLOOK_LABEL} {number(round(figures.outlook))} {unit}"
-        parts.append(outlook)
     parts.append("אין חיוב" if figures.amount is None else f"חיוב {_shekels(figures.amount)}")
     return ", ".join(parts)
 

@@ -1,5 +1,5 @@
 """Period arithmetic: the end date, the open period, the readings a period spans, consumption
-across a meter reset, forecasts, tariffs, charges and the reclose window."""
+across a meter reset, tariffs, charges and the reclose window."""
 
 from datetime import date
 from types import SimpleNamespace
@@ -12,7 +12,6 @@ from common.periods import (
     charge,
     consumption,
     figures,
-    forecast,
     is_closing_candidate,
     open_period,
     period_end,
@@ -74,26 +73,24 @@ def test_consumption_none_without_opening_reading():
     assert consumption([MIDDLE], PERIOD) is None
 
 
-def test_consumption_open_period_and_forecast():
+def test_consumption_open_period():
     c = consumption([OPENING, MIDDLE], PERIOD)
     assert (c.opening, c.last, c.units, c.final) == (OPENING, MIDDLE, 209, False)
-    assert forecast(c, PERIOD) == pytest.approx(209 / 37 * 61)
+
+
+def test_an_open_periods_charge_is_its_consumption_so_far_at_todays_price():
+    tariffs = [
+        {"effective_date": "2026-01-01", "electricity_per_kwh": 0.5, "water_per_m3": 10},
+        {"effective_date": "2026-12-01", "electricity_per_kwh": 0.7, "water_per_m3": 12},
+    ]
+    f = figures("electricity", [OPENING, MIDDLE], PERIOD, tariffs, date(2026, 12, 5))
+    assert (f.consumption.units, f.price, f.amount) == (209, 0.7, charge(209, 0.7))
+    assert not hasattr(f, "outlook")
 
 
 def test_consumption_closed_period_is_final():
     c = consumption([OPENING, MIDDLE, CLOSING], PERIOD)
     assert (c.units, c.final) == (359, True)
-
-
-def test_forecast_none_with_only_the_opening_reading():
-    assert forecast(consumption([OPENING], PERIOD), PERIOD) is None
-
-
-def test_forecast_none_for_second_reading_on_the_opening_day():
-    same_day = reading("2026-10-29", 392700, seq="2")
-    c = consumption([OPENING, same_day], PERIOD)
-    assert c.last is same_day
-    assert forecast(c, PERIOD) is None
 
 
 def test_period_readings_rejects_a_closing_reading_without_an_opening_one():

@@ -1,8 +1,8 @@
 # Domain rules
 
 This document details the conversation engine that [Architecture](architecture.md) summarizes:
-the lifecycle of meters, readings and billing periods, and the arithmetic of consumption,
-forecast and charge, with the exact values the code uses. The arithmetic lives in
+the lifecycle of meters, readings and billing periods, and the arithmetic of consumption and
+charge, with the exact values the code uses. The arithmetic lives in
 `src/common/periods.py`, which does no I/O; the lifecycles live in the flows under
 `src/common/flows/`.
 
@@ -141,8 +141,8 @@ A known meter's type and place and an open period are saved records, so no card 
 change to any saved record (a property, apartment, meter, reading, period, tariff or delegate's
 address) is planned on a copy of the account and shown on one correction card, ahead of any
 waiting card. The card lists each changed field as its new value in place of the old one, every
-record the change removes or reopens, and every meter's figures (consumption, forecast and charge)
-in every period of its apartment that differ, closed periods included. Nothing is written until
+record the change removes or reopens, and every meter's figures (consumption and charge) in
+every period of its apartment that differ, closed periods included. Nothing is written until
 the card is confirmed, and then every row is written in one transaction; a correction touching
 more rows than that holds is refused. Confirming plans again from the current records: when the
 card would say something else it is shown again and nothing is written. A correction never sends
@@ -264,8 +264,9 @@ Run in this order on confirmation, each stopping at its own card:
 
 A meter's first saved reading in the open period becomes that period's opening reading for the
 meter. After a save that has a previous reading, the reply shows it, the consumption since it
-(or that the meter was reset), the period's consumption so far, the forecast or final figure,
-and the charge when a tariff is in force.
+(or that the meter was reset), the period's consumption, final or so far, and the charge when a
+tariff is in force. The reply to a reading that closes a period is built after the close, so it
+reports the closed period.
 
 ## Period lifecycle
 
@@ -299,30 +300,27 @@ and the charge when a tariff is in force.
   first `GET /chat` of a day that has no message yet adds a greeting naming every such
   apartment; with none, it adds nothing.
 
-## Consumption, forecast and charge
+## Consumption and charge
 
 - **Consumption** of a meter in a period runs from its opening reading to its closing reading,
   or to its latest reading while the period is open. A reading flagged as a reset ends one
   stretch at the reading before it and starts the next at itself; the period's units are the
   sum of the stretches. Consumption is per meter, so a replaced meter and its successor are
   reported separately.
-- **Final** when the meter's last reading in the period is its closing reading; the outlook is
-  then the consumption itself.
-- **Forecast** for an open period: units ÷ days from the opening reading to the latest reading
-  × the period's days, counting both its first and last day. There is no forecast while the
-  latest reading is on the opening reading's date. Replies round the outlook to whole units.
-- **Charge** is the outlook × the price for the meter's type, rounded to 2 decimal places. The
-  price comes from the tariff with the latest effective date on or before the closing reading's
-  date when final, or on or before today for a forecast. With no tariff in force on that date
-  the reply says so and shows no amount; no later or guessed tariff is used. A tariff that
-  leaves a type unpriced counts as no tariff for that type.
+- **Final** when the meter's last reading in the period is its closing reading; while the period
+  is open, the consumption is the count so far.
+- **Charge** is the consumption × the price for the meter's type, rounded to 2 decimal places.
+  The price comes from the tariff with the latest effective date on or before the closing
+  reading's date when final, or on or before today while the period is open. With no tariff in
+  force on that date the reply says so and shows no amount; no later or guessed tariff is used.
+  A tariff that leaves a type unpriced counts as no tariff for that type.
 
 ## Period report
 
 - **When.** A confirmed reading that has a previous one sends one report, and so does a close. A
   meter's first reading sends nothing. A reading before every period has none to report.
 - **Figures.** Each live meter shows its opening reading, its closing or latest reading, its units,
-  its outlook, its price and its cost, all as in the section above. A meter with no reading in the
+  its price and its cost, all as in the section above. A meter with no reading in the
   period is named as such.
 - **Total.** The sum of the costs. A meter with no reading, or no price, leaves it uncalculated,
   shown as such. The report is final only when every meter's figures are.
@@ -354,6 +352,5 @@ the effective date.
 - **One at a time.** A statement photo replaces whichever tariffs card waits, the request or a
   tariffs card, so at most one tariffs card waits at a time.
 - **Saving** writes the row under its effective date, replacing a row of the same date, and the
-  reply lists each closed period whose charge the row changes, per meter, with the figures before
-  and after as a correction's card shows them, then one line counting the open periods whose
-  forecast it changes.
+  reply lists each period, closed or open, whose charge the row changes, per meter, with the
+  figures before and after as a correction's card shows them.

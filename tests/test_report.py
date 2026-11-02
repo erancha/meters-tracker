@@ -87,9 +87,8 @@ def test_every_report_of_an_apartment_carries_the_same_subject(env, ddb):
     assert [m["Subject"] for m in _messages()] == [SUBJECT, SUBJECT]
 
 
-def test_report_shows_the_hand_computed_outlook_of_both_meters(env, ddb):
-    """A 61-day period. Electricity: 300 units in 30 days project to 610, at 0.6432 that is 392.35.
-    Water: 30 units in 15 days project to 122, at 15.62 that is 1,905.64."""
+def test_report_charges_both_meters_on_their_consumption_so_far(env, ddb):
+    """Electricity: 300 units at 0.6432 is 192.96. Water: 30 units at 15.62 is 468.60."""
     kit = Kit(today=date(2026, 10, 1))
     _apartment(kit, [reading("2026-09-16", 1230)])
     _confirm_electricity(kit)
@@ -102,16 +101,15 @@ def test_report_shows_the_hand_computed_outlook_of_both_meters(env, ddb):
         "E-392",
         "392,000",
         "392,300",
-        "610",
+        "300",
         "0.6432",
-        "392.35",
+        "192.96",
         "W-1250",
         "1,200",
         "1,230",
-        "122",
         "15.62",
-        "1,905.64",
-        "2,297.99",
+        "468.60",
+        "661.56",
         OUTLOOK,
     ):
         assert expected in text

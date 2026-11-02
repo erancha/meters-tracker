@@ -540,12 +540,12 @@ def summary(engine, user, meter, reading) -> Reply:
         since_previous = reading["value"] - previous["value"]
     periods = engine.store.periods(user.account, meter["apartment_id"])
     containing = [p for p in periods if reading in period_readings(readings, p)]
-    period_units = outlook = amount = None
-    final = False
+    period_units = amount = None
     if containing:
-        figures = period_figures(engine, user, meter["type"], readings, containing[-1])
-        period_units, final = figures.consumption.units, figures.consumption.final
-        outlook, amount = figures.outlook, figures.amount
+        figures = period_figures(
+            engine, user, meter["type"], readings, _reported(reading, containing)
+        )
+        period_units, amount = figures.consumption.units, figures.amount
     return Reply(
         texts.summary_after_save(
             prop["name"],
@@ -555,11 +555,18 @@ def summary(engine, user, meter, reading) -> Reply:
             reading,
             since_previous,
             period_units,
-            outlook,
-            final,
             amount,
         )
     )
+
+
+def _reported(reading, containing) -> dict:
+    """The period a reading's reply reports on: the one it closes, since a closing reading also
+    opens the next period, else the latest period that holds it."""
+    if reading["closes_period"] is not None:
+        [closed] = [p for p in containing if p["start"] == reading["closes_period"]]
+        return closed
+    return containing[-1]
 
 
 def put_period(engine, user, apartment_id, start, months):

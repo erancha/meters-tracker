@@ -3,7 +3,8 @@ reading of a known meter. A photo of no known meter family and no serial is read
 previous statement, and one that is a statement is handed to the tariffs flow, dated like a
 reading. An unknown serial is handed to the link flow. On a reading near the period's end, the
 close option or a typed vacate hands the apartment to the close flow after the reading is
-saved. The value, date and serial take a typed edit on every step.
+saved, and the reading's reply is built after the close, so it reports the closed period. The
+value, date and serial take a typed edit on every step.
 
 Steps: unreadable -> reading -> one of duplicate, lower_reading, swap, propose_reclose,
 open_period, propose_close -> saved. A reading is never saved twice for one meter and date. A
@@ -423,12 +424,15 @@ def answer(engine, user, item, action) -> list[Reply]:
     if key == "keep_open":
         return _save(engine, user, item)
     if step == "propose_close" and key in ("close", "vacate"):
-        replies = _save(engine, user, item)
         apartment_id = _meter(engine, user, data)["apartment_id"]
-        closes = close_period.start(
-            engine, user, apartment_id, vacate=key == "vacate", at_once=True
+        return _save(
+            engine,
+            user,
+            item,
+            then=lambda: close_period.start(
+                engine, user, apartment_id, vacate=key == "vacate", at_once=True
+            ),
         )
-        return [*replies, *closes]
     return not_understood(card(item), key)
 
 
@@ -482,12 +486,12 @@ def _closing_step(closing, closed, day, config) -> str | None:
     return None
 
 
-def _save(engine, user, item) -> list[Reply]:
+def _save(engine, user, item, then=None) -> list[Reply]:
     meter = _meter(engine, user, item["data"])
     current = current_period(engine, user, meter["apartment_id"])
     readings = engine.store.readings(user.account, meter["serial"])
     opens = joining_opens(current, readings)
-    return _done(engine, user, item, save_reading(engine, user, item, opens=opens))
+    return _done(engine, user, item, save_reading(engine, user, item, opens=opens), then=then)
 
 
 def _replace(engine, user, item) -> list[Reply]:
@@ -547,9 +551,11 @@ def _mark_report(engine, user, meter, reading, ignored):
         engine.report_due(meter["apartment_id"], start, ignored)
 
 
-def _done(engine, user, item, reading, ignored=None) -> list[Reply]:
+def _done(engine, user, item, reading, ignored=None, then=None) -> list[Reply]:
     """Finishes a saved reading: a two-number display's choice becomes the meter's, the item
-    leaves the queue, its period is marked for a report, and the summary follows."""
+    leaves the queue, its period is marked for a report, and the summary follows. then, a step
+    that writes more, runs once the item has left the queue and before the summary is built, so
+    the summary shows what it wrote; its replies follow the summary."""
     data = item["data"]
     meter = _meter(engine, user, data)
     if meter["display_choice"] is None and display_choice(data) is not None:
@@ -557,4 +563,6 @@ def _done(engine, user, item, reading, ignored=None) -> list[Reply]:
             user.account, meter["serial"], display_choice=display_choice(data)
         )
     _mark_report(engine, user, meter, reading, ignored)
-    return drop(engine, user, item, [summary(engine, user, meter, reading)], state="saved")
+    drop(engine, user, item, [], state="saved")
+    later = [] if then is None else then()
+    return [summary(engine, user, meter, reading), *later]

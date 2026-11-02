@@ -581,7 +581,7 @@ const OWNER_CHAT = [
   s => bot("<p><b>נשמר.</b> " + APARTMENT_LABEL + " · " + KINDS.elec.name + "</p>" +
            facts([["קריאת פתיחה", ltr(reading(READINGS.elec.open)) + " " + KINDS.elec.unit + " · " + ltr(dmy(LINK_DAY))],
                   ["תקופה", periodLabel(periodStart(), periodEnd())]]) +
-           '<p class="muted">אין עדיין קריאה קודמת, ולכן אין צריכה או צפי.</p>' +
+           '<p class="muted">אין עדיין קריאה קודמת, ולכן אין עדיין צריכה.</p>' +
            "<p>חסרים תעריפים. אפשר להקליד אותם, או לצלם חשבון קודם.</p>"),
 
   s => '<li class="msg user photo" data-t="photo"><div class="stmt-thumb">' + statementHtml(PREVIOUS_STATEMENT) + "</div></li>",
@@ -645,7 +645,7 @@ function landingHtml() {
   return '<main class="landing">' +
     '<span class="brand">' + ICONS.gauge + "מונים AI</span>" +
     '<p class="pitch">מצלמים את המונה. המערכת קוראת אותו, מחשבת צריכה וחיוב, ושולחת דוח.</p>' +
-    "<ul><li>מוני מים וחשמל, כל דירה בנפרד</li><li>צפי לסוף התקופה, וחישוב סופי כשהיא נסגרת</li><li>הכול בצ'אט, בעברית</li></ul>" +
+    "<ul><li>מוני מים וחשמל, כל דירה בנפרד</li><li>צריכה וחיוב לכל תקופה, וחישוב סופי כשהיא נסגרת</li><li>הכול בצ'אט, בעברית</li></ul>" +
     '<div class="signin-wrap"><button class="google" data-t="signin"><span class="g">G</span>התחברות עם Google</button>' +
     '<span class="muted">כניסה רק עם חשבון Google</span></div>' +
     "</main>";

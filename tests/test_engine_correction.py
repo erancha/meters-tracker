@@ -167,7 +167,7 @@ def test_corrected_apartment_months_reach_the_next_period_through_a_close(env, d
     kit = Kit(today=date(2026, 8, 20))
     apartment = _seeded(kit)
     card = _say(kit, edit("months", "3", f"apartment|{apartment['id']}")).snapshot.card
-    assert "01/07/2026" in _text(card) and texts.OUTLOOK_LABEL in _text(card)
+    assert _text(card) == "תיקון נתונים שמורים\nדירה עורף · מספר החודשים: 3 במקום 2"
     kit.choose("confirm")
     _say(kit, IntentResult(intent="close_period", name="עורף"))
     kit.choose("confirm")

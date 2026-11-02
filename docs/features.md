@@ -55,8 +55,8 @@ final step fails shows a banner asking to reload and sign in again.
   בלאונר 18". No field picker appears.
 - A correction shows a card titled `תיקון נתונים שמורים`, ahead of any waiting card. Its lines name
   each changed field (`... · הקריאה: 843 במקום 820`), each record it removes or reopens, warnings
-  such as a reading lower than the one before it, and every period whose consumption, forecast or
-  charge changes, with the new figures beside the old. "אישור" saves it; "בטל" leaves everything as
+  such as a reading lower than the one before it, and every period whose consumption or charge
+  changes, with the new figures beside the old. "אישור" saves it; "בטל" leaves everything as
   it was. Another value typed instead ("לא, 845") replaces the card. A correction the app refuses
   shows no card, only the reason and what to do instead.
 - A correction that leaves out its new value ("הקריאה הקודמת לא נכונה") shows a question card
@@ -126,8 +126,8 @@ no lines and no missing tariffs shows no strip.
 - Every report of one apartment has the subject `[<property> / <apartment>] קריאות מונים`, so
   Gmail groups them into one conversation; the date and the total are in the body.
 - The PDF shows the property, the apartment, the period and the date of the latest reading, then
-  a table with a column per meter: opening reading, closing or latest reading, units, outlook,
-  price and cost. A total closes it, marked as final or as an outlook. A meter with no reading in
+  a table with a column per meter: opening reading, closing or latest reading, units, price
+  and cost. A total closes it, marked as final or as an outlook. A meter with no reading in
   the period is named as such, and a total that cannot be calculated says so.
 - After a re-close, the body and the top of the PDF name the date of the report to ignore.
 

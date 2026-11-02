@@ -102,6 +102,28 @@ def test_close_chosen_on_a_reading_closes_at_once(env, ddb):
     ]
 
 
+def test_the_reply_to_a_reading_that_closes_states_the_periods_final_figures(env, ddb):
+    """691 kWh from 392,000 to 392,691 at 0.6, charged on the closing date."""
+    kit = Kit(today=date(2026, 11, 2))
+    _apartment(kit, [reading("2026-10-15", 1100)])
+    kit.send_photo(electricity())
+    kit.choose("confirm")
+    summary = kit.choose("close").replies[0].text
+    assert "צריכה מתחילת התקופה: 691 קוט״ש" in summary
+    assert "חיוב: 414.60 ₪" in summary
+    assert "צפי" not in summary
+
+
+def test_a_reading_in_an_open_period_replies_with_its_charge_so_far(env, ddb):
+    kit = Kit(today=date(2026, 10, 15))
+    _apartment(kit)
+    kit.send_photo(electricity())
+    summary = kit.choose("confirm").replies[-1].text
+    assert "צריכה מתחילת התקופה: 691 קוט״ש" in summary
+    assert "חיוב: 414.60 ₪" in summary
+    assert "צפי" not in summary
+
+
 def test_typed_vacate_closes_without_reopen_and_next_photo_opens_period(env, ddb):
     kit = Kit([IntentResult(intent="vacate")], today=date(2026, 11, 2))
     apartment = _apartment(kit, [reading("2026-10-15", 1100)])

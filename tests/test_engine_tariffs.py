@@ -303,7 +303,7 @@ def test_saved_tariff_correction_names_every_changed_closed_period(env, ddb):
     assert "35.00" in text and "30.00" in text
 
 
-def test_a_tariff_save_lists_closed_periods_and_counts_the_open_forecasts(env, ddb):
+def test_a_tariff_save_lists_every_period_whose_charge_it_changes(env, ddb):
     kit = Kit(
         [_prices(electricity_price=0.7), edit("effective_date", "2026-01-01")],
         today=date(2026, 8, 20),
@@ -328,10 +328,11 @@ def test_a_tariff_save_lists_closed_periods_and_counts_the_open_forecasts(env, d
     kit.say("בתוקף מ-1 בינואר")
     lines = kit.choose("confirm").replies[-1].text.splitlines()
     assert lines[0] == texts.tariffs_saved(date(2026, 1, 1))
-    closed = lines[1:-1]
-    assert len(closed) == 8
-    assert all("70.00" in line and "60.00" in line for line in closed)
-    assert lines[-1] == texts.forecasts_repriced(8)
+    changed = lines[1:]
+    assert len(changed) == 16
+    assert sum("70.00" in line and "60.00" in line for line in changed) == 8
+    assert sum("35.00" in line and "30.00" in line for line in changed) == 8
+    assert not any("צפי" in line for line in lines)
 
 
 def test_prices_read_as_a_request_still_land_on_the_waiting_request(env, ddb):

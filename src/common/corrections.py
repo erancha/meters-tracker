@@ -923,11 +923,12 @@ def _all_figures(state: Account, today: date, key_of) -> dict:
 
 
 def _shown_figures(f: Figures | None) -> tuple | None:
-    """The figures as the card prints them, so two that read the same are not a change."""
+    """The figures as the card compares them, so two that bill the same are not a change: a zero
+    charge bills what no charge does, as a period just opened with no use yet shows."""
     if f is None:
         return None
-    outlook = None if f.outlook is None else round(f.outlook)
-    return f.consumption.units, outlook, f.amount
+    billed = None if f.amount == 0 else f.amount
+    return f.consumption.units, billed
 
 
 def _compared(before: Account, after: Account, starts: dict, today: date) -> list[FigureChange]:

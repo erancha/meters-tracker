@@ -11,9 +11,9 @@ Core pieces:
 - new_period: a period's row as it opens
 - period_readings / flags_in_order / joining_opens: a meter's readings in a period, whether its
   flags there make sense, and what a joining reading opens
-- consumption / forecast / charge: units in a period, the period's projected units, their price
-- figures: one meter's Consumption, outlook, price and amount for a period, from the tariffs
-  and today's date it is handed
+- consumption / charge: units in a period and their price
+- figures: one meter's Consumption, price and amount for a period, from the tariffs and today's
+  date it is handed
 """
 
 from dataclasses import dataclass
@@ -100,14 +100,6 @@ def consumption(readings: list, period: dict) -> Consumption | None:
     )
 
 
-def forecast(c: Consumption, period: dict) -> float | None:
-    elapsed_days = (parse_iso(c.last["date"]) - parse_iso(c.opening["date"])).days
-    if elapsed_days == 0:
-        return None
-    period_days = (period_end(period) - parse_iso(period["start"])).days + 1
-    return c.units / elapsed_days * period_days
-
-
 def tariff_on(tariffs: list, d: date) -> dict | None:
     effective = [t for t in tariffs if parse_iso(t["effective_date"]) <= d]
     return effective[-1] if effective else None
@@ -140,11 +132,9 @@ def price_in(tariffs: list, meter_type: str, d: date) -> float | None:
 
 @dataclass(frozen=True)
 class Figures:
-    """One meter's figures for a period. outlook is the period's units: the final count, else the
-    forecast, which is None until time has passed since the opening reading."""
+    """One meter's figures for a period: its consumption, final or so far, and the charge on it."""
 
     consumption: Consumption
-    outlook: float | None
     price: float | None
     amount: float | None
 
@@ -153,11 +143,10 @@ def figures(
     meter_type: str, readings: list, period: dict, tariffs: list, today: date
 ) -> Figures | None:
     """The meter's figures for the period, or None when it has no reading there. A final count is
-    priced on its last reading's date, a forecast on today."""
+    priced on its closing reading's date, a count so far on today."""
     c = consumption(readings, period)
     if c is None:
         return None
-    outlook = c.units if c.final else forecast(c, period)
     price = price_in(tariffs, meter_type, parse_iso(c.last["date"]) if c.final else today)
-    amount = None if outlook is None or price is None else charge(outlook, price)
-    return Figures(c, outlook, price, amount)
+    amount = None if price is None else charge(c.units, price)
+    return Figures(c, price, amount)
