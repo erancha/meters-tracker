@@ -132,10 +132,18 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
 ## The conversation engine
 
 `src/common/engine.py` takes one action and returns the replies plus a snapshot. A photo starts
-the meter-photo flow; a card choice goes to the pending item it names; text goes to the oldest
-item awaiting an answer; text with nothing awaiting is classified into a close, vacate,
-period-change or tariffs request. Every user action and every reply is appended to the
-address's message history.
+the meter-photo flow; a card choice goes to the pending item it names; text is classified, and
+goes to the first item awaiting an answer, except that a change to a saved record becomes a
+correction card (`src/common/flows/correction.py`), planned without I/O by
+`src/common/corrections.py` on a copy of the account (`src/common/account.py`). The classifier
+also gets every waiting card and the latest dropped photos, so an edit can reach a card behind the
+first or read a dropped photo again. A change missing its value, or with one that does not fit,
+becomes a question card (`src/common/flows/question.py`) that keeps the change until the answer.
+Text with nothing awaiting is classified into a close, vacate, period-change or tariffs request.
+Any message that is not a change the app can make (a how-to question, an ambiguous message, a
+request the app lacks, a bare value with no card) is answered by `ask_back` in `src/common/flows/`
+from a fixed template, never with a bare "not understood". Every user action and every reply is
+appended to the address's message history.
 
 Each flow (`src/common/flows/`) is a small state machine stored as a **pending item**: `seq` (a
 timestamp-ordered key), `kind` (the flow), `status`, `step`, `version` and `data` (the answers so
@@ -147,12 +155,13 @@ the model reads the photo, `awaiting` while a card waits for the user, `parked` 
 for a meter's photo and shows no card, and `standby` while a request for tariffs waits without
 blocking the queue: its card shows only when no card awaits, and typed text with nothing awaiting
 reaches it only when it is prices, a cancel or a question; any other text is classified as a request
-as usual. The **snapshot** is the oldest awaiting item's card, else the oldest standby item's, plus
-how many queued items stand behind it; the client renders it and never orders the queue itself. Code
-decides every step and renders every reply from `src/common/texts.py`; the model only reads photos
-and classifies text, and every data write waits behind a confirmation card ([ADR
-0005](adr/0005-code-led-conversation.md)). Billing periods belong to the apartment, so its water and
-electricity meters open and close together ([ADR 0003](adr/0003-period-belongs-to-apartment.md)).
+as usual. The **snapshot** is the first awaiting item's card, a question then a correction ahead
+of the rest, else the oldest standby item's, plus how many queued items stand behind it; the
+client renders it and never orders the queue itself. Code decides every step and renders every
+reply from `src/common/texts.py`; the model only reads photos and classifies text, and every data
+write waits behind a confirmation card ([ADR 0005](adr/0005-code-led-conversation.md)). Billing
+periods belong to the apartment, so its water and electricity meters open and close together
+([ADR 0003](adr/0003-period-belongs-to-apartment.md)).
 The flows and the rules they enforce are in [Domain rules](domain-rules.md).
 
 The model client (`src/common/model.py`) calls the model that the deploy setting `LLM_MODEL` names
@@ -163,13 +172,16 @@ and parse it into a pydantic model: a meter reading (type, serial, candidate val
 display position, unreadable digits, handwritten label), a previous statement's tariffs (whether the
 photo is a statement, the electricity and water prices, whether they include VAT), or one intent
 from a closed list —
-`confirm`, `reject`, `correct_field`, `set_date`, `choose_property`, `choose_apartment`,
-`choose_option`, `set_period`, `close_period`, `vacate`, `change_period`, `set_tariffs`, `explain`,
-`unknown`. A photo is read as a statement only when its meter read finds neither a meter type nor a
-serial. Each classification is sent with today's date and the pending card's text with its button
-labels; a request no card takes is sent with the account's apartment names instead, after any
-standby card, so the model names the apartment exactly as stored. The prompts are in
-`src/common/prompts.py`. A refusal raises instead of returning a guess.
+`confirm`, `reject`, `edit`, `choose_option`, `close_period`, `vacate`, `change_period`,
+`set_tariffs`, `explain`, `how_to`, `which`, `not_offered`, `unknown`, with the operations an
+`edit`, a `how_to` or a `which` names. A photo is read as a statement only when its meter read
+finds neither a meter type nor a serial. Each classification is sent with today's date, the
+pending card's text with its fields, the field it asked for again and its button labels, and the
+account's records with their ids, so the model names an apartment or a record exactly as stored.
+The prompts are in `src/common/prompts.py`. A refusal raises instead of returning a guess. Only
+the owner runs the classifier against the real model, with `scripts/eval-intents.sh` over the
+recorded messages in
+`tests/intents.json`; the test suite uses a fake model ([Development](development.md)).
 
 ## Cross-cutting mechanisms
 
@@ -251,7 +263,10 @@ expires after 30 days. `deploy.sh` refuses to create the app stack while such le
 ## Codebase structure
 
 - `src/handlers/` — the Lambda entry points, `api.py` and `presignup.py`.
-- `src/common/` — the shared core: `engine.py` and `flows/` (the conversation), `periods.py`
+- `src/common/` — the shared core: `engine.py` and `flows/` (the conversation, one module per
+  card kind: `meter_photo`, `link_meter`, `close_period`, `period_change`, `tariffs`, `correction`,
+  `question`), `fields.py` (the table of editable fields), `corrections.py` and `account.py` (a
+  correction planned on a copy of the account, and the rows it writes), `periods.py`
   (pure period arithmetic), `store.py` and `paging.py` (DynamoDB), `files.py` (S3), `model.py`
   and `prompts.py` (the model), `report.py` and `notify.py` (the period report and its email),
   `fonts/` (the font the PDF ships with), `access.py`, `texts.py` (every Hebrew string),

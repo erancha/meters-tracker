@@ -7,6 +7,7 @@ address. A delegate row names the owner account the address works in.
 from dataclasses import dataclass
 
 OWNER = "owner"
+DELEGATE = "delegate"
 
 
 @dataclass

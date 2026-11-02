@@ -13,7 +13,7 @@ from fake_model import FakeModel
 from common.access import User
 from common.engine import Action, Choice, Engine
 from common.files import Files
-from common.model import Candidate, MeterReadingResult, StatementResult
+from common.model import Candidate, IntentResult, MeterReadingResult, Operation, StatementResult
 from common.notify import Mailer
 from common.store import Store
 
@@ -83,9 +83,18 @@ def reading(day, value, opens=None, closes=None):
 
 
 class Kit:
-    def __init__(self, intents=(), today=date(2026, 10, 29)):
+    """Drives the engine as one user over the mocked store: seeds the user's account, sends photos,
+    texts and card choices, and reads back the card and the records.
+
+    user is the owner whose account the kit seeds and speaks for; a distinct user per case lets
+    one mocked store hold many independent accounts. store and ses, when given, are reused rather
+    than built, since building the AWS clients costs more than a turn."""
+
+    def __init__(self, intents=(), today=date(2026, 10, 29), user=USER, store=None, ses=None):
         self.today = today
-        self.store = Store.from_env()
+        self.user = user
+        self.account = user.account
+        self.store = Store.from_env() if store is None else store
         self._photos = {}
         self._statements = {}
         self.model = FakeModel(self._photos, list(intents), self._statements)
@@ -95,7 +104,7 @@ class Kit:
             self.store,
             self.model,
             Files("files"),
-            Mailer(boto3.client("ses"), os.environ["SES_SENDER"]),
+            Mailer(boto3.client("ses") if ses is None else ses, os.environ["SES_SENDER"]),
             config,
             timedelta(seconds=int(os.environ["LAMBDA_TIMEOUT_SECONDS"])),
             os.environ["LLM_MODEL"],
@@ -112,44 +121,50 @@ class Kit:
         """Sends a photo the model reads as result, and as as_statement when result is no meter."""
         image = f"photo-{len(self._photos)}".encode()
         self.register_photo(image, result, as_statement)
-        return self.engine.turn(USER, Action(image=image, media_type="image/jpeg", note=note))
+        return self.engine.turn(self.user, Action(image=image, media_type="image/jpeg", note=note))
 
     def choose(self, option):
         return self.choose_on(self.card(), option)
 
     def choose_on(self, card, option):
         """Answers the given card, which may be one the queue has since moved past."""
-        return self.engine.turn(USER, choice(card, option))
+        return self.engine.turn(self.user, choice(card, option))
 
     def say(self, text):
-        return self.engine.turn(USER, Action(text=text))
+        return self.engine.turn(self.user, Action(text=text))
 
     def card(self):
-        return self.engine.snapshot(USER).card
+        return self.engine.snapshot(self.user).card
+
+    def form(self):
+        """The fields of the card the snapshot shows, with their current values."""
+        shown = self.card()
+        item = {i["seq"]: i for i in self.store.pending(self.user.email)}[shown["pending"]]
+        return self.engine.flow(item).form(item)
 
     def photo_keys(self):
         """Keys of the user's photo messages, in order sent."""
-        messages, _ = self.engine.load(USER)
+        messages, _ = self.engine.load(self.user)
         return [m["image_key"] for m in messages if m["role"] == "user" and m["image_key"]]
 
     def apartment(
         self, name="עורף", property_name="הגפן 7", start="2026-09-01", months=2, closed_on=None
     ):
-        prop = self.store.put_property(ACCOUNT, property_name)
-        apartment = self.store.put_apartment(ACCOUNT, prop["id"], name, start, months)
+        prop = self.store.put_property(self.account, property_name)
+        apartment = self.store.put_apartment(self.account, prop["id"], name, start, months)
         self.period(apartment, start, months, closed_on)
         return apartment
 
     def period(self, apartment, start, months=2, closed_on=None):
         self.store.put_period(
-            ACCOUNT,
+            self.account,
             apartment["id"],
             {"start": start, "months": months, "closed_on": closed_on, "last_reminded_on": None},
         )
 
     def meter(self, apartment, serial, meter_type, readings, display_choice=None, retired_at=None):
         self.store.put_meter(
-            ACCOUNT,
+            self.account,
             {
                 "serial": serial,
                 "apartment_id": apartment["id"],
@@ -160,14 +175,14 @@ class Kit:
             },
         )
         for r in readings:
-            self.store.put_reading(ACCOUNT, serial, r)
+            self.store.put_reading(self.account, serial, r)
 
     def send_statement(self, result=None, note=None):
         return self.send_photo(UNKNOWN, note, statement() if result is None else result)
 
     def tariff(self, effective_date, electricity, water):
         self.store.put_tariff(
-            ACCOUNT,
+            self.account,
             {
                 "effective_date": effective_date,
                 "electricity_per_kwh": electricity,
@@ -177,13 +192,25 @@ class Kit:
         )
 
     def tariffs(self):
-        return self.store.tariffs(ACCOUNT)
+        return self.store.tariffs(self.account)
 
     def readings(self, serial):
-        return self.store.readings(ACCOUNT, serial)
+        return self.store.readings(self.account, serial)
 
     def periods(self, apartment):
-        return self.store.periods(ACCOUNT, apartment["id"])
+        return self.store.periods(self.account, apartment["id"])
+
+
+def edits(*changes, target="card") -> IntentResult:
+    """The model's answer to a message changing each (field, value) pair of the target."""
+    operations = [
+        Operation(action="set", target=target, field=field, value=value) for field, value in changes
+    ]
+    return IntentResult(intent="edit", operations=operations)
+
+
+def edit(field, value, target="card") -> IntentResult:
+    return edits((field, value), target=target)
 
 
 def choice(card, option) -> Action:

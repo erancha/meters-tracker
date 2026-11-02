@@ -1,10 +1,13 @@
 """Fixtures shared by the suite: the environment the Lambdas read, mocked AWS tables and bucket,
 a Store over them, and a fake SES client for the sign-up handler."""
 
+from contextlib import contextmanager
+
 import boto3
 import pytest
 from moto import mock_aws
 
+from common import store as store_module
 from common.store import Store
 
 REGION = "eu-central-1"
@@ -23,6 +26,16 @@ KEYED_BY_PK_AND_SK = [
 ]
 
 
+def pytest_configure(config):
+    """Registers the correction matrix's markers. Its slices are named in the matrix module, from
+    its states and case counts, so they are read from there."""
+    from test_correction_matrix import MATRIX_SLICES
+
+    config.addinivalue_line("markers", "matrix: the exhaustive correction matrix")
+    for name in MATRIX_SLICES:
+        config.addinivalue_line("markers", f"{name}: one slice of the correction matrix")
+
+
 def _table(ddb, name, with_sort_key=True):
     """Creates one app table under the shared pk/sk key shape."""
     key_schema = [{"AttributeName": "pk", "KeyType": "HASH"}]
@@ -38,10 +51,24 @@ def _table(ddb, name, with_sort_key=True):
     )
 
 
-@pytest.fixture
-def env(monkeypatch):
+def _maps_reversed(convert):
+    """DynamoDB hands a map back with its keys in an order of its own, while moto keeps the order
+    written. Reversing it on every read makes code that depends on that order fail here too."""
+
+    def from_dynamo(value):
+        converted = convert(value)
+        if isinstance(converted, dict):
+            return dict(reversed(converted.items()))
+        return converted
+
+    return from_dynamo
+
+
+def set_environment(monkeypatch):
     """Points the code under test at the mocked tables, the mocked files bucket and the repo's
-    own app config, with the api function's time limit the template deploys."""
+    own app config, with the api function's time limit the template deploys, and makes the
+    store read maps back with their keys reordered."""
+    monkeypatch.setattr(store_module, "_from_dynamo", _maps_reversed(store_module._from_dynamo))
     for name in KEYED_BY_PK_ONLY + KEYED_BY_PK_AND_SK:
         monkeypatch.setenv(f"{name.upper()}_TABLE", name)
     monkeypatch.setenv("FILES_BUCKET", FILES_BUCKET)
@@ -53,10 +80,16 @@ def env(monkeypatch):
 
 
 @pytest.fixture
-def ddb():
+def env(monkeypatch):
+    set_environment(monkeypatch)
+
+
+@contextmanager
+def mocked_aws():
     """Mocked DynamoDB resource with the app's tables pre-created (access keyed by pk only, the
     rest by pk+sk), an empty mocked S3 bucket and a verified report sender in mocked SES. The AWS
-    mock stays active for the whole test, so code under test may also build its own boto3 clients."""
+    mock stays active while the context is open, so code under test may also build its own boto3
+    clients."""
     with mock_aws():
         resource = boto3.resource("dynamodb", region_name=REGION)
         for name in KEYED_BY_PK_ONLY:
@@ -67,6 +100,12 @@ def ddb():
             Bucket=FILES_BUCKET, CreateBucketConfiguration={"LocationConstraint": REGION}
         )
         boto3.client("ses", region_name=REGION).verify_email_identity(EmailAddress=SES_SENDER)
+        yield resource
+
+
+@pytest.fixture
+def ddb():
+    with mocked_aws() as resource:
         yield resource
 
 

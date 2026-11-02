@@ -3,37 +3,70 @@
     "message": "1/9/2026",
     "card": "period",
     "today": "2026-10-29",
-    "intent": "set_period",
+    "intent": "edit",
     "fields": {
-      "date": "2026-09-01"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "2026-09-01"
+        }
+      ]
     }
   },
   {
     "message": "1/9",
     "card": "period",
     "today": "2026-10-29",
-    "intent": "set_period",
+    "intent": "edit",
     "fields": {
-      "date": "2026-09-01"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "2026-09-01"
+        }
+      ]
     }
   },
   {
     "message": "מ-1/9 לשלושה חודשים",
     "card": "period",
     "today": "2026-10-29",
-    "intent": "set_period",
+    "intent": "edit",
     "fields": {
-      "date": "2026-09-01",
-      "months": 3
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "period_start",
+          "value": "2026-09-01"
+        },
+        {
+          "action": "set",
+          "target": "card",
+          "field": "months",
+          "value": "3"
+        }
+      ]
     }
   },
   {
     "message": "מ-1/11",
     "card": "period",
     "today": "2026-10-29",
-    "intent": "set_period",
+    "intent": "edit",
     "fields": {
-      "date": "2026-11-01"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "2026-11-01"
+        }
+      ]
     }
   },
   {
@@ -64,58 +97,112 @@
     "message": "קדמית",
     "card": "period_typo",
     "today": "2026-10-29",
-    "intent": "choose_apartment",
+    "intent": "edit",
     "fields": {
-      "name": "קדמית"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "apartment",
+          "value": "קדמית"
+        }
+      ]
+    }
+  },
+  {
+    "message": "2721058",
+    "card": "unreadable_serial",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "2721058"
+        }
+      ]
     }
   },
   {
     "message": "הקריאה מ-27/8",
     "card": "reading",
     "today": "2026-10-29",
-    "intent": "set_date",
+    "intent": "edit",
     "fields": {
-      "date": "2026-08-27"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "date",
+          "value": "2026-08-27"
+        }
+      ]
     }
   },
   {
     "message": "הקריאה היא 37938",
     "card": "reading",
     "today": "2026-10-29",
-    "intent": "correct_field",
+    "intent": "edit",
     "fields": {
-      "field": "value",
-      "value": 37938
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "37938"
+        }
+      ]
     }
   },
   {
     "message": "37938",
     "card": "reading",
     "today": "2026-10-29",
-    "intent": "correct_field",
+    "intent": "edit",
     "fields": {
-      "field": "value",
-      "value": 37938
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "37938"
+        }
+      ]
     }
   },
   {
     "message": "הקריאה היא 39,26.9",
     "card": "reading",
     "today": "2026-10-29",
-    "intent": "correct_field",
+    "intent": "edit",
     "fields": {
-      "field": "value",
-      "value": 3926
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "3926"
+        }
+      ]
     }
   },
   {
     "message": "הספרה האחרונה היא אחרי הנקודה",
     "card": "reading",
     "today": "2026-10-29",
-    "intent": "correct_field",
+    "intent": "edit",
     "fields": {
-      "field": "value",
-      "value": 3926
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "3926"
+        }
+      ]
     }
   },
   {
@@ -146,30 +233,60 @@
     "message": "לאונר 18, דירה קדמית",
     "card": "property",
     "today": "2026-10-29",
-    "intent": "choose_property",
+    "intent": "edit",
     "fields": {
-      "name": "לאונר 18",
-      "apartment": "דירה קדמית"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "property",
+          "value": "לאונר 18"
+        },
+        {
+          "action": "set",
+          "target": "card",
+          "field": "apartment",
+          "value": "דירה קדמית"
+        }
+      ]
     }
   },
   {
     "message": "לאונר 18",
     "card": "property",
     "today": "2026-10-29",
-    "intent": "choose_property",
+    "intent": "edit",
     "fields": {
-      "name": "לאונר 18",
-      "apartment": null
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "לאונר 18"
+        }
+      ]
     }
   },
   {
     "message": "לאונר 18, דירה קדמית",
     "card": "property_existing",
     "today": "2026-10-29",
-    "intent": "choose_property",
+    "intent": "edit",
     "fields": {
-      "name": "לאונר 18",
-      "apartment": "דירה קדמית"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "property",
+          "value": "לאונר 18"
+        },
+        {
+          "action": "set",
+          "target": "card",
+          "field": "apartment",
+          "value": "דירה קדמית"
+        }
+      ]
     }
   },
   {
@@ -182,18 +299,32 @@
     "message": "דירה 3",
     "card": "apartment",
     "today": "2026-10-29",
-    "intent": "choose_apartment",
+    "intent": "edit",
     "fields": {
-      "name": "דירה 3"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "דירה 3"
+        }
+      ]
     }
   },
   {
     "message": "דירה קדמית",
     "card": "apartment",
     "today": "2026-10-29",
-    "intent": "choose_apartment",
+    "intent": "edit",
     "fields": {
-      "name": "דירה קדמית"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "דירה קדמית"
+        }
+      ]
     }
   },
   {
@@ -212,30 +343,48 @@
     "message": "הספרה האחרונה במספר המונה שגויה - הספרה היא 8",
     "card": "link",
     "today": "2026-10-29",
-    "intent": "correct_field",
+    "intent": "edit",
     "fields": {
-      "field": "serial",
-      "serial": "2721058"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "serial",
+          "value": "2721058"
+        }
+      ]
     }
   },
   {
     "message": "המספר הסידורי הוא 2721058",
     "card": "link",
     "today": "2026-10-29",
-    "intent": "correct_field",
+    "intent": "edit",
     "fields": {
-      "field": "serial",
-      "serial": "2721058"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "serial",
+          "value": "2721058"
+        }
+      ]
     }
   },
   {
     "message": "הקריאה היא 37938",
     "card": "link",
     "today": "2026-10-29",
-    "intent": "correct_field",
+    "intent": "edit",
     "fields": {
-      "field": "value",
-      "value": 37938
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "37938"
+        }
+      ]
     }
   },
   {
@@ -287,10 +436,22 @@
     "message": "חשמל 0.6432, מים 15.62",
     "card": "tariffs_ask",
     "today": "2026-10-29",
-    "intent": "set_tariffs",
+    "intent": "edit",
     "fields": {
-      "electricity_price": 0.6432,
-      "water_price": 15.62
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "electricity_price",
+          "value": "0.6432"
+        },
+        {
+          "action": "set",
+          "target": "card",
+          "field": "water_price",
+          "value": "15.62"
+        }
+      ]
     },
     "apartments": [
       "דירה קדמית",
@@ -301,10 +462,16 @@
     "message": "המים 16 שקל לקוב",
     "card": "tariffs_ask",
     "today": "2026-10-29",
-    "intent": "set_tariffs",
+    "intent": "edit",
     "fields": {
-      "water_price": 16,
-      "electricity_price": null
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "water_price",
+          "value": "16"
+        }
+      ]
     },
     "apartments": [
       "דירה קדמית",
@@ -349,18 +516,32 @@
     "message": "בתוקף מ-1/11",
     "card": "tariffs",
     "today": "2026-10-29",
-    "intent": "set_date",
+    "intent": "edit",
     "fields": {
-      "date": "2026-11-01"
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "effective_date",
+          "value": "2026-11-01"
+        }
+      ]
     }
   },
   {
     "message": "המים 16 שקל לקוב",
     "card": "tariffs",
     "today": "2026-10-29",
-    "intent": "set_tariffs",
+    "intent": "edit",
     "fields": {
-      "water_price": 16
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "water_price",
+          "value": "16"
+        }
+      ]
     }
   },
   {
@@ -431,5 +612,950 @@
       "דירה קדמית",
       "עורף"
     ]
+  },
+  {
+    "message": "מ-15/9",
+    "card": "change_period",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "period_start",
+          "value": "2026-09-15"
+        }
+      ]
+    }
+  },
+  {
+    "message": "לשלושה חודשים",
+    "card": "change_period",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "months",
+          "value": "3"
+        }
+      ]
+    }
+  },
+  {
+    "message": "התאריך הוא 1/9",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "period_start",
+          "value": "2026-09-01"
+        }
+      ]
+    }
+  },
+  {
+    "message": "הקריאה היא 37938",
+    "card": "property",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "37938"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התאריך הוא 28/10",
+    "card": "apartment",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "date",
+          "value": "2026-10-28"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה היא 37938",
+    "card": "period",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "37938"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הכתובת היא לאונר 16",
+    "card": "apartment",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "property",
+          "value": "לאונר 16"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה היא 39285",
+    "card": "duplicate",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "39285"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה היא 39260",
+    "card": "lower_reading",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "39260"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התאריך הוא 27/10",
+    "card": "swap",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "date",
+          "value": "2026-10-27"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה היא 39310",
+    "card": "propose_reclose",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "39310"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התאריך הוא 14/11",
+    "card": "open_period",
+    "today": "2026-11-16",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "date",
+          "value": "2026-11-14"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה היא 39275",
+    "card": "propose_close",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "value",
+          "value": "39275"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "זה מונה מים",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "meter_type",
+          "value": "water"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הדירה היא עורף",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "apartment",
+          "value": "עורף"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "לשלושה חודשים",
+    "card": "link",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": "months",
+          "value": "3"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "קריאת הסגירה היא 39510",
+    "card": "close",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|2721058|2026-11-15#2026-11-15T09:00:00",
+          "field": "value",
+          "value": "39510"
+        }
+      ]
+    }
+  },
+  {
+    "message": "בכרטיס של המים הקריאה היא 1310",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card|2026-10-29T10:00:00.000000_b2c3",
+          "field": "value",
+          "value": "1310"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "ביטלתי בטעות את הצילום של החשמל",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "photo|2026-10-29T13:00:00.000000_c3d4",
+          "field": "kind",
+          "value": "meter"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התמונה האחרונה היא של מונה, לא של חשבון",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "photo|2026-10-29T14:00:00.000000_d4e5",
+          "field": "kind",
+          "value": "meter"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הצילום של החשמל שביטלתי הוא בעצם חשבון קודם",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "photo|2026-10-29T13:00:00.000000_c3d4",
+          "field": "kind",
+          "value": "statement"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה הקודמת היא 843",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|4410290|2026-09-01#2026-09-01T09:00:00",
+          "field": "value",
+          "value": "843"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה של עורף מ-29/10 נלקחה ב-28/10",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|4410290|2026-10-29#2026-10-29T12:00:00",
+          "field": "date",
+          "value": "2026-10-28"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה האחרונה שייכת למונה 4410273",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|4410290|2026-10-29#2026-10-29T12:00:00",
+          "field": "serial",
+          "value": "4410273"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התכוונתי לבטל",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "delete",
+          "target": "reading|4410290|2026-10-29#2026-10-29T12:00:00",
+          "field": null,
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "המונה של עורף התאפס בקריאה האחרונה",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|4410290|2026-10-29#2026-10-29T12:00:00",
+          "field": "resets",
+          "value": "true"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "מספר המונה היה גם אז 2721058, לא 2721056",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "meter|2721056",
+          "field": "serial",
+          "value": "2721058"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "המונה 5500123 הוא מונה מים",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "meter|5500123",
+          "field": "type",
+          "value": "water"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "המונה 4410290 שייך לדירה 3",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "meter|4410290",
+          "field": "apartment",
+          "value": "a3"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "במונה 2721058 הקריאה היא המספר התחתון",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "meter|2721058",
+          "field": "display",
+          "value": "bottom"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "המונה 2721056 לא הוחלף",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "meter|2721056",
+          "field": "retired_at",
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "המונה 5500123 הוצא משימוש ב-20/10",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "meter|5500123",
+          "field": "retired_at",
+          "value": "2026-10-20"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "מחק את המונה 5500123",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "delete",
+          "target": "meter|5500123",
+          "field": null,
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "שם הנכס לאונר 16 הוא בעצם לאונר 14",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "property|p2",
+          "field": "name",
+          "value": "לאונר 14"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "לאונר 16 ולאונר 18 הם אותו נכס, תשאיר את לאונר 18",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "apartment|a3",
+          "field": "property",
+          "value": "p1"
+        },
+        {
+          "action": "delete",
+          "target": "property|p2",
+          "field": null,
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "מחק את דירה 3",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "delete",
+          "target": "apartment|a3",
+          "field": null,
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "שנה את השם של עורף לדירה אחורית",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "apartment|a2",
+          "field": "name",
+          "value": "דירה אחורית"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "דירה 3 נמצאת בלאונר 18",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "apartment|a3",
+          "field": "property",
+          "value": "p1"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התקופות של עורף הן של 3 חודשים",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "apartment|a2",
+          "field": "months",
+          "value": "3"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התקופה הראשונה של דירה קדמית התחילה ב-28/8",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "period|a1|2026-09-01",
+          "field": "start",
+          "value": "2026-08-28"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "סגרתי בטעות את התקופה הראשונה של דירה קדמית",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "period|a1|2026-09-01",
+          "field": "closed_on",
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התקופה הראשונה של דירה קדמית צריכה להיסגר בקריאת המים 1270",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "period|a1|2026-09-01",
+          "field": "closing",
+          "value": "4410273|2026-10-25#2026-10-25T09:00:00"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "מחיר המים הוא 16 שקל, לא 15.62",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "tariff|2026-09-01",
+          "field": "water_price",
+          "value": "16"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "התעריף בתוקף מ-15/9",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "tariff|2026-09-01",
+          "field": "effective_date",
+          "value": "2026-09-15"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "מחק את התעריף",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "delete",
+          "target": "tariff|2026-09-01",
+          "field": null,
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הכתובת של המורשה היא helper2@gmail.com",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "delegate|helper@gmail.com",
+          "field": "address",
+          "value": "helper2@gmail.com"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה הקודמת היא 843",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|4410290|2026-09-01#2026-09-01T09:00:00",
+          "field": "value",
+          "value": "843"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "לא, 845",
+    "card": "correction",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|4410290|2026-09-01#2026-09-01T09:00:00",
+          "field": "value",
+          "value": "845"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "כן",
+    "card": "correction",
+    "today": "2026-10-29",
+    "intent": "confirm",
+    "records": "story"
+  },
+  {
+    "message": "בטל",
+    "card": "correction",
+    "today": "2026-10-29",
+    "intent": "reject",
+    "records": "story"
+  },
+  {
+    "message": "הקריאה הקודמת לא נכונה",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "reading|4410290|2026-09-01#2026-09-01T09:00:00",
+          "field": "value",
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "843",
+    "card": "question",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "843"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "2721059",
+    "card": "reading_asked_serial",
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "2721059"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "845",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "edit",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "card",
+          "field": null,
+          "value": "845"
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "איך מתקנים תאריך של קריאה?",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "how_to",
+    "records": "story"
+  },
+  {
+    "message": "איך משנים את שם הדירה עורף?",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "how_to",
+    "fields": {
+      "operations": [
+        {
+          "action": "set",
+          "target": "apartment|a2",
+          "field": "name",
+          "value": null
+        }
+      ]
+    },
+    "records": "story"
+  },
+  {
+    "message": "הקריאה היא 860",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "which",
+    "records": "story"
+  },
+  {
+    "message": "תוסיף את dana@gmail.com כמורשה",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "not_offered",
+    "records": "story"
+  },
+  {
+    "message": "מה מזג האוויר מחר?",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "unknown",
+    "records": "story"
   }
 ]

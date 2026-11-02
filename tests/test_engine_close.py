@@ -237,7 +237,7 @@ def test_change_period_intent_moves_open_period_start(env, ddb):
     apartment = _apartment(kit)
     result = kit.say("השוכר החדש מ-15/9, לשלושה חודשים")
     card = result.snapshot.card
-    assert card["kind"] == "change_period"
+    assert card["kind"] == "correction"
     assert "E-392" in card_text(card) and "W-1250" in card_text(card)
     assert [p["start"] for p in kit.periods(apartment)] == [START]
     assert _flags(kit, "E-392") == [(START, START, None)]
@@ -347,17 +347,81 @@ def test_a_photo_after_the_cancel_offer_still_resumes_the_close(env, ddb):
     assert result.snapshot.card["kind"] == "close"
 
 
-def test_a_typed_request_is_classified_with_the_apartment_names(env, ddb):
+def test_a_typed_request_is_classified_with_the_apartment_records(env, ddb):
     kit = Kit([IntentResult(intent="close_period", name="עורף")], today=date(2026, 11, 2))
     _apartment(kit)
     kit.apartment(name="קדמית", property_name="לאונר 18")
     kit.say("סגור את התקופה של עורף")
-    assert kit.model.classified[-1] == ("סגור את התקופה של עורף", "דירות: עורף | קדמית")
+    text, context = kit.model.classified[-1]
+    assert text == "סגור את התקופה של עורף"
+    assert context.startswith(f"{texts.RECORDS_TITLE}:\n")
+    assert "name=עורף; " in context and "name=קדמית; " in context
 
 
 def test_a_typed_name_no_apartment_has_is_not_found(env, ddb):
     kit = Kit([IntentResult(intent="close_period", name="מרתף")], today=date(2026, 11, 2))
     _apartment(kit)
     result = kit.say("סגור את התקופה של המרתף")
-    assert [r.text for r in result.replies] == [texts.unknown_apartment("מרתף")]
+    assert [r.text for r in result.replies] == [texts.unknown_apartment("מרתף", ["עורף"])]
     assert result.snapshot.card is None
+
+
+def _apartment_months(kit):
+    [apartment] = kit.store.apartments(ACCOUNT)
+    return apartment["period_months"]
+
+
+def test_a_changed_length_is_the_apartments_length_too(env, ddb):
+    kit = Kit([IntentResult(intent="change_period", name="עורף", months=3)])
+    apartment = _apartment(kit)
+    kit.say("התקופה של עורף שלושה חודשים")
+    kit.choose("confirm")
+    assert [p["months"] for p in kit.periods(apartment)] == [3]
+    assert _apartment_months(kit) == 3
+
+
+def test_a_moved_start_with_a_new_length_is_the_apartments_length_too(env, ddb):
+    kit = Kit([IntentResult(intent="change_period", name="עורף", date="2026-09-15", months=3)])
+    apartment = _apartment(kit)
+    kit.say("מ-15/9 לשלושה חודשים")
+    kit.choose("confirm")
+    assert [(p["start"], p["months"]) for p in kit.periods(apartment)] == [("2026-09-15", 3)]
+    assert kit.readings("W-1250")[0]["opens_period"] == "2026-09-15"
+    assert kit.readings("E-392")[0]["opens_period"] == "2026-09-15"
+    assert _apartment_months(kit) == 3
+
+
+def test_a_moved_start_alone_leaves_the_apartments_length(env, ddb):
+    kit = Kit([IntentResult(intent="change_period", name="עורף", date="2026-09-15")])
+    apartment = _apartment(kit)
+    kit.store.update_period(ACCOUNT, apartment["id"], START, months=4)
+    kit.say("מ-15/9")
+    kit.choose("confirm")
+    assert [p["months"] for p in kit.periods(apartment)] == [4]
+    assert _apartment_months(kit) == 2
+
+
+def test_a_request_with_nothing_to_change_shows_no_card(env, ddb):
+    kit = Kit([IntentResult(intent="change_period", name="עורף", months=2)])
+    _apartment(kit)
+    result = kit.say("התקופה של עורף חודשיים")
+    assert [r.text for r in result.replies] == [texts.nothing_to_correct()]
+    assert result.snapshot.card is None
+
+
+def test_a_start_overlapping_a_closed_period_is_refused(env, ddb):
+    kit = Kit([IntentResult(intent="change_period", name="עורף", date="2026-08-15")])
+    apartment = kit.apartment(start="2026-07-01", closed_on="2026-08-31")
+    kit.period(apartment, START)
+    result = kit.say("מ-15/8")
+    assert [r.text for r in result.replies] == [texts.periods_overlap("עורף", date(2026, 7, 1))]
+    assert [p["start"] for p in kit.periods(apartment)] == ["2026-07-01", START]
+
+
+def test_a_vacant_apartments_new_period_length_is_the_apartments_length_too(env, ddb):
+    kit = Kit([IntentResult(intent="change_period", name="עורף", date="2026-12-15", months=5)])
+    apartment = kit.apartment(start=START, closed_on="2026-10-31")
+    kit.say("תקופה חדשה מ-15/12 לחמישה חודשים")
+    kit.choose("confirm")
+    assert [(p["start"], p["months"]) for p in kit.periods(apartment)][-1] == ("2026-12-15", 5)
+    assert _apartment_months(kit) == 5

@@ -19,6 +19,8 @@ from engine_kit import (
     UNKNOWN,
     USER,
     Kit,
+    edit,
+    edits,
     electricity,
     options,
     statement,
@@ -26,7 +28,7 @@ from engine_kit import (
 )
 
 from common import texts
-from common.flows import AWAITING, card_text, classify_context, request_context
+from common.flows import card_text, classify_context, message_context
 from common.model import IntentResult
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -81,8 +83,8 @@ class Owner:
         return self._checked(self.kit.send_photo(result, as_statement=as_statement))
 
     def say(self, text, intent):
-        """Types text that the model classifies as intent, against the card the owner sees: an
-        awaiting card alone, or a standby card or none with the account's apartment names."""
+        """Types text that the model classifies as intent, against the card the owner sees, with
+        the account's records."""
         shown = self.card()
         context = self._context(shown)
         self.kit.model.queue(intent)
@@ -91,11 +93,9 @@ class Owner:
         return result
 
     def _context(self, shown) -> str:
-        status = {i["seq"]: i["status"] for i in self.kit.store.pending(USER.email)}
-        if shown is not None and status[shown["pending"]] == AWAITING:
-            return classify_context(shown)
-        names = sorted(a["name"] for a in self.kit.store.apartments(ACCOUNT))
-        return request_context(names, shown)
+        records, _ = self.kit.engine.records(USER)
+        card = None if shown is None else classify_context(shown, self.kit.form())
+        return message_context(records, card)
 
     def choose(self, option):
         assert option in options(self.card())
@@ -156,10 +156,10 @@ def _link_electricity(owner):
     """A new two-number meter linked to a new apartment from 1/9, its serial corrected."""
     first = owner.photo(_electricity(OPENING, SERIAL_READ))
     _ask_property(owner, first, SERIAL_READ)
-    both = IntentResult(intent="choose_property", name=PROPERTY, apartment=APARTMENT)
+    both = edits(("property", PROPERTY), ("apartment", APARTMENT))
     _ask_period(owner.say(PLACE, both))
 
-    result = owner.say("1/9", IntentResult(intent="set_period", date="2026-09-01"))
+    result = owner.say("1/9", edit("period_start", "2026-09-01"))
     card = result.snapshot.card
     assert card["kind"] == "link"
     assert card["title"] == f"סיכום לפני שמירה: מונה חשמל {SERIAL_READ} · {PROPERTY} / {APARTMENT}"
@@ -179,8 +179,7 @@ def _link_electricity(owner):
         ("confirm", "אישור"),
     ]
 
-    serial = IntentResult(intent="correct_field", field="serial", serial=SERIAL)
-    corrected = owner.say("הספרה האחרונה היא 8", serial).snapshot.card
+    corrected = owner.say("הספרה האחרונה היא 8", edit("serial", SERIAL)).snapshot.card
     assert corrected["kind"] == "link"
     assert SERIAL in corrected["title"] and SERIAL_READ not in corrected["title"]
     assert corrected["lines"] == card["lines"]
@@ -188,14 +187,9 @@ def _link_electricity(owner):
     top = IntentResult(intent="choose_option", name="המספר העליון")
     chosen = owner.say("העליון", top).snapshot.card
     assert chosen["kind"] == "link"
-    assert chosen["lines"] == [
-        f"נכס חדש: {PROPERTY}",
-        f"דירה חדשה: {APARTMENT}",
-        "קריאה: 37,937 קוט״ש",
-        "תאריך: 01/09/2026",
-        "קריאת פתיחה לתקופה מ־01/09/2026 לחודשיים",
-    ]
-    assert options(chosen) == ["confirm"]
+    # The other number stays on the card, so the choice can be taken back until confirmation.
+    assert chosen["lines"] == card["lines"]
+    assert options(chosen) == ["top", "bottom", "confirm"]
 
     result = owner.choose("confirm")
     assert result.snapshot.card is None
@@ -253,10 +247,9 @@ def _price_by_typing(owner):
     assert _texts(result) == [texts.EXPLANATIONS["tariffs_ask"], card_text(ask)]
     assert result.snapshot.card == ask
 
-    prices = IntentResult(
-        intent="set_tariffs",
-        electricity_price=PRICES["electricity"],
-        water_price=PRICES["water"],
+    prices = edits(
+        ("electricity_price", str(PRICES["electricity"])),
+        ("water_price", str(PRICES["water"])),
     )
     card = owner.say(TYPED_PRICES, prices).snapshot.card
     assert card["kind"] == "tariffs"
@@ -271,7 +264,10 @@ def _price_by_typing(owner):
 
     result = owner.choose("confirm")
     assert result.snapshot.card is None
-    charge = f"{PROPERTY} / {APARTMENT} · חשמל, התקופה מ־01/09/2026: 1,332 קוט״ש, חיוב 856.74 ₪"
+    charge = (
+        f"{PROPERTY} / {APARTMENT} · מונה חשמל 2721058, התקופה מ־01/09/2026: "
+        "1,332 קוט״ש, חיוב 856.74 ₪ (במקום 1,332 קוט״ש, אין חיוב)"
+    )
     assert _texts(result) == ["התעריפים נשמרו, בתוקף מ־29/10/2026.\n" + charge]
     [tariff] = owner.kit.tariffs()
     assert tariff["effective_date"] == "2026-10-29"
@@ -292,7 +288,7 @@ def _link_water(owner):
     assert card["title"] == f"מונה מים {WATER_SERIAL} עדיין לא מקושר לדירה. לאיזה נכס הוא שייך?"
     assert card["lines"] == [f"נכסים קיימים: {PROPERTY}", "או כתובת של נכס חדש."]
 
-    both = IntentResult(intent="choose_property", name=PROPERTY, apartment=APARTMENT)
+    both = edits(("property", PROPERTY), ("apartment", APARTMENT))
     card = owner.say(PLACE, both).snapshot.card
     # The apartment has an open period, so no start is asked.
     assert card["kind"] == "link"
@@ -324,8 +320,8 @@ def _ask_close(owner):
     """A typed close of the apartment shows the close card listing both closing readings."""
     request = IntentResult(intent="close_period", name=APARTMENT)
     card = owner.say(f"סגור את התקופה של {LABEL}", request).snapshot.card
-    # The request reaches the model with the apartment names it must name one of.
-    assert owner.kit.model.classified[-1][1] == f"דירות: {APARTMENT}"
+    # The request reaches the model with the apartment records it must name one of.
+    assert f"name={APARTMENT}; " in owner.kit.model.classified[-1][1]
     assert card["kind"] == "close"
     assert card["title"] == f"סגירת התקופה של {APARTMENT} (מ־30/10/2026)"
     assert card["lines"] == [
@@ -362,7 +358,7 @@ def test_a_new_meter_is_linked_from_typed_answers(env, ddb):
 def test_asking_about_the_apartment_question_explains_it(env, ddb):
     owner = Owner()
     _ask_property(owner, owner.photo(_electricity(OPENING, SERIAL)), SERIAL)
-    result = owner.say(PROPERTY, IntentResult(intent="choose_property", name=PROPERTY))
+    result = owner.say(PROPERTY, edit("property", PROPERTY))
     card = result.snapshot.card
     assert card["kind"] == "apartment"
     assert card["title"] == f"לאיזו דירה ב{PROPERTY}?"
@@ -371,7 +367,7 @@ def test_asking_about_the_apartment_question_explains_it(env, ddb):
     result = owner.say("מה זה?", IntentResult(intent="explain"))
     assert _texts(result) == [texts.EXPLANATIONS["apartment"], card_text(card)]
     assert result.snapshot.card == card
-    _ask_period(owner.say(APARTMENT, IntentResult(intent="choose_apartment", name=APARTMENT)))
+    _ask_period(owner.say(APARTMENT, edit("apartment", APARTMENT)))
 
 
 def test_the_next_reading_closes_the_period_and_asks_for_tariffs(env, ddb):

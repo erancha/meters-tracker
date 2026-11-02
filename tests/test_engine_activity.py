@@ -4,7 +4,7 @@ saved, set as the photo moves through its flows, so the browser can list the day
 from datetime import date, timedelta
 
 import pytest
-from engine_kit import UNKNOWN, USER, Kit, electricity, reading, water
+from engine_kit import UNKNOWN, USER, Kit, edits, electricity, reading, water
 
 from common import dates
 from common.engine import Action, MessageFailed
@@ -56,7 +56,7 @@ def test_a_confirmed_reading_is_saved(env, ddb):
 
 
 def test_a_photo_of_an_unknown_meter_is_awaiting_through_the_link_questions(env, ddb):
-    both = IntentResult(intent="choose_property", name="לאונר 18", apartment="דירה קדמית")
+    both = edits(("property", "לאונר 18"), ("apartment", "דירה קדמית"))
     kit = Kit([both])
     kit.send_photo(water())
     assert _photo(kit)["reading"] == {

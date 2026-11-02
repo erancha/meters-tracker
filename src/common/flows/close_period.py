@@ -16,19 +16,22 @@ apartments the daily greeting names.
 from datetime import date
 
 from common import texts
-from common.dates import parse_iso
+from common.account import reading_id
+from common.dates import next_day, parse_iso
 from common.flows import (
     AWAITING,
     PARKED,
+    CardGone,
     Reply,
+    apply_edits,
     ask,
     current_period,
     dated_rows,
     decide,
     drop,
+    live_apartment,
     make_card,
     new_item,
-    next_day,
     not_understood,
     place,
     put_period,
@@ -38,6 +41,7 @@ from common.flows import (
 from common.periods import apartment_meters, period_end, period_readings
 
 KIND = "close_period"
+CLOSE = "close"
 WAITING = "waiting"
 
 
@@ -51,6 +55,55 @@ def card(item) -> dict:
         data["apartment"], parse_iso(data["period_start"]), dated_rows(data["closing"])
     )
     return make_card(item, "close", text, options)
+
+
+def form(item) -> dict:
+    """The closing readings' values, each by its record id: the card lists saved readings, so a
+    change to one is a correction of that record, which the card's next answer then shows."""
+    if item["step"] == WAITING:
+        return {}
+    data = item["data"]
+    return {
+        f"reading|{target}": value
+        for target, (_, _, value, _) in zip(data["closing_ids"], data["closing"])
+    }
+
+
+def default_field(item) -> str | None:
+    return None
+
+
+def refresh(engine, user, item):
+    """Re-reads the apartment, its open period and the readings the card lists. A close card is
+    for the period it lists; once another open period has taken its place, it is done."""
+    data = item["data"]
+    apartment = live_apartment(engine, user, data["apartment_id"])
+    period = current_period(engine, user, apartment["id"])
+    if period is None:
+        raise CardGone(texts.no_open_period(apartment["name"]))
+    if item["step"] == CLOSE and period["start"] != data["period_start"]:
+        listed = parse_iso(data["period_start"])
+        raise CardGone(texts.period_already_closed(apartment["name"], listed))
+    closing, missing = _closing(engine, user, apartment["id"], period)
+    if missing:
+        _hold_missing(data, apartment, missing)
+        item["step"] = WAITING
+    else:
+        _hold_closing(data, apartment, period, closing)
+        item["step"] = CLOSE
+
+
+def _hold_missing(data, apartment, missing):
+    data.update(apartment=apartment["name"], missing=[list(m) for m in missing])
+
+
+def _hold_closing(data, apartment, period, closing):
+    data.update(
+        apartment=apartment["name"],
+        period_start=period["start"],
+        closing=[[m["type"], m["serial"], r["value"], r["date"]] for m, r in closing],
+        closing_ids=[reading_id(m["serial"], r) for m, r in closing],
+    )
 
 
 def parked(engine, user, apartment_id) -> dict | None:
@@ -70,7 +123,7 @@ def start(engine, user, apartment_id, vacate, at_once=False) -> list[Reply]:
     item = parked(engine, user, apartment_id)
     asked_again = item is not None
     if item is None:
-        item = new_item(engine.stamp(), KIND, AWAITING, "close", {"apartment_id": apartment_id})
+        item = new_item(engine.stamp(), KIND, AWAITING, CLOSE, {"apartment_id": apartment_id})
     item["data"]["vacate"] = vacate
     return _advance(engine, user, item, decided=False, offer_cancel=asked_again, at_once=at_once)
 
@@ -91,9 +144,11 @@ def resume(engine, user, item) -> list[Reply]:
 
 
 def answer(engine, user, item, action) -> list[Reply]:
-    key, _ = decide(engine, card(item), action)
+    key, intent = decide(engine, item, action)
     if key == "reject":
         return drop(engine, user, item, [Reply(texts.close_cancelled())])
+    if key == "edit":
+        return apply_edits(engine, user, item, intent.operations)
     if key in ("confirm", "vacate"):
         item["data"]["vacate"] = key == "vacate"
         return _advance(engine, user, item, decided=True)
@@ -110,17 +165,16 @@ def _advance(engine, user, item, decided, offer_cancel=False, at_once=False) -> 
         return drop(engine, user, item, [Reply(texts.no_open_period(apartment["name"]))])
     closing, missing = _closing(engine, user, apartment["id"], period)
     if missing:
-        data.update(apartment=apartment["name"], missing=[list(m) for m in missing])
+        _hold_missing(data, apartment, missing)
         if offer_cancel:
             return ask(engine, user, item, WAITING, card)
         item.update(step=WAITING, status=PARKED)
         engine.store.put_pending(user.email, item)
         return [Reply(texts.missing_photos(apartment["name"], missing))]
-    shown = [[m["type"], m["serial"], r["value"], r["date"]] for m, r in closing]
-    if at_once or (decided and shown == data["closing"]):
+    if at_once or decided:
         return _close(engine, user, item, apartment, period, closing)
-    data.update(apartment=apartment["name"], period_start=period["start"], closing=shown)
-    return ask(engine, user, item, "close", card)
+    _hold_closing(data, apartment, period, closing)
+    return ask(engine, user, item, CLOSE, card)
 
 
 def _closing(engine, user, apartment_id, period) -> tuple[list, list]:

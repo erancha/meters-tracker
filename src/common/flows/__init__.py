@@ -9,47 +9,83 @@ state within the flow; version grows every time the item shows a card or a choic
 choice names the exact card it answers; data holds the flow's accumulated answers, enough to render
 its card without another store read.
 
+Every flow module offers form(item), the fields a typed edit may change with their current values,
+in the order edits apply, None for a field not answered yet, and default_field(item), the field a
+bare input fills, or None when there is none. A flow with fields also has edit(engine, user, item,
+field, value), which changes one of them, and after_edit(engine, user, item), which shows the card
+the edits lead to. A question card is a form whose asked field is empty, so its typed answer is an
+edit too. A card that asked for one of its fields again, after a missing or unfitting value, holds
+that field as asked until it is shown anew or a refresh moves it to another step, and a bare input
+fills it in place of the default.
+
+An item holds copies of saved records, which go stale when a correction lands, so every flow module
+also offers refresh(engine, user, item), which re-reads them into the item in memory and may move
+it to another step or kind. It raises CardGone when no card can stand on the records any more.
+
 Building blocks:
 - Action / Choice / Reply / Snapshot / TurnResult: what a turn takes and returns
 - new_item / make_card / ask / drop / decide: a new pending item, card rendering, the pending
   write, reading a choice or text
 - tag_photo: the reading field on a photo's message, kept current by ask and drop
-- classify_context / request_context: what the classifier is given with an answer to a card,
-  and with a request no card takes
-- propose / edit_reading: the value a photo proposes and the edits a reading card accepts
-- save_reading / summary / price_in / price_on: the reading record, the reply that follows a
+- classify_context / form_context / message_context: what the classifier is given with typed text
+  (a card's text, fields, asked field and buttons, then the account's records)
+- ask_back / not_understood: the reply to a message that is no change the app can make, with no
+  card or on one; never a bare "not understood", always what can be done or a question
+- on_card / record_operation / apply_edits: what tells a card's operation from a saved record's,
+  and the one path of a typed edit on a card, whatever the flow and the step
+- propose / edit_read / choose_position: the value a photo proposes and the changes to what the
+  photo read
+- save_reading / summary / price_on: the reading record, the reply that follows a
   save, and the price it is charged at
-- Figures / period_figures: one meter's period figures, shared by the summary and the report
-- failed_photos / failure_record: the photos the model failed on, recorded with the reading
-- put_period / flagged / move_period: period rows and the reading flags that point at them
+- period_figures: one meter's period figures at the engine's clock, shared by the summary and
+  the report
+- add_failed_photos / failed_photos / failure_record: the photos the model failed on, each once,
+  recorded with the reading
+- put_period: a new period's row
+- known_meter / live_apartment: the records a refresh re-reads a card from
 - with_apartment / dated_rows: resolving a typed apartment name; card rows with parsed dates
 """
 
 from dataclasses import dataclass
-from datetime import timedelta
 
-from common import texts
+from common import account, corrections, texts
 from common.dates import parse_iso
+from common.fields import (
+    DISPLAY_POSITIONS,
+    FIELDS,
+    InvalidValue,
+    UnknownField,
+    UnknownTarget,
+    field_for,
+    parse,
+)
 from common.model import IntentResult
 from common.periods import (
-    Consumption,
-    charge,
+    Figures,
     consumption,
-    forecast,
+    figures,
+    new_period,
     open_period,
     period_readings,
-    tariff_on,
+    price_in,
 )
 
 READING = "reading"
 AWAITING = "awaiting"
 PARKED = "parked"
 STANDBY = "standby"
-POSITIONS = ("top", "bottom")
+POSITIONS = DISPLAY_POSITIONS
 FAILURE_FIELDS = ("failed_photos", "model")
 # The flows a meter photo's pending item passes through.
 READING_KINDS = ("meter_photo", "link_meter")
-PRICES = {"electricity": "electricity_per_kwh", "water": "water_per_m3"}
+# The target of an edit on the card on screen.
+CARD_TARGET = "card"
+# The item key holding the field a card asked for again; absent while it asks for none.
+ASKED = "asked"
+# The kind of the question flow's item, which a newer card replaces.
+QUESTION = "question"
+# The intents answered the same on any card or none, since none of them changes anything.
+ASK_BACK_INTENTS = ("how_to", "which", "not_offered")
 
 
 class AlreadyHandled(Exception):
@@ -60,6 +96,14 @@ class AlreadyHandled(Exception):
 class MessageFailed(Exception):
     """Handling a stored text or photo failed, so the message is marked failed and can be
     retried. The original exception is the cause."""
+
+
+class CardGone(Exception):
+    """A waiting card's records can no longer carry it; text tells the person why."""
+
+    def __init__(self, text: str):
+        super().__init__(text)
+        self.text = text
 
 
 @dataclass
@@ -77,6 +121,8 @@ class Action:
     note: str | None = None
     choice: Choice | None = None
     retry: str | None = None
+    # What the model made of text; the engine sets it before a flow sees the action.
+    intent: IntentResult | None = None
 
 
 @dataclass
@@ -133,20 +179,38 @@ def card_text(card) -> str:
     return "\n".join([card["title"], *card["lines"]])
 
 
-def classify_context(card) -> str:
-    """The card as the classifier is given it: its text, then its button labels when it has
-    any, so a message can name a button."""
+def form_context(form: dict) -> str:
+    """A card's fields as the classifier is given them, one per line under their title, each by
+    the name an edit gives it."""
+    lines = [f"{name}: {texts.EMPTY_VALUE if v is None else v}" for name, v in form.items()]
+    return "\n".join([f"{texts.FORM_TITLE}:", *lines])
+
+
+def asked_field(item) -> str | None:
+    return item.get(ASKED)
+
+
+def classify_context(card, form: dict, asked: str | None = None) -> str:
+    """The card as the classifier is given it: its text, its fields when it has any, so an edit
+    can name one, and the field it asked for again, then its button labels when it has any, so a
+    message can name a button."""
+    parts = [card_text(card)]
+    if form:
+        parts.append(form_context(form))
+    if asked is not None:
+        parts.append(f"{texts.ASKED_TITLE}: {asked}")
     labels = [option["label"] for option in card["options"]]
-    context = card_text(card)
-    return context + "\nכפתורים: " + " | ".join(labels) if labels else context
+    if labels:
+        parts.append(f"{texts.BUTTONS_TITLE}: " + " | ".join(labels))
+    return "\n".join(parts)
 
 
-def request_context(apartment_names: list[str], standby_card=None) -> str:
-    """The context of typed text no awaiting card takes: the standby card when one waits, then
-    the account's apartment names, so a request names its apartment exactly as stored."""
-    parts = [] if standby_card is None else [classify_context(standby_card)]
-    if apartment_names:
-        parts.append("דירות: " + " | ".join(apartment_names))
+def message_context(records: str, card_context: str | None = None) -> str:
+    """The context of typed text: the waiting card's classify_context when a card takes the text,
+    then the account's records block, so a change or a request can name a saved record exactly."""
+    parts = [] if card_context is None else [card_context]
+    if records:
+        parts.append(records)
     return "\n".join(parts)
 
 
@@ -155,8 +219,15 @@ def card_reply(card) -> Reply:
 
 
 def ask(engine, user, item, step, render) -> list[Reply]:
-    """Shows the item's card for step, under a new version."""
+    """Shows the item's card for step, under a new version, which asks for no field. An item's
+    first card drops a question still waiting, since the person has moved on to something newer
+    and the question's answer must not take text meant for the new card."""
+    if item["version"] == 0 and item["kind"] != QUESTION:
+        for waiting in engine.store.pending(user.email):
+            if waiting["kind"] == QUESTION:
+                drop(engine, user, waiting, [])
     item.update(step=step, status=AWAITING, version=item["version"] + 1)
+    item.pop(ASKED, None)
     engine.store.put_pending(user.email, item)
     tag_photo(engine, user, item, "awaiting")
     return [card_reply(render(item))]
@@ -178,14 +249,16 @@ def tag_photo(engine, user, item, state):
     engine.store.set_message_reading(user.email, data["message_at"], {"state": state, **reading})
 
 
-def decide(engine, card, action) -> tuple[str, IntentResult | None]:
+def decide(engine, item, action) -> tuple[str, IntentResult | None]:
     """Returns the option id of a choice, or the intent name of typed text with its arguments.
     The engine has already checked that a choice's option is on the card."""
     if action.choice is not None:
         return action.choice.option, None
+    intent = action.intent
+    card = engine.flow(item).card(item)
     labels = {option["label"]: option["id"] for option in card["options"]}
-    intent = engine.model.classify(action.text, classify_context(card), engine.clock())
-    # A typed button label answers as the button does; a label the card lacks is not understood.
+    # A typed button label answers as the button does; a label the card lacks gets what the
+    # card takes.
     if intent.intent == "choose_option" and intent.name in labels:
         return labels[intent.name], None
     return intent.intent, intent
@@ -193,10 +266,107 @@ def decide(engine, card, action) -> tuple[str, IntentResult | None]:
 
 def not_understood(card, key) -> list[Reply]:
     """The reply to an answer the card cannot take, then the card again: what the card asks when
-    the owner asked that and the card has an explanation, else the general help."""
+    the owner asked that and the card has an explanation, else what the card takes."""
     explain = key == "explain" and card["kind"] in texts.EXPLANATIONS
-    text = texts.EXPLANATIONS[card["kind"]] if explain else texts.unknown_intent()
+    labels = [option["label"] for option in card["options"]]
+    text = texts.EXPLANATIONS[card["kind"]] if explain else texts.card_help(labels)
     return [Reply(text), card_reply(card)]
+
+
+def _how_to(operations) -> str | None:
+    """The how-to text of the field the first operation names, or None when it names none."""
+    if not operations:
+        return None
+    key = (operations[0].target.partition("|")[0], operations[0].field)
+    return FIELDS[key].how_to if key in FIELDS else None
+
+
+def _which(engine, user, operations, names) -> str:
+    state = account.load(engine.store, user.account, user.role)
+    try:
+        labels = [corrections.label(state, operation.target) for operation in operations]
+    except UnknownTarget:
+        return texts.unknown_record(names)
+    if not labels:
+        return texts.options_reply(names)
+    return texts.which_record(list(dict.fromkeys(labels)))
+
+
+def ask_back(engine, user, intent) -> list[Reply]:
+    """The reply to a message that is no change the app can make: a how-to question gets the
+    field's how-to text, a message fitting several records lists them, a request the app lacks
+    says so, a bare value with no card to take it is asked about, and anything else gets what the
+    assistant can do, with the account's own apartment names. Nothing is written."""
+    names = [a["name"] for a in engine.store.apartments(user.account)]
+    if intent.intent == "how_to":
+        how_to = _how_to(intent.operations)
+        return [Reply(texts.options_reply(names) if how_to is None else texts.how_to_reply(how_to))]
+    if intent.intent == "which":
+        return [Reply(_which(engine, user, intent.operations, names))]
+    if intent.intent == "not_offered":
+        return [Reply(texts.not_offered(names))]
+    values = [o.value for o in intent.operations if on_card(o) and o.value is not None]
+    if intent.intent == "edit" and values:
+        return [Reply(texts.bare_input(values[0]))]
+    return [Reply(texts.options_reply(names))]
+
+
+def on_card(operation) -> bool:
+    """True for an operation on a waiting card, as opposed to a saved record."""
+    return operation.target.partition("|")[0] == CARD_TARGET
+
+
+def record_operation(operation, form: dict):
+    """The operation with a form field that is a record's id (a close card lists its closing
+    readings so) aimed at that record's value, which is what setting such a field means. Any other
+    operation is returned as it is."""
+    if operation.target == CARD_TARGET and operation.field in form and "|" in operation.field:
+        return operation.model_copy(update={"target": operation.field, "field": "value"})
+    return operation
+
+
+def _typed_edit(flow, item, form, operation, today) -> tuple[str, object]:
+    """The (field name, typed value) of a set on the card on screen. A field the operation leaves
+    out is the card's default field. Raises UnknownField for anything else the card cannot take,
+    and InvalidValue for a value that does not fit the field."""
+    if operation.action != "set" or operation.target != CARD_TARGET:
+        raise UnknownField(f"{operation.action} on {operation.target}")
+    name = operation.field
+    if name is None:
+        asked = asked_field(item)
+        name = flow.default_field(item) if asked is None else asked
+    if name not in form:
+        raise UnknownField(name)
+    return name, parse(field_for("card", name), operation.value, today)
+
+
+def apply_edits(engine, user, item, operations) -> list[Reply]:
+    """Applies a message's operations to the item and shows the card its flow arrives at. Every
+    operation is checked before the first is applied, so an edit the card cannot take leaves the
+    item as it was and shows the card again: with the field's question when the value is missing
+    or invalid, and the card then holds that field as asked, else with what the card takes. Edits
+    apply in the order of the form's fields, so a message means one thing whatever order the model
+    lists its operations in."""
+    flow = engine.flow(item)
+    card = flow.card(item)
+    form = flow.form(item)
+    if not operations:
+        return not_understood(card, "edit")
+    edits = []
+    for operation in operations:
+        try:
+            edits.append(_typed_edit(flow, item, form, operation, engine.clock()))
+        except UnknownField:
+            return not_understood(card, "edit")
+        except InvalidValue as error:
+            item[ASKED] = error.field.name
+            engine.store.put_pending(user.email, item)
+            current = texts.field_value(error.field.kind, form[error.field.name])
+            return [Reply(error.field.question.format(current=current)), card_reply(card)]
+    fields = list(form)
+    for name, value in sorted(edits, key=lambda edit: fields.index(edit[0])):
+        flow.edit(engine, user, item, name, value)
+    return flow.after_edit(engine, user, item)
 
 
 def readable(candidate) -> bool:
@@ -226,36 +396,25 @@ def display_choice(data) -> int | None:
     return POSITIONS.index(data["position"]) if data["position"] in POSITIONS else None
 
 
-def edit_reading(data, key, intent) -> bool:
-    """Applies a reading card's edit (a display position, a typed value, a date); False when key
-    is not an edit."""
-    if key in POSITIONS:
-        data.update(value=data["alternatives"][key], position=key, alternatives=None)
-    elif key == "correct_field" and intent.field == "value":
-        data.update(value=intent.value, position=None, alternatives=None)
-    elif key == "set_date":
-        data["reading_date"] = intent_date(intent)
+def edit_read(data, field, value):
+    """Changes a field the photo read. A typed value replaces the numbers the display offered. A
+    typed value, date or serial takes back a reset chosen for the earlier reading, since the
+    lower-reading check runs again on the changed reading. A typed serial settles the serial, and
+    the one the model read is kept as read_serial, so the saved reading records the misread."""
+    if field == "value":
+        data.update(value=value, position=None, alternatives=None, resets=False)
+    elif field == "date":
+        data.update(reading_date=value, resets=False)
+    elif field == "serial":
+        data.setdefault("read_serial", data["serial"])
+        data.update(serial=value, serial_unreadable=False, resets=False)
     else:
-        return False
-    return True
+        data["meter_type"] = value
 
 
-def correct_serial(data, key, intent) -> bool:
-    """Applies a typed serial correction; False when key is not one. The serial the model read
-    is kept as read_serial, so the saved reading records the misread."""
-    if key != "correct_field" or intent.field != "serial":
-        return False
-    if intent.serial is None:
-        raise ValueError("a serial correction came without the serial")
-    data.setdefault("read_serial", data["serial"])
-    data["serial"] = intent.serial
-    return True
-
-
-def intent_date(intent) -> str:
-    if intent.date is None:
-        raise ValueError("set_date intent came without a date")
-    return intent.date
+def choose_position(data, position):
+    """The alternatives stay so the other number can still be pressed; position marks the choice."""
+    data.update(value=data["alternatives"][position], position=position)
 
 
 def reading_text(data):
@@ -285,17 +444,53 @@ def place(engine, user, apartment_id) -> tuple[dict, dict]:
     return apartment, by_id(engine.store.properties(user.account), apartment["property_id"])
 
 
+def live_apartment(engine, user, apartment_id) -> dict:
+    """The apartment a card names. Raises CardGone when a correction deleted it."""
+    apartments = {a["id"]: a for a in engine.store.apartments(user.account)}
+    if apartment_id not in apartments:
+        raise CardGone(texts.card_gone())
+    return apartments[apartment_id]
+
+
+def known_meter(engine, user, data) -> dict | None:
+    """The meter data's serial names, setting that serial to the meter's current one when a
+    correction renamed it; None when no meter holds or held it. The serial the model read stays as
+    read_serial, as a typed serial keeps it, so the saved reading counts the photo as misread. A
+    row has former_serials only once it was renamed. Should two meters have held the serial, the
+    card shows the first one's, so the person sees which it took."""
+    meter = engine.store.meter(user.account, data["serial"])
+    if meter is None:
+        renamed = (
+            m
+            for m in engine.store.meters(user.account)
+            if data["serial"] in m.get("former_serials", ())
+        )
+        meter = next(renamed, None)
+        if meter is not None:
+            data.setdefault("read_serial", data["serial"])
+            data["serial"] = meter["serial"]
+    return meter
+
+
 def current_period(engine, user, apartment_id) -> dict | None:
     return open_period(engine.store.periods(user.account, apartment_id))
+
+
+def add_failed_photos(data, keys):
+    """Adds to the photos the model failed on each key not listed yet, so each is listed once."""
+    for key in keys:
+        if key not in data["failed_photos"]:
+            data["failed_photos"].append(key)
 
 
 def failed_photos(data) -> list[str]:
     """The photos the model failed on along the way to this reading: the superseded unreadable
     ones, then this one when the confirmed value is not among the values it read or the owner
-    corrected its serial."""
+    corrected its serial. A reopened photo the model read no meter type in is listed already."""
     read_values = [c["value"] for c in data["candidates"] if readable(c)]
     serial_corrected = "read_serial" in data and data["read_serial"] != data["serial"]
-    if data["value"] in read_values and not serial_corrected:
+    listed = data["image_key"] in data["failed_photos"]
+    if listed or (data["value"] in read_values and not serial_corrected):
         return data["failed_photos"]
     return [*data["failed_photos"], data["image_key"]]
 
@@ -324,39 +519,14 @@ def save_reading(engine, user, item, opens=None, closes=None) -> dict:
     return reading
 
 
-def price_in(tariffs, meter_type, d) -> float | None:
-    """The price of meter_type in the tariff in force on d; None when no tariff is in force or
-    that tariff leaves the type unpriced."""
-    tariff = tariff_on(tariffs, d)
-    return None if tariff is None else tariff[PRICES[meter_type]]
-
-
 def price_on(engine, user, meter_type, d) -> float | None:
     return price_in(engine.store.tariffs(user.account), meter_type, d)
 
 
-@dataclass(frozen=True)
-class Figures:
-    """One meter's figures for a period. outlook is the period's units: the final count, else the
-    forecast, which is None until time has passed since the opening reading."""
-
-    consumption: Consumption
-    outlook: float | None
-    price: float | None
-    amount: float | None
-
-
 def period_figures(engine, user, meter_type, readings, period) -> Figures | None:
-    """The meter's figures for the period, or None when it has no reading there. A final count is
-    priced on its last reading's date, a forecast on today."""
-    c = consumption(readings, period)
-    if c is None:
+    if consumption(readings, period) is None:
         return None
-    outlook = c.units if c.final else forecast(c, period)
-    priced_on = parse_iso(c.last["date"]) if c.final else engine.clock()
-    price = price_on(engine, user, meter_type, priced_on)
-    amount = None if outlook is None or price is None else charge(outlook, price)
-    return Figures(c, outlook, price, amount)
+    return figures(meter_type, readings, period, engine.store.tariffs(user.account), engine.clock())
 
 
 def summary(engine, user, meter, reading) -> Reply:
@@ -392,51 +562,19 @@ def summary(engine, user, meter, reading) -> Reply:
     )
 
 
-def next_day(d: str) -> str:
-    return (parse_iso(d) + timedelta(days=1)).isoformat()
-
-
 def put_period(engine, user, apartment_id, start, months):
-    engine.store.put_period(
-        user.account,
-        apartment_id,
-        {"start": start, "months": months, "closed_on": None, "last_reminded_on": None},
-    )
-
-
-def flagged(engine, user, apartment_id, flag, start) -> list[tuple[dict, dict]]:
-    """(meter, reading) pairs whose flag ("opens_period" or "closes_period") names the period
-    starting on start, over every meter the apartment ever had, retired ones included."""
-    return [
-        (meter, r)
-        for meter in engine.store.meters(user.account)
-        if meter["apartment_id"] == apartment_id
-        for r in engine.store.readings(user.account, meter["serial"])
-        if r[flag] == start
-    ]
-
-
-def move_period(engine, user, apartment_id, period, start, months):
-    """Re-keys a period to a new start and points its opening readings at it."""
-    if start == period["start"]:
-        raise ValueError(f"period {start} is already at that start")
-    engine.store.put_period(
-        user.account, apartment_id, {**period, "start": start, "months": months}
-    )
-    for meter, r in flagged(engine, user, apartment_id, "opens_period", period["start"]):
-        engine.store.update_reading(
-            user.account, meter["serial"], r["date"], r["seq"], opens_period=start
-        )
-    engine.store.delete_period(user.account, apartment_id, period["start"])
+    engine.store.put_period(user.account, apartment_id, new_period(start, months))
 
 
 def with_apartment(engine, user, name, act) -> list[Reply]:
     apartments = engine.store.apartments(user.account)
+    if not apartments:
+        return [Reply(texts.no_apartments())]
     matches = apartments if name is None else [a for a in apartments if a["name"] == name]
     if len(matches) == 1:
         return act(matches[0])
     if not matches:
-        return [Reply(texts.no_apartments() if name is None else texts.unknown_apartment(name))]
+        return [Reply(texts.unknown_apartment(name, [a["name"] for a in apartments]))]
     return [Reply(texts.which_apartment([a["name"] for a in matches]))]
 
 

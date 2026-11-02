@@ -10,6 +10,7 @@ import anthropic
 import openai
 import pytest
 from fake_model import FakeModel
+from openai.lib._pydantic import to_strict_json_schema
 
 from common import prompts
 from common.model import (
@@ -18,6 +19,7 @@ from common.model import (
     MeterReadingResult,
     ModelRefused,
     OpenAIModel,
+    Operation,
     StatementResult,
     Usage,
     build_model,
@@ -168,7 +170,7 @@ def test_classify_tells_the_model_today_and_the_pending_card(monkeypatch, cls, s
     assert cls("key", "m").classify("כן", "כרטיס", date(2026, 10, 29)) is intent
     _, call = calls
     content = call["messages"][0]["content"] if stub == "anthropic" else call["input"][1]["content"]
-    assert content == "Today: 2026-10-29\n\nכן\n\nPending card:\nכרטיס"
+    assert content == "Today: 2026-10-29\n\nכן\n\nContext:\nכרטיס"
 
 
 def test_claude_model_raises_on_refusal(monkeypatch):
@@ -271,3 +273,35 @@ def test_set_tariffs_intent_carries_both_prices():
     intent = IntentResult(intent="set_tariffs", electricity_price=0.6432, water_price=None)
     assert (intent.electricity_price, intent.water_price) == (0.6432, None)
     assert "set_tariffs" in prompts.CLASSIFY
+
+
+def test_intent_result_carries_operations():
+    result = IntentResult.model_validate(
+        {
+            "intent": "edit",
+            "operations": [
+                {"action": "set", "target": "meter|2721056", "field": "serial", "value": "2721058"}
+            ],
+        }
+    )
+    (operation,) = result.operations
+    assert isinstance(operation, Operation)
+    assert (operation.action, operation.target) == ("set", "meter|2721056")
+    assert (operation.field, operation.value) == ("serial", "2721058")
+    assert IntentResult(intent="confirm").operations == []
+
+
+def test_strict_schema_carries_no_non_null_default():
+    def non_null_defaults(node, path="$"):
+        found = []
+        if isinstance(node, dict):
+            if "default" in node and node["default"] is not None:
+                found.append(path)
+            for key, child in node.items():
+                found += non_null_defaults(child, f"{path}.{key}")
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                found += non_null_defaults(child, f"{path}[{index}]")
+        return found
+
+    assert non_null_defaults(to_strict_json_schema(IntentResult)) == []

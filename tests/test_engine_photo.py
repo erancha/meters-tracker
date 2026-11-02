@@ -5,7 +5,7 @@ limit, and the photos a saved reading records as failed."""
 from datetime import timedelta
 
 import pytest
-from engine_kit import ACCOUNT, USER, Kit, electricity, options, reading, water
+from engine_kit import ACCOUNT, USER, Kit, candidate, edit, electricity, options, reading, water
 
 from common import dates, texts
 from common.engine import AlreadyHandled, MessageFailed
@@ -38,7 +38,7 @@ def test_known_meter_shows_reading_card_with_saved_choice(env, ddb):
     card = result.replies[-1].card
     assert card["kind"] == "reading"
     assert options(card) == ["confirm"]
-    text = "\n".join([card["title"], *card["lines"]])
+    text = card_text(card)
     assert "392,693" in text and "392,691" not in text
     assert "עורף" in text
     assert result.snapshot.card == card
@@ -90,7 +90,7 @@ def test_duplicate_same_date_is_offered_not_saved(env, ddb):
 
 
 def test_backdated_reading_inserts_by_date(env, ddb):
-    kit = Kit([IntentResult(intent="set_date", date="2026-10-10")])
+    kit = Kit([edit("date", "2026-10-10")])
     _water_apartment(
         kit, [reading("2026-10-01", 1000, opens="2026-10-01"), reading("2026-10-20", 1200)]
     )
@@ -104,8 +104,36 @@ def test_backdated_reading_inserts_by_date(env, ddb):
     ]
 
 
+def test_a_note_is_classified_with_the_date_the_photo_would_take(env, ddb):
+    kit = Kit([edit("date", "2026-10-10")])
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1100), note="צולם ב-10/10")
+    assert kit.model.classified == [("צולם ב-10/10", f"{texts.FORM_TITLE}:\ndate: 2026-10-29")]
+
+
+def test_a_note_that_is_only_a_date_dates_the_reading(env, ddb):
+    kit = Kit([edit(None, "2026-10-10")])
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1100), note="10/10")
+    assert "10/10/2026" in card_text(kit.card())
+
+
+def test_a_note_naming_a_day_after_the_photo_keeps_the_day_it_was_sent(env, ddb):
+    kit = Kit([edit("date", "2026-10-30")])
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1100), note="צולם מחר")
+    assert "29/10/2026" in card_text(kit.card())
+
+
+def test_a_note_naming_no_date_keeps_the_day_it_was_sent(env, ddb):
+    kit = Kit([edit("serial", "W-1250")])
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1100), note="המונה של עורף")
+    assert "29/10/2026" in card_text(kit.card())
+
+
 def test_backdated_before_closing_offers_swap(env, ddb):
-    kit = Kit([IntentResult(intent="set_date", date="2026-10-01")])
+    kit = Kit([edit("date", "2026-10-01")])
     apartment = kit.apartment(start="2026-08-01", closed_on="2026-10-05")
     kit.period(apartment, "2026-10-06")
     kit.meter(
@@ -213,7 +241,7 @@ def test_two_photos_show_oldest_first_and_confirm_pulls_next(env, ddb):
 
 
 def test_unreadable_digit_asks_for_retake_or_value(env, ddb):
-    kit = Kit([IntentResult(intent="correct_field", field="value", value=1251)])
+    kit = Kit([edit("value", "1251")])
     _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
     result = kit.send_photo(water(None, unreadable=True))
     assert result.snapshot.card["kind"] == "unreadable"
@@ -287,7 +315,7 @@ def test_photo_read_past_the_lambda_timeout_asks_for_a_retake(env, ddb):
 
 
 def test_typed_correction_on_a_reading_card_replaces_the_value(env, ddb):
-    kit = Kit([IntentResult(intent="correct_field", field="value", value=392650)])
+    kit = Kit([edit("value", "392650")])
     _electric_apartment(kit, display_choice=0)
     kit.send_photo(electricity())
     result = kit.say("הקריאה היא 392650")
@@ -345,7 +373,7 @@ def test_reading_confirmed_as_proposed_carries_no_record(env, ddb):
 
 
 def test_typed_value_marks_the_saved_photo_as_failed(env, ddb):
-    kit = Kit([IntentResult(intent="correct_field", field="value", value=1260)])
+    kit = Kit([edit("value", "1260")])
     _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
     kit.send_photo(water(1250))
     kit.say("הקריאה היא 1260")
@@ -415,3 +443,30 @@ def test_choice_message_names_the_card_it_answered(env, ddb):
         {"pending": card["pending"], "version": card["version"]},
         None,
     ]
+
+
+def test_typed_serial_on_unreadable_card_moves_the_photo_to_that_serial(env, ddb):
+    kit = Kit([edit("serial", "2721058")])
+    unreadable_serial = MeterReadingResult(
+        meter_type="electricity",
+        serial=None,
+        serial_unreadable=True,
+        candidates=[candidate(392691, "top", "kWh")],
+        handwritten_label=None,
+    )
+    result = kit.send_photo(unreadable_serial)
+    assert result.snapshot.card["kind"] == "unreadable"
+    card = kit.say("המספר הסידורי הוא 2721058").snapshot.card
+    assert card["kind"] == "property"
+    assert "2721058" in card_text(card)
+
+
+def test_a_retired_meter_with_no_live_meter_of_its_type_is_refused_naming_none(env, ddb):
+    kit = Kit()
+    apartment = kit.apartment()
+    rows = [reading("2026-09-01", 1000, opens="2026-09-01")]
+    kit.meter(apartment, "W-1", "water", rows, retired_at="2026-09-10")
+    result = kit.send_photo(water(1300, serial="W-1"))
+    assert [r.text for r in result.replies] == [texts.retired_meter_alone("W-1")]
+    assert result.snapshot.card is None
+    assert len(kit.readings("W-1")) == 1

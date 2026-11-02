@@ -1,6 +1,6 @@
-"""Every Hebrew string the chat and the emailed report show. Card texts return (title, lines); replies return one string.
-Flows pass plain values in (names, numbers, dates) and never build Hebrew themselves, so the
-owner's wording corrections touch this file only."""
+"""Every Hebrew string the chat and the emailed report show. Card texts return (title, lines);
+replies return one string. Flows pass plain values in (names, numbers, dates) and never build
+Hebrew themselves, so the owner's wording corrections touch this file only."""
 
 from datetime import date
 
@@ -22,9 +22,21 @@ OPTION_LABELS = {
 METER_KINDS = {"electricity": "חשמל", "water": "מים"}
 UNITS = {"electricity": "קוט״ש", "water": "קוב"}
 POSITION_NAMES = {"top": "עליון", "bottom": "תחתון"}
+# How a photo was read, by the value of its kind field.
+PHOTO_KIND_NAMES = {"statement": "חשבון קודם", "meter": "מונה"}
 FINAL_LABEL = "חישוב סופי"
 OUTLOOK_LABEL = "צפי לסוף התקופה"
 NO_FIGURE = "—"
+
+
+# What the classifier reads above a card's fields, buttons and the account's records, and what
+# stands for a field with no value; the classifier's prompt names each.
+FORM_TITLE = "שדות"
+BUTTONS_TITLE = "כפתורים"
+RECORDS_TITLE = "רשומות"
+# Names the field a card's last question asked for, which a bare answer then fills.
+ASKED_TITLE = "שאלה"
+EMPTY_VALUE = "ריק"
 
 
 def number(value) -> str:
@@ -50,8 +62,9 @@ def reading_card(
     if alternatives is None:
         return title, [f"קריאה: {number(value)} {UNITS[meter_type]}", f"תאריך: {fmt(d)}"]
     choices = [
-        f"{POSITION_NAMES[p]}: {number(v)}" + (" (מסומן)" if p == position else "")
-        for p, v in alternatives.items()
+        f"{POSITION_NAMES[p]}: {number(alternatives[p])}" + (" (מסומן)" if p == position else "")
+        for p in POSITION_NAMES
+        if p in alternatives
     ]
     return title, ["בצג שני מספרים. איזה מהם הקריאה?", *choices, f"תאריך: {fmt(d)}"]
 
@@ -63,10 +76,13 @@ def not_a_meter() -> str:
 UNREADABLE_SERIAL = "המספר הסידורי"
 UNREADABLE_VALUE = "הקריאה"
 UNREADABLE_PHOTO = "התמונה"
+UNREADABLE_TYPE = "סוג המונה"
 
 
 def unreadable(fields: list[str]):
     title = "לא הצלחתי לקרוא בוודאות: " + ", ".join(fields)
+    if UNREADABLE_TYPE in fields:
+        return title, ["אפשר לכתוב אם זה מונה מים או מונה חשמל."]
     if UNREADABLE_SERIAL in fields or UNREADABLE_PHOTO in fields:
         return title, ["אפשר לצלם שוב, קרוב וישר מול המונה."]
     return title, ["אפשר לצלם שוב, קרוב וישר מול המונה, או לכתוב את הקריאה."]
@@ -100,6 +116,13 @@ def lower_reading(prev: dict, value):
     )
 
 
+def retired_meter_alone(serial) -> str:
+    return (
+        f"המונה {serial} אינו פעיל, ולכן הקריאה לא נשמרה. אם הוא עדיין מותקן, אפשר לכתוב "
+        f"שהמונה {serial} לא הוחלף; אם הוחלף, מצלמים את המונה החדש."
+    )
+
+
 def replaced_has_new_serial() -> str:
     return (
         "מונה שהוחלף מקבל מספר סידורי חדש, וזה אותו מספר. הקריאה לא נשמרה; "
@@ -107,19 +130,10 @@ def replaced_has_new_serial() -> str:
     )
 
 
-def change_card(apartment, start: date, months, opens_new, reflag):
-    if opens_new:
-        return (
-            f"לפתוח ל{apartment} תקופה מ־{fmt(start)} {months_phrase(months)}?",
-            ["קריאת הפתיחה תהיה הצילום הבא של כל מונה."],
-        )
+def change_card(apartment, start: date, months):
     return (
-        f"לשנות את התקופה של {apartment}: מ־{fmt(start)} {months_phrase(months)}?",
-        [
-            f"{meter_name(meter_type, serial)} · קריאת הפתיחה {number(value)} ({fmt(d)}) "
-            f"תפתח את התקופה מ־{fmt(start)}"
-            for meter_type, serial, value, d in reflag
-        ],
+        f"לפתוח ל{apartment} תקופה מ־{fmt(start)} {months_phrase(months)}?",
+        ["קריאת הפתיחה תהיה הצילום הבא של כל מונה."],
     )
 
 
@@ -159,12 +173,12 @@ def no_previous_reading() -> str:
     return "אין עדיין קריאה קודמת, ולכן אין צריכה או צפי."
 
 
-def _dated_value(reading) -> str:
+def dated_value(reading) -> str:
     return f"{number(reading['value'])} ({fmt(parse_iso(reading['date']))})"
 
 
 def _reading_line(label, reading) -> str:
-    return f"{label}: {_dated_value(reading)}"
+    return f"{label}: {dated_value(reading)}"
 
 
 def _shekels(amount) -> str:
@@ -235,8 +249,8 @@ def _report_column(meter_type, figures) -> list[str]:
     outlook = "אין עדיין צפי" if figures.outlook is None else number(round(figures.outlook))
     amount = NO_FIGURE if figures.amount is None else _shekels(figures.amount)
     return [
-        _dated_value(c.opening),
-        _dated_value(c.last),
+        dated_value(c.opening),
+        dated_value(c.last),
         f"{number(c.units)} {unit}",
         outlook if figures.outlook is None else f"{outlook} {unit}",
         price_text(meter_type, figures.price),
@@ -290,6 +304,10 @@ EXPLANATIONS = {
         "כדי לחשב חיוב בכסף צריך את המחיר לקוט״ש חשמל ולקוב מים, כולל מע״מ. "
         'אפשר להקליד אותם, למשל "חשמל 0.64, מים 15.6", או לצלם חשבון קודם שהם מופיעים בו.'
     ),
+    "correction": (
+        "זה תיקון של נתונים שכבר נשמרו: הכרטיס מראה מה ישתנה ואיך ישתנו הצריכה והחיוב. "
+        "אישור ישמור את התיקון, וביטול ישאיר הכול כפי שהיה."
+    ),
 }
 
 
@@ -312,12 +330,13 @@ def tariffs_card(
     prices: dict, effective: date, from_close: bool, from_statement: bool, ex_vat: dict | None
 ):
     """prices and ex_vat map a meter type to its price; from_close marks an effective date taken
-    from a period's closing date; from_statement marks a card read from a statement photo."""
+    from a period's closing date; from_statement marks a card read from a statement photo. The
+    lines follow METER_KINDS, whatever order a stored map holds its keys in."""
     if ex_vat is None:
-        lines = [price_text(t, p) for t, p in prices.items()]
+        lines = [price_text(t, prices[t]) for t in METER_KINDS if t in prices]
         lines.append("כולל מע״מ.")
     else:
-        lines = [price_text(t, p) + " (בלי מע״מ)" for t, p in ex_vat.items()]
+        lines = [price_text(t, ex_vat[t]) + " (בלי מע״מ)" for t in METER_KINDS if t in ex_vat]
         lines.append(
             "המחירים בחשבון אינם כוללים מע״מ, ולכן לא יישמרו. אפשר להקליד את התעריפים כולל מע״מ."
         )
@@ -331,10 +350,14 @@ def tariffs_saved(effective: date) -> str:
     return f"התעריפים נשמרו, בתוקף מ־{fmt(effective)}."
 
 
-def repriced(property_name, apartment, meter_type, start: date, units, amount) -> str:
+def forecasts_repriced(count) -> str:
+    return f"החיוב הצפוי של {count} תקופות פתוחות חושב מחדש לפי התעריפים."
+
+
+def tariffs_not_missing() -> str:
     return (
-        f"{property_name} / {apartment} · {METER_KINDS[meter_type]}, התקופה מ־{fmt(start)}: "
-        f"{number(units)} {UNITS[meter_type]}, חיוב {amount:,.2f} ₪"
+        "כל התקופות הסגורות כבר מתומחרות, ולכן בקשת התעריפים בוטלה. "
+        "תעריפים חדשים אפשר להקליד בכל עת, והם יחולו מהיום."
     )
 
 
@@ -421,15 +444,433 @@ def period_opened(apartment, start: date, months) -> str:
     return f"נפתחה תקופה חדשה ל{apartment} מ־{fmt(start)} {months_phrase(months)}."
 
 
-def period_changed(apartment, start: date, months) -> str:
-    return f"התקופה של {apartment} מתחילה עכשיו ב־{fmt(start)}, {months_phrase(months)}."
+def property_label(name) -> str:
+    return f"נכס {name}"
+
+
+def apartment_label(name) -> str:
+    return f"דירה {name}"
+
+
+def reading_label(meter_type, serial, d: date) -> str:
+    return f"קריאה של {meter_name(meter_type, serial)} מ־{fmt(d)}"
+
+
+def period_label(apartment, start: date) -> str:
+    return f"התקופה של {apartment} מ־{fmt(start)}"
+
+
+def tariff_label(effective: date) -> str:
+    return f"התעריף מ־{fmt(effective)}"
+
+
+def change_line(record_label, field_label, old, new) -> str:
+    return f"{record_label} · {field_label}: {new} במקום {old}"
+
+
+def _figures_text(meter_type, figures) -> str:
+    """A meter's consumption in a period, its forecast while the period runs, and its charge."""
+    if figures is None:
+        return "אין קריאה בתקופה"
+    unit = UNITS[meter_type]
+    parts = [f"{number(figures.consumption.units)} {unit}"]
+    if not figures.consumption.final:
+        outlook = "אין עדיין צפי"
+        if figures.outlook is not None:
+            outlook = f"{OUTLOOK_LABEL} {number(round(figures.outlook))} {unit}"
+        parts.append(outlook)
+    parts.append("אין חיוב" if figures.amount is None else f"חיוב {_shekels(figures.amount)}")
+    return ", ".join(parts)
+
+
+def figure_line(
+    property_name, apartment, meter_type, serial, start: date, before_type, before, after
+) -> str:
+    """One meter's period whose figures a correction changes; before and after are its Figures,
+    each worded in the units of that side's meter type."""
+    return (
+        f"{property_name} / {apartment} · {meter_name(meter_type, serial)}, "
+        f"התקופה מ־{fmt(start)}: {_figures_text(meter_type, after)} "
+        f"(במקום {_figures_text(before_type, before)})"
+    )
+
+
+def correction_card(lines: list[str]):
+    return "תיקון נתונים שמורים", lines
+
+
+def correction_saved() -> str:
+    return "התיקון נשמר."
+
+
+def correction_cancelled() -> str:
+    return "התיקון בוטל, ודבר לא השתנה."
+
+
+def correction_changed() -> str:
+    return "הנתונים השתנו מאז שהוצג התיקון, ולכן הוא לא נשמר. זה התיקון לפי הנתונים הנוכחיים:"
+
+
+def card_changed() -> str:
+    return "הנתונים השתנו מאז שהוצג הכרטיס, ולכן הפעולה לא בוצעה. זה הכרטיס לפי הנתונים הנוכחיים:"
+
+
+def card_gone() -> str:
+    return "הרשומה שהכרטיס הזה נשען עליה כבר לא קיימת, ולכן הוא בוטל. אפשר לכתוב את הבקשה מחדש."
+
+
+def period_already_closed(apartment, start: date) -> str:
+    return (
+        f"התקופה של {apartment} מ־{fmt(start)} כבר נסגרה, ולכן הכרטיס בוטל. "
+        f'כדי לסגור את התקופה הבאה אפשר לכתוב "סגור את התקופה של {apartment}".'
+    )
+
+
+def period_already_open(apartment) -> str:
+    return f"ב{apartment} כבר יש תקופה פתוחה, ולכן הכרטיס בוטל. אפשר לכתוב בהודעה חדשה מה לשנות בה."
+
+
+def correction_replaced() -> str:
+    return "התיקון הקודם בוטל, וזה התיקון החדש:"
+
+
+def correction_gone() -> str:
+    return (
+        "הרשומה שביקשת לתקן כבר לא קיימת, ולכן התיקון לא נשמר. "
+        "אפשר לכתוב אותו מחדש לפי הנתונים הנוכחיים."
+    )
+
+
+def nothing_to_correct() -> str:
+    return "הערכים האלה כבר רשומים, ולכן אין מה לתקן. אם הכוונה לרשומה אחרת, אפשר לכתוב לאיזו."
+
+
+def duplicate_property(name) -> str:
+    return (
+        f"כבר קיים נכס בשם {name}, ולכן התיקון לא נשמר. אפשר לבחור שם אחר, או לאחד את שני הנכסים."
+    )
+
+
+def duplicate_apartment(name, property_name) -> str:
+    return (
+        f"ב{property_name} כבר קיימת דירה בשם {name}, ולכן התיקון לא נשמר. "
+        "אפשר לבחור שם אחר, או לאחד את שתי הדירות."
+    )
+
+
+def same_day_clash(serial, d: date) -> str:
+    return (
+        f"למונה {serial} כבר יש קריאה מ־{fmt(d)}, ולכן התיקון לא נשמר. "
+        "אפשר לבחור תאריך אחר, או למחוק קודם את הקריאה הקיימת."
+    )
+
+
+def serial_taken(serial) -> str:
+    return (
+        f"המספר {serial} שייך למונה מסוג אחר או בדירה אחרת, ולכן התיקון לא נשמר. "
+        "אפשר לבדוק את המספר ולכתוב אותו שוב."
+    )
+
+
+def live_meter_exists(meter_type, apartment) -> str:
+    return (
+        f"בדירה {apartment} כבר יש מונה {METER_KINDS[meter_type]} פעיל, ולכן התיקון לא נשמר. "
+        "אפשר להוציא קודם את המונה הפעיל משימוש, ואז לתקן שוב."
+    )
+
+
+def reassign_uncovered(apartment, days: list[date]) -> str:
+    shown = ", ".join(fmt(d) for d in days)
+    return (
+        f"לדירה {apartment} אין תקופה שמכסה את הקריאות מ־{shown}, ולכן התיקון לא נשמר. "
+        "קריאה לפני התקופה הראשונה: אפשר להקדים קודם את תחילת התקופה של הדירה. "
+        "קריאה אחרי שהדירה פונתה: אפשר לבטל קודם את הפינוי. אחר כך מתקנים שוב."
+    )
+
+
+def reopen_refused(apartment, start: date) -> str:
+    return (
+        f"התיקון היה פותח מחדש את התקופה של {apartment} מ־{fmt(start)}, "
+        "אבל התקופה שאחריה כבר נסגרה, ולכן הוא לא נשמר. "
+        "אפשר לפתוח קודם את התקופה שאחריה, ואז לתקן שוב."
+    )
+
+
+def closed_on_follows_readings(apartment, start: date) -> str:
+    return (
+        f"תאריך הסגירה של התקופה של {apartment} מ־{fmt(start)} נקבע לפי קריאות הסגירה, "
+        "ולכן התיקון לא נשמר. אפשר לתקן את התאריך של קריאת הסגירה, לבחור קריאה אחרת לסגירה, "
+        "לבטל את הסגירה כדי לפתוח מחדש את התקופה, או לבקש לסגור תקופה פתוחה."
+    )
+
+
+def closing_row_opens_its_period(apartment, start: date) -> str:
+    return (
+        f"התקופה של {apartment} מ־{fmt(start)} נסגרת באותה קריאה שפותחת אותה, ולכן הקריאה לא יכולה "
+        "לפתוח גם את התקופה הבאה, והתיקון לא נשמר. אפשר לפתוח מחדש את התקופה במקום זה."
+    )
+
+
+def vacate_open_period(apartment) -> str:
+    return (
+        f"התקופה של {apartment} עדיין פתוחה, ולכן התיקון לא נשמר. "
+        "אפשר לכתוב שהדירה התפנתה, והתקופה תיסגר."
+    )
+
+
+def vacate_next_closed(apartment, start: date) -> str:
+    return (
+        f"התקופה של {apartment} מ־{fmt(start)} כבר נסגרה, ולכן אי אפשר לסמן שהדירה ריקה לפניה. "
+        "אפשר לפתוח אותה מחדש, ואז לתקן שוב."
+    )
+
+
+def vacate_next_holds_readings(apartment, start: date) -> str:
+    return (
+        f"בתקופה של {apartment} מ־{fmt(start)} כבר יש קריאות, ולכן אי אפשר לסמן שהדירה ריקה. "
+        "אפשר למחוק קודם את הקריאות האלה, ואז לתקן שוב."
+    )
+
+
+def period_not_deletable(apartment, start: date) -> str:
+    return (
+        f"אי אפשר למחוק את התקופה של {apartment} מ־{fmt(start)}. "
+        "אפשר לפתוח מחדש תקופה שנסגרה בטעות, או לתקן את התאריך שבו היא מתחילה."
+    )
+
+
+def apartment_holds_meters(name, meters: list[str]) -> str:
+    return (
+        f"בדירה {name} יש עדיין {', '.join(meters)}, ולכן היא לא נמחקה. "
+        "אפשר להעביר את המונים לדירה אחרת או למחוק אותם, ואז למחוק אותה שוב."
+    )
+
+
+def property_holds_apartments(name, apartments: list[str]) -> str:
+    return (
+        f"בנכס {name} יש עדיין דירות: {', '.join(apartments)}, ולכן הוא לא נמחק. "
+        "אפשר להעביר את הדירות לנכס אחר או למחוק אותן, ואז למחוק אותו שוב."
+    )
+
+
+def one_serial_at_a_time() -> str:
+    return (
+        "ההודעה משנה מספר סידורי של מונה קיים יחד עם מספר של מונה אחר, ולכן התיקון לא נשמר. "
+        "אפשר לתקן מספר אחד, לאשר, ואז לתקן את הבא."
+    )
+
+
+def duplicate_tariff(effective: date) -> str:
+    return (
+        f"כבר קיים תעריף מ־{fmt(effective)}, ולכן התיקון לא נשמר. "
+        "אפשר לתקן את התעריף הקיים, או לבחור תאריך אחר."
+    )
+
+
+def periods_overlap(apartment, start: date) -> str:
+    return (
+        f"התקופה של {apartment} מ־{fmt(start)} הייתה חופפת לתקופה סמוכה, ולכן התיקון לא נשמר. "
+        "אפשר לתקן קודם את התאריכים של התקופה הסמוכה, ואז לתקן שוב."
+    )
+
+
+def closing_before_opening(serial, start: date) -> str:
+    return (
+        f"במונה {serial} קריאת הסגירה של התקופה מ־{fmt(start)} "
+        "הייתה מקדימה את קריאת הפתיחה שלה, ולכן התיקון לא נשמר. "
+        "אפשר לפתוח מחדש את התקופה, ואז לתקן שוב."
+    )
+
+
+def period_loses_opening(serial, start: date) -> str:
+    return (
+        f"במונה {serial} התקופה מ־{fmt(start)} הייתה נשארת בלי קריאת פתיחה, כי הקריאה הבאה כבר "
+        "פותחת את התקופה שאחריה, ולכן התיקון לא נשמר. אפשר לפתוח מחדש את התקופה, ואז לתקן שוב."
+    )
+
+
+def opening_without_closing(serial, start: date) -> str:
+    return (
+        f"במונה {serial} התקופה מ־{fmt(start)} לא הייתה נסגרת לפני שנפתחת התקופה הבאה, "
+        "וכך אותן יחידות היו נספרות פעמיים, ולכן התיקון לא נשמר. "
+        "אפשר לפתוח מחדש את התקופה, ואז לתקן שוב."
+    )
+
+
+def reading_stops_counting(serial, d: date, apartment) -> str:
+    return (
+        f"הקריאה של מונה {serial} מ־{fmt(d)} הייתה מפסיקה להיספר בתקופה, ולכן התיקון לא נשמר. "
+        f"אפשר לפתוח מחדש את התקופה האחרונה של {apartment}, ואז לתקן שוב."
+    )
+
+
+def moved_reading_stops_counting(serial, d: date) -> str:
+    return (
+        f"במונה {serial} הקריאה מ־{fmt(d)} לא הייתה נספרת באף תקופה, ולכן התיקון לא נשמר. "
+        "אפשר לתקן את התאריך של הקריאה, או למחוק אותה."
+    )
+
+
+def meter_left_unclosed(serial, start: date) -> str:
+    return (
+        f"למונה {serial} לא הייתה קריאת סגירה בתקופה מ־{fmt(start)}, ואז הקריאות הבאות שלו "
+        "היו נספרות פעמיים, ולכן התיקון לא נשמר. אפשר לפתוח מחדש את התקופה, ואז לתקן שוב."
+    )
+
+
+# The way out of a state two operations of one message reach together and neither alone.
+ONE_PER_MESSAGE = "אפשר לתקן דבר אחד בכל הודעה, ולאשר כל אחד בנפרד."
+
+
+def two_open_periods(apartment) -> str:
+    return (
+        f"התיקון היה משאיר בדירה {apartment} שתי תקופות פתוחות בבת אחת, ולכן לא נשמר. "
+        f"{ONE_PER_MESSAGE}"
+    )
+
+
+def reading_names_missing_period(serial, d: date, start: date, apartment) -> str:
+    return (
+        f"הקריאה של מונה {serial} מ־{fmt(d)} הייתה נשארת מסומנת כגבול של התקופה מ־{fmt(start)}, "
+        f"שלא הייתה קיימת עוד בדירה {apartment}, ולכן התיקון לא נשמר. {ONE_PER_MESSAGE}"
+    )
+
+
+def owner_only() -> str:
+    return "את השינוי הזה יכול לעשות רק בעל החשבון, אז אפשר לבקש ממנו."
+
+
+def delegate_label(address) -> str:
+    return f"המורשה {address}"
+
+
+def access_lost(address) -> str:
+    return f"הגישה של {address} לחשבון תיפסק."
+
+
+def access_gained(address) -> str:
+    return f"הגישה לחשבון תינתן ל־{address}."
+
+
+def waiting_card_lost(address) -> str:
+    return f"כרטיס שממתין אצל {address} יימחק."
+
+
+def unknown_delegate(address) -> str:
+    return f"לא מצאתי מורשה בכתובת {address}. אפשר לכתוב את הכתובת כפי שהמורשה נכנס איתה."
+
+
+def delegate_exists(address) -> str:
+    return f"{address} כבר מורשה בחשבון הזה. אפשר לכתוב כתובת אחרת."
+
+
+def address_taken() -> str:
+    return "הכתובת הזו כבר בשימוש בחשבון אחר. אפשר לכתוב אחרת."
+
+
+def delegate_not_removable(address) -> str:
+    return f"עוד אי אפשר להסיר מורשה, ולכן {address} נשאר. אפשר לתקן את הכתובת שלו."
+
+
+def delegate_address_changed() -> str:
+    return "הגישה של אחת הכתובות השתנתה בינתיים, ולכן התיקון לא נשמר. אפשר לכתוב אותו שוב."
+
+
+def correction_too_large(size) -> str:
+    return (
+        f"התיקון נוגע ב־{number(size)} רשומות, יותר ממה שאפשר לשמור בבת אחת, ולכן לא נשמר. "
+        "אפשר לחלק אותו לכמה הודעות."
+    )
+
+
+def opening_moved(meter_type, serial, value, d: date, start: date) -> str:
+    return (
+        f"{meter_name(meter_type, serial)} · קריאת הפתיחה {number(value)} ({fmt(d)}) "
+        f"תפתח את התקופה מ־{fmt(start)}"
+    )
+
+
+def merged_display_differs(meter_type, serial, position) -> str:
+    return (
+        f"שימו לב: ב{meter_name(meter_type, serial)} נשאר המספר {POSITION_NAMES[position]}, "
+        "ולא זה של המונה שמתמזג אליו."
+    )
+
+
+def meter_removed(meter_type, serial) -> str:
+    return f"{meter_name(meter_type, serial)} יימחק, כי לא נשארו לו קריאות."
+
+
+def replacement_undone(meter_type, serial) -> str:
+    return f"{meter_name(meter_type, serial)} יחזור להיות פעיל."
+
+
+def period_removed(apartment, start: date) -> str:
+    return f"התקופה של {apartment} מ־{fmt(start)} תימחק."
+
+
+def period_reopened(apartment, start: date) -> str:
+    return f"התקופה של {apartment} מ־{fmt(start)} תיפתח מחדש."
+
+
+def reading_removed(label, value) -> str:
+    return f"{label}, {number(value)}, תימחק."
+
+
+def tariff_removed(label) -> str:
+    return f"{label} יימחק."
+
+
+def apartment_removed(name) -> str:
+    return f"דירה {name} תימחק."
+
+
+def property_removed(name) -> str:
+    return f"נכס {name} יימחק."
+
+
+def closing_reading_taken(reading, start: date) -> str:
+    return (
+        f"הקריאה {dated_value(reading)} כבר שייכת לגבול של התקופה מ־{fmt(start)}, "
+        "ולכן התיקון לא נשמר. אפשר לבחור קריאה אחרת לסגירה."
+    )
+
+
+def no_closing_reading(serial, start: date) -> str:
+    return (
+        f"למונה {serial} אין קריאת סגירה בתקופה מ־{fmt(start)}, ולכן התיקון לא נשמר. "
+        "אפשר לבחור קריאה אחרת של המונה לסגירה, או לצלם אותו."
+    )
+
+
+def single_counter_display(serial) -> str:
+    return (
+        f"למונה {serial} יש מספר אחד בלבד, ולכן אין מה לבחור בתצוגה שלו. אפשר לתקן את הקריאה עצמה."
+    )
+
+
+def out_of_order(serial, earlier, later) -> str:
+    return (
+        f"שימו לב: במונה {serial} הקריאה {dated_value(later)} "
+        f"נמוכה מהקריאה שלפניה, {dated_value(earlier)}."
+    )
+
+
+def display_past_readings(meter_type, serial, readings: list[dict]) -> list[str]:
+    """The readings a display change leaves as they are, each still correctable by its value."""
+    head = (
+        f"השינוי ישפיע על צילומים הבאים בלבד. הקריאות שכבר נשמרו ב{meter_name(meter_type, serial)} "
+        "נשארות כפי שהן, ואפשר לתקן כל אחת מהן בנפרד:"
+    )
+    return [head, *[dated_value(r) for r in readings]]
+
+
+# How an account with no apartment starts.
+START_HINT = "אפשר להתחיל בצילום של מונה מים או חשמל: אזהה אותו ואציע לאיזו דירה לשייך."
 
 
 def welcome() -> str:
-    return (
-        "שלום. החשבון חדש ועדיין ריק.\n"
-        "אפשר להתחיל בצילום של מונה מים או חשמל: אזהה אותו ואציע לאיזו דירה לשייך."
-    )
+    return f"שלום. החשבון חדש ועדיין ריק.\n{START_HINT}"
 
 
 def greeting(apartments_past_end: list[tuple[str, date]]) -> str:
@@ -444,8 +885,8 @@ def which_apartment(names: list[str]) -> str:
     return "לאיזו דירה? " + ", ".join(names)
 
 
-def unknown_apartment(name) -> str:
-    return f"לא מצאתי דירה בשם {name}."
+def unknown_apartment(name, names: list[str]) -> str:
+    return f"לא מצאתי דירה בשם {name}. אפשר לכתוב אחת מהדירות בחשבון: {', '.join(names)}."
 
 
 def no_apartments() -> str:
@@ -453,15 +894,169 @@ def no_apartments() -> str:
 
 
 def no_open_period(apartment) -> str:
-    return f"לדירה {apartment} אין תקופה פתוחה."
+    return (
+        f"לדירה {apartment} אין תקופה פתוחה. אפשר לפתוח תקופה חדשה, "
+        f'למשל "פתח ל{apartment} תקופה מהיום".'
+    )
 
 
 def close_cancelled() -> str:
     return "התקופה לא נסגרה."
 
 
-def unknown_intent() -> str:
+def options_reply(names: list[str]) -> str:
+    """What the assistant can do, with the account's own apartment names; names is empty for an
+    account with no apartment yet."""
+    if not names:
+        return START_HINT
     return (
-        'לא הבנתי. אפשר לשלוח צילום של מונה, לבקש לסגור תקופה ("סגור את התקופה של עורף"), '
-        "להודיע שדירה ריקה, או לקבוע תאריך התחלה לתקופה חדשה."
+        "אני יכול לעזור כך: לקרוא צילום של מונה; לסגור תקופה, "
+        f'למשל "סגור את התקופה של {names[0]}"; לרשום שדירה התפנתה; לשנות תאריך או אורך של '
+        "תקופה; לשמור מחירי חשמל ומים; ולתקן כל נתון שנשמר, "
+        f'למשל "הקריאה הקודמת היא 843". הדירות בחשבון: {", ".join(names)}.'
     )
+
+
+def not_offered(names: list[str]) -> str:
+    return f"את זה עוד אי אפשר לעשות כאן. {options_reply(names)}"
+
+
+def unknown_record(names: list[str]) -> str:
+    return f"לא מצאתי את מה שביקשת לשנות, ולכן דבר לא השתנה. {options_reply(names)}"
+
+
+def bare_input(value) -> str:
+    return (
+        f'על מה "{value}"? אין כרטיס שמחכה לתשובה, ולכן דבר לא נשמר. '
+        'אפשר לכתוב משפט שלם, למשל "הקריאה הקודמת היא 843", או לצלם את המונה.'
+    )
+
+
+def how_to_reply(how_to) -> str:
+    return f"{how_to} אפשר לכתוב את זה כאן, ואציג מה ישתנה לפני שמירה."
+
+
+def which_record(labels: list[str]) -> str:
+    return f"לאיזו מהן הכוונה? {'; '.join(labels)}. אפשר לכתוב שוב ולציין אחת מהן."
+
+
+def card_help(labels: list[str]) -> str:
+    """What a card takes, for an answer it cannot; labels are its buttons'."""
+    if not labels:
+        return 'בכרטיס הזה אפשר לכתוב את התשובה, לתקן במילים כל פרט שמופיע בו, או לכתוב "בטל".'
+    return (
+        f"בכרטיס הזה אפשר לבחור: {' / '.join(labels)}; לתקן במילים כל פרט שמופיע בו; "
+        'או לכתוב "בטל".'
+    )
+
+
+def photo_help() -> str:
+    return (
+        "על צילום שלא נשמר אפשר לכתוב את המספר הסידורי, את הקריאה, את התאריך או את סוג המונה, "
+        "או לכתוב שזה חשבון קודם, והצילום ייקרא שוב."
+    )
+
+
+def photo_not_reopenable() -> str:
+    return (
+        "את הצילום הזה אי אפשר לקרוא שוב: הוא כבר שמור בקריאה, בתעריף או בכרטיס שממתין, "
+        "או שצולם בחשבון אחר. אפשר לתקן את הרשומה השמורה בכתיבה, למשל "
+        '"הקריאה האחרונה היא 845", או לשלוח צילום חדש.'
+    )
+
+
+def question_cancelled() -> str:
+    return "השאלה בוטלה, ודבר לא השתנה."
+
+
+def field_value(kind: str, value) -> str:
+    """A card field's current value as a question names it; kind is the field's value kind."""
+    if value is None:
+        return EMPTY_VALUE
+    if kind in ("date", "future_date", "optional_date"):
+        return fmt(parse_iso(value))
+    if kind == "meter_type":
+        return METER_KINDS[value]
+    if kind == "flag":
+        return "כן" if value else "לא"
+    if kind == "display":
+        return POSITION_NAMES[value]
+    if kind == "photo_kind":
+        return PHOTO_KIND_NAMES[value]
+    return str(value)
+
+
+# Editable fields, keyed by the concept a field stands for; record variants that mean the same
+# thing (a card's date and a reading's date) share one entry. Every question carries {current},
+# the value on record.
+FIELD_LABELS = {
+    "value": "הקריאה",
+    "date": "התאריך",
+    "serial": "המספר הסידורי",
+    "meter_type": "סוג המונה",
+    "property": "הנכס",
+    "apartment": "הדירה",
+    "period_start": "תחילת התקופה",
+    "months": "מספר החודשים",
+    "electricity_price": "מחיר החשמל",
+    "water_price": "מחיר המים",
+    "resets": "איפוס המונה",
+    "display": "המספר בתצוגה",
+    "retired_at": "תאריך הוצאת המונה משימוש",
+    "property_name": "שם הנכס",
+    "apartment_name": "שם הדירה",
+    "closed_on": "תאריך הסגירה",
+    "closing": "קריאת סגירה",
+    "vacant": "דירה ריקה",
+    "effective_date": "תאריך תחילת התעריף",
+    "delegate_address": "כתובת המייל",
+    "photo_kind": "סוג התמונה",
+}
+
+FIELD_QUESTIONS = {
+    "value": "מה הקריאה הנכונה? (רשומה: {current})",
+    "date": "מה התאריך הנכון? (רשום: {current})",
+    "serial": "מה המספר הסידורי הנכון? (רשום: {current})",
+    "meter_type": "האם זה מונה מים או מונה חשמל? (רשום: {current})",
+    "property": "לאיזה נכס זה שייך? (רשום: {current})",
+    "apartment": "לאיזו דירה זה שייך? (רשומה: {current})",
+    "period_start": "מתי התחילה התקופה? (רשום: {current})",
+    "months": "לכמה חודשים התקופה? (רשום: {current})",
+    "electricity_price": "מה מחיר החשמל לקוט״ש? (רשום: {current})",
+    "water_price": "מה מחיר המים לקוב? (רשום: {current})",
+    "resets": "האם המונה התאפס בקריאה הזו? (רשום: {current})",
+    "display": "איזה מספר בתצוגה הוא הקריאה של המונה, העליון או התחתון? (רשום: {current})",
+    "retired_at": "מתי הוצא המונה משימוש? (רשום: {current})",
+    "property_name": "מה שם הנכס? (רשום: {current})",
+    "apartment_name": "מה שם הדירה? (רשום: {current})",
+    "closed_on": "באיזה תאריך נסגרה התקופה? (רשום: {current})",
+    "closing": "איזו קריאה סוגרת את התקופה? (רשומה: {current})",
+    "vacant": "האם הדירה ריקה? (רשום: {current})",
+    "effective_date": "מאיזה תאריך התעריף בתוקף? (רשום: {current})",
+    "delegate_address": "מה כתובת המייל הנכונה של המורשה? (רשומה: {current})",
+    "photo_kind": "האם בתמונה מונה או חשבון קודם? (רשום: {current})",
+}
+
+FIELD_HOW_TO = {
+    "value": "כותבים את המספר שעל המונה, בלי ספרה עשרונית.",
+    "date": "כותבים תאריך שלא אחרי היום, למשל 31/10/2026.",
+    "serial": "כותבים את המספר הסידורי כפי שהוא מופיע על המונה.",
+    "meter_type": 'כותבים "מים" או "חשמל".',
+    "property": "כותבים את שם הנכס.",
+    "apartment": "כותבים את שם הדירה.",
+    "period_start": "כותבים את תאריך תחילת התקופה, גם אם הוא עוד לא הגיע.",
+    "months": "כותבים מספר חודשים בין 1 ל־24.",
+    "electricity_price": "כותבים מחיר בשקלים לקוט״ש, גדול מאפס.",
+    "water_price": "כותבים מחיר בשקלים לקוב, גדול מאפס.",
+    "resets": 'כותבים "כן" אם המונה התאפס, או "לא" אם לא.',
+    "display": 'כותבים "עליון" או "תחתון".',
+    "retired_at": "כותבים את התאריך שבו הוצא המונה משימוש, או משאירים ריק.",
+    "property_name": "כותבים את השם החדש של הנכס.",
+    "apartment_name": "כותבים את השם החדש של הדירה.",
+    "closed_on": "כדי לפתוח מחדש תקופה שנסגרה בטעות, מבקשים לבטל את הסגירה.",
+    "closing": "כותבים איזו קריאה סוגרת את התקופה.",
+    "vacant": 'כותבים "כן" אם הדירה ריקה, או "לא" אם לא.',
+    "effective_date": "כותבים את התאריך שממנו התעריף בתוקף, גם אם הוא עוד לא הגיע.",
+    "delegate_address": "כותבים את כתובת המייל המלאה של המורשה, למשל name@example.com.",
+    "photo_kind": 'כותבים "מונה" אם בתמונה מונה, או "חשבון" אם זה חשבון קודם.',
+}

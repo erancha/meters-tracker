@@ -30,6 +30,9 @@ forecast and charge, with the exact values the code uses. The arithmetic lives i
 | `close_days_before_end`: 7 | `config/app.json` | Days before a period's end that may close it |
 | `file_url_minutes`: 10 | `config/app.json` | Lifetime of a photo's presigned URL |
 | `sidebar_min_width_px`: 900 | `config/app.json` | Narrowest window with the day panel |
+| `correction_recent_readings`: 12 | `config/app.json` | Readings per meter the classifier gets |
+| `correction_dropped_photos`: 5 | `config/app.json` | Latest dropped photos the classifier gets |
+| 100 | `src/common/store.py` | Most rows one correction writes |
 | 4 MiB, JPEG or PNG | `src/handlers/api.py` | Largest accepted photo, after base64 decoding |
 | 200 | `src/common/store.py` | Messages `GET /chat` returns |
 | Asia/Jerusalem | `src/common/dates.py` | The zone of every date and of "today" |
@@ -50,29 +53,30 @@ the day the photo was sent, which a retry on a later day keeps.
   a retake or a typed value. A new photo replaces an earlier unreadable card that had no serial
   or had the same serial.
 - **Retired meter.** A photo of a retired meter is refused, naming the live meter that replaced
-  it.
+  it, when its apartment has one of its type.
 - **Two-number display.** With no saved choice, the card offers both numbers with the top one
-  selected. The position of the first saved reading becomes the meter's display choice, and
-  later photos propose that position's number directly.
+  selected, and pressing the other one moves the mark until the card is confirmed. The position of
+  the first saved reading becomes the meter's display choice, and later photos propose that
+  position's number directly.
 - **Unknown serial.** A link flow (`src/common/flows/link_meter.py`) asks for the property and then
   the apartment, existing or new by name; an answer naming both ("לאונר 18, דירה קדמית") skips the
   apartment question; a property or apartment name typed on a later question corrects the one given,
-  and the flow resumes from the corrected name. An apartment with no open period also asks for the
-  period's start (buttons for today and for the first of next month, which is left out on the first
-  of a month; a typed date also answers) and length (default `default_period_months`, or the
-  apartment's own length when it exists). A new period that starts before the photo's date dates the
-  opening reading at the start, since the photo then stands for the meter on that day; a later start
-  keeps the photo's date. The final card shows everything that will be created; on confirmation the
-  property, apartment and period are created as needed, the meter is saved, and its reading becomes
-  the period's opening reading. A live meter of the same type in that apartment is retired, dated
-  the new reading's date; each keeps its own consumption. When another photo of the same serial was
-  linked while this one waited, the next answer turns it into an ordinary reading card for that
-  meter.
+  forgets the period answered for it, and the flow resumes from the corrected name. An apartment
+  with no open period also asks for the period's start (buttons for today and for the first of next
+  month, which is left out on the first of a month; a typed date also answers) and length (default
+  `default_period_months`, or the apartment's own length when it exists). A new period that starts
+  before the photo's date dates the opening reading at the start, since the photo then stands for
+  the meter on that day; a later start keeps the photo's date. The final card shows everything that
+  will be created; on confirmation the property, apartment and period are created as needed, the
+  meter is saved, and its reading becomes the period's opening reading. A live meter of the same
+  type in that apartment is retired, dated the new reading's date; each keeps its own consumption.
+  When another photo of the same serial was linked while this one waited, it shows next as an
+  ordinary reading card for that meter.
 - **Known serial.** The card proposes the reading; the user confirms, picks the other number,
   or types a corrected value, a date, or a cancel. Cards carry no reject button: corrections and
   cancels are typed.
 - **Corrected serial.** A typed serial, whole or as a few corrected digits, replaces the one the
-  model read on a reading or link card. The photo then goes to that serial's meter: a reading
+  model read on any card of the photo. The photo then goes to that serial's meter: a reading
   card for a known meter, the link questions for a new one.
 - **Failed photos.** A photo counts as failed when its card was unreadable or stalled and a later
   photo replaced it, or when it is the saved photo and the confirmed value is not among the readable
@@ -85,6 +89,154 @@ the day the photo was sent, which a retry on a later day keeps.
   the order they were sent, and the `LLM_MODEL` value of the model that failed on them. A replacing
   duplicate reading whose new photo was read right removes the keys and the model from the replaced
   row.
+
+## Typed edits on a card
+
+A waiting card is a form, and a typed answer to a question card is an edit of its empty field. An
+edit may change any field of the card at any step, and the card the flow then arrives at is shown.
+
+- **Unreadable card.** The value, date, serial and meter type. A bare input fills the serial
+  while the serial is what is unreadable, else the value.
+- **Reading card and its checks.** The value, date and serial. A bare input fills the value.
+- **Link questions and summary.** The value, date, serial, meter type, property and apartment,
+  plus the period's start and length while the link creates the period. A bare input fills the
+  asked field, and the value on the summary. On the period question a date is the period's start.
+- **Period change card.** The start and the length of a period opening on a vacant apartment. A
+  bare input fills the start.
+- **Tariffs card.** Both prices and the effective date. A bare number fills nothing, since it
+  could be either price.
+- **Close card.** It lists saved readings, each under its record's id, so a change to one is a
+  correction of that record. Once it is confirmed, the close card shows the current readings.
+- **Current records.** A waiting card is built again from the saved records each time it is about
+  to be shown, after any turn and on each load of the chat, so a correction by anyone shows on it
+  at once. A card that now reads differently is shown anew; one whose records are gone is dropped,
+  saying why and what to do next, and the card after it is built again in turn. An answer to a
+  card that changed since it was shown is not acted on: the card is shown again.
+- **A card behind the first.** The classifier gets every waiting card with its fields, so an edit
+  may name a card further back in the queue. That card takes the edit and is shown; the first card
+  stays in front.
+- **A dropped photo.** The classifier also gets the user's latest `correction_dropped_photos`
+  photos the app did not keep: cancelled, not a meter, a retired serial, or read as a statement.
+  Only a photo of this account that no saved reading (its own or a failed photo), tariff or
+  waiting meter card holds is listed, so a photo is never counted twice; an edit naming any other
+  is refused with what to do instead. A waiting statement card leaves the queue when its photo is
+  reopened as a meter's. An edit naming a listed one reads the stored photo again,
+  dated the day it was sent, applies its typed value, date, serial or meter type, and routes it as
+  a new photo. A typed kind forces the reading: a statement becomes a tariffs card; a meter is
+  never dropped as no meter, so a type the model cannot tell is asked for. A photo the model read
+  no meter type in counts once among the failed photos of the reading it becomes.
+- **Checks run again.** A value, date or serial changed on a check card (see below) returns to the
+  reading card, so the checks run again on confirmation, and takes back a reset chosen on the
+  earlier reading.
+- **Refused edits.** One message may change several fields. Every change is checked first, so an
+  edit the card cannot take changes nothing and the card is shown again. A missing or unfitting
+  value is answered with the field's question naming its current value, and the card then holds
+  that field as asked: the next bare input fills it, not the default field, until the card is shown
+  anew or moves to another step. Any other edit the card cannot take is answered with what the
+  card takes (its buttons, a typed correction of any detail on it, or a cancel).
+
+## Corrections of saved records
+
+A known meter's type and place and an open period are saved records, so no card edits them. A
+change to any saved record (a property, apartment, meter, reading, period, tariff or delegate's
+address) is planned on a copy of the account and shown on one correction card, ahead of any
+waiting card. The card lists each changed field as its new value in place of the old one, every
+record the change removes or reopens, and every meter's figures (consumption, forecast and charge)
+in every period of its apartment that differ, closed periods included. Nothing is written until
+the card is confirmed, and then every row is written in one transaction; a correction touching
+more rows than that holds is refused. Confirming plans again from the current records: when the
+card would say something else it is shown again and nothing is written. A correction never sends
+a report. A new correction replaces one still waiting, so only the latest can be confirmed; a
+message giving another value for what the card shows ("לא, 845") is such a new correction.
+
+- **Warn or refuse.** A value out of order with its neighbours is a warning on the card, since
+  fixing two wrong readings passes through that state. A refusal shows no confirmation and names
+  the reason and what to do instead: two readings of a meter on one day, overlapping periods, a
+  closing reading before its opening reading, two live meters of one type in an apartment, two
+  tariffs of one date, a repeated name in one property or account, two open periods in an
+  apartment, readings no period of a meter's new apartment covers. Whatever the operation,
+  the result is also checked as a whole: a reading counted in a period before the change and not
+  deleted by it is still counted after; a live meter that opens a closed period also closes it;
+  every period flag names a period of the reading's own apartment. Periods overlap when one
+  starts before the one before it closed: a period may start on its neighbour's closing day,
+  since one closing reading can stand for both.
+- **A reading's value, date or reset.** The meter's figures in each period it counts in are
+  recomputed. A date that crosses a period moves the reading's flags with it.
+- **A reading on another meter.** It moves with its flags rebuilt against the target meter's
+  periods; moving a meter's last reading follows the rule of deleting it.
+- **Delete a reading.** An opening flag passes to the meter's next reading in that period. A
+  closing flag passes to the previous reading after the opening; with none, the period reopens. A
+  row that closes one period and opens the next gives both flags to the previous reading after the
+  opening, as a close does; with none, the period reopens. A reset flag passes to the next reading.
+- **A meter's last reading.** Deleting it deletes the meter too, which undoes its link. A
+  replacement the link caused is undone, so the replaced meter is live again with its readings
+  rebuilt against the apartment's periods. A period, apartment or property left empty that was
+  created for the link goes too. The card lists each.
+- **A meter's serial.** The meter keeps every former serial, so a card holding an old serial still
+  finds its meter. A serial another meter holds merges the two: allowed for the same type and
+  apartment, the readings join and the other row goes; another type or apartment, or a same-day
+  clash, is refused.
+- **A meter's apartment.** Its readings' flags are rebuilt from the target apartment's periods by
+  date. With no target period covering its first reading, the source's periods are copied to the
+  target. A reading that would fall outside every target period is refused, naming its dates.
+- **A meter's display.** It changes which number later photos read; the card lists the meter's
+  past readings, each correctable by its value. A water meter, with one number, has no display.
+- **A meter's retirement.** A date retires the meter by hand; a blank brings a retired meter back,
+  with its readings rebuilt against the apartment's periods.
+- **Merge.** Apartments merge by moving every meter of the one that goes, then deleting it.
+  Properties merge by moving every apartment of the one that goes, then deleting it.
+- **Delete a property or apartment.** Refused while it holds apartments or meters, naming them. A
+  period has no delete: a close is undone by reopening, a start by moving it.
+- **A period's start or length.** The readings that open or close it move with the start. An
+  apartment's length is also its open period's, so the next close carries it.
+- **Reopen a period.** A blank closing date clears it and every closing flag of the period, and
+  the next period merges back: its row goes and its readings count in the reopened period. It is
+  refused unless that next period is open or absent. A live meter with no opening in the reopened
+  period opens it on its latest reading inside it, or on the day before its start when the
+  previous period closed then. Any other closing date is refused, naming the closing reading's
+  date as the way to change it.
+- **Another closing reading.** The chosen reading takes both flags of its meter's closing reading
+  in the period, and the period's closing date and the next period's start follow it. It is
+  refused when the meter has no closing reading there, or when the chosen reading already opens or
+  closes another period.
+- **Vacate.** Adding one to a closed period removes the period after it, refused while that period
+  is closed or holds readings. Undoing one on a closed period with no later period opens the next.
+- **A tariff.** Its prices, its date and its deletion recompute every charge they reach.
+- **A delegate's address.** Owner only. The card says which address loses access and which gains
+  it, and that the new address loses a waiting card it holds. An address that holds data or
+  delegates for another owner is refused, on the card and again on confirmation, in one neutral
+  text. Confirming clears the waiting items of both addresses in the same transaction.
+- **A delegate's corrections.** A delegate cannot change a delegate's address or delete an
+  apartment or property, and is refused any change whose result removes a property, apartment or
+  meter that held more than one reading.
+- **Failed photos.** A saved reading whose value or serial changes adds its photo and the model's
+  name to its failed photos, once.
+- **Day panel.** The acting person's photos have their reading tags brought in step with the
+  records: a photo whose reading is gone counts as dropped. Other people's tags are left as they
+  were.
+
+## Replies that ask back
+
+No reply only says it did not understand. Each comes from a fixed template in
+`src/common/texts.py`, chosen by the intent and the field table; the model never writes it.
+
+- **A missing or unfitting value** on a saved record or a dropped photo shows a question card
+  naming the field's current value, with the field's how-to text. It comes first in the queue,
+  ahead of a correction, and its answer fills only that field: a bare value never reaches a card
+  behind it. The completed message then goes on as it would have, so a value that still does not
+  fit asks again. A cancel drops the question; a new one replaces it, and so does the first card of
+  any newer photo, correction or request, so text meant for that card never fills the question.
+- **A how-to question** about a field gets that field's how-to text and an offer to make the change
+  here; one about no field gets what the assistant can do.
+- **A message fitting several records** lists them, so the next message can name one.
+- **A bare value with no card waiting** asks what it is, and nothing is written.
+- **A request the app does not offer**, such as adding a delegate, says so, then what it can do.
+- **Anything else** gets what the assistant can do, with an example naming one of the account's own
+  apartments; an account with no apartment is told to start with a photo. On a card, it gets what
+  that card takes, and the card again. A record the account lacks, an unknown field on a record,
+  and an unknown field on a dropped photo each name what can be done instead.
+- **A dropped card.** A card whose records a correction removed is dropped as soon as it would
+  show, with the reason and the next step.
 
 ## Checks before a reading is saved
 
@@ -103,7 +255,8 @@ Run in this order on confirmation, each stopping at its own card:
 
    Either way, accepting moves both of the old reading's period flags to the new reading and
    sets the closed period's `closed_on` to its latest closing reading's date. A next period, when
-   there is one, moves to start the day after. Declining saves an ordinary reading.
+   there is one, moves to start the day after, as a close opens it. Declining saves an ordinary
+   reading.
 5. **Period end near or reached.** With no close already waiting, a reading dated on or after the
    open period's last day, or at most `close_days_before_end` days before it, offers to close the
    period with it or keep it as an ordinary reading; typing that the apartment is empty
@@ -130,13 +283,15 @@ and the charge when a tariff is in force.
   readings change before it is answered, the card is shown again with the new ones.
 - **On closing** each closing reading is flagged as closing the period, `closed_on` is the
   latest closing reading's date, and the next period opens the day after with the same length,
-  the closing readings flagged as its opening readings. **Vacate** closes without opening a next
-  period; the apartment's next photo offers a new one (check 3). The reply lists the closing
-  readings.
+  the closing readings flagged as its opening readings. A close always opens the next period the
+  day after; a correction may also start it on the closing day itself (see Warn or refuse).
+  **Vacate** closes without opening a next period; the apartment's next photo offers a new one
+  (check 3). The reply lists the closing readings.
 - **Change.** Typed text naming a start date, a length or both (`change_period`) shows a card
-  with the effect. On an open period it changes the length in place or moves the start, and
-  moving the start re-points the period's opening readings to the new start. On a vacant
-  apartment it opens a period, from today unless a date is given.
+  with the effect. On an open period that card is a correction: it changes the length in place or
+  moves the start, and moving the start re-points the readings that open or close the period. On a
+  vacant apartment it opens a period, from today unless a date is given. A new length is the
+  apartment's too, written in one transaction with the period.
 - **Welcome.** The first `GET /chat` of an account with no messages adds a welcome that says to
   start with a photo of a water or electricity meter.
 - **Greeting.** A greeting appears only when an apartment's period is past its end: the open period
@@ -180,7 +335,7 @@ The tariffs flow (`src/common/flows/tariffs.py`) writes a tariff row only from i
 card, which shows the electricity price per kWh, the water price per cubic meter, a VAT note and
 the effective date.
 
-- **Typed.** Typed prices (`set_tariffs`) with no card awaiting show the card, effective today.
+- **Typed.** Typed prices (`set_tariffs`) with no card waiting show the card, effective today.
   On the card, typed prices replace the ones shown, a typed date moves the effective date, and
   a cancel drops it.
 - **Statement photo.** The card shows the VAT-inclusive prices billed for the apartment's own
@@ -193,11 +348,12 @@ the effective date.
   card that asks for tariffs, with no buttons, effective from the earliest such closing date;
   the tariffs card then names that date as the period's closing date until a typed date
   replaces it. The request never blocks other cards: it shows only when no other card awaits,
-  and typed text reaches it only when no other card awaits and the text is prices (moving it to
-  the tariffs card), a cancel (dropping it) or a question; other typed requests pass it by. An
-  ordinary save without a tariff only says there is no charge.
+  and typed text reaches it only when no other card awaits and the text is prices or a date
+  (moving it to the tariffs card), a cancel (dropping it) or a question; other typed requests pass
+  it by. An ordinary save without a tariff only says there is no charge.
 - **One at a time.** A statement photo replaces whichever tariffs card waits, the request or a
   tariffs card, so at most one tariffs card waits at a time.
 - **Saving** writes the row under its effective date, replacing a row of the same date, and the
-  reply lists the charge of each closed period whose closing reading the new row prices for the
-  first time, per meter.
+  reply lists each closed period whose charge the row changes, per meter, with the figures before
+  and after as a correction's card shows them, then one line counting the open periods whose
+  forecast it changes.

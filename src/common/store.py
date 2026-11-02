@@ -9,8 +9,16 @@ Core pieces:
   records; every read is strongly consistent, because a flow reads back within one turn what it
   has just written
 - one method family per table, constructing the pk/sk each record is stored under
+- row_key: the pk/sk a record is stored under, from its table, account and scope (the apartment
+  for a period, the meter for a reading); the per-record methods and apply share it
+- apply: a set of puts and deletes across tables in one all-or-nothing transaction, refused with
+  TooLarge before any write when it exceeds MAX_TRANSACTION_ITEMS; access rows are written under
+  conditions, and AccessChanged says one failed
 - failed_photo_readings: the one read that spans accounts, a filtered scan of the
   readings table
+- photo_messages: the messages holding a photo's reading tag, across every day
+- delegates: an account's delegate rows, a filtered scan of the access table, which has the
+  address alone as its key
 """
 
 import os
@@ -20,6 +28,7 @@ from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 
+from common.access import DELEGATE, OWNER
 from common.paging import query_all, scan_all
 
 TABLE_NAMES = (
@@ -59,8 +68,52 @@ def _record(item) -> dict:
     return _from_dynamo({key: value for key, value in item.items() if key not in ("pk", "sk")})
 
 
-def _reading_key(date, seq) -> str:
+def _scoped(account, scope) -> str:
+    return f"{account}#{scope}"
+
+
+def reading_key(date, seq) -> str:
     return f"{date}#{seq}"
+
+
+# Per table, the pk and sk a record is stored under, given its account and its scope: the
+# apartment id for a period, the meter serial for a reading, the user's address for a pending
+# item, None elsewhere.
+_ROW_KEYS = {
+    "access": lambda account, scope, record: (record["email"], None),
+    "properties": lambda account, scope, record: (account, record["id"]),
+    "apartments": lambda account, scope, record: (account, record["id"]),
+    "meters": lambda account, scope, record: (account, record["serial"]),
+    "periods": lambda account, scope, record: (_scoped(account, scope), record["start"]),
+    "readings": lambda account, scope, record: (
+        _scoped(account, scope),
+        reading_key(record["date"], record["seq"]),
+    ),
+    "tariffs": lambda account, scope, record: (account, record["effective_date"]),
+    "pending": lambda account, scope, record: (scope, record["seq"]),
+}
+
+# DynamoDB refuses a transaction of more items.
+MAX_TRANSACTION_ITEMS = 100
+
+
+class TooLarge(Exception):
+    """A set of writes exceeds what one transaction holds."""
+
+
+class AccessChanged(Exception):
+    """An access row the writes rest on changed since they were planned; nothing was written."""
+
+
+def row_key(table, account, scope, record) -> tuple:
+    """The (pk, sk) the record is stored under in the table."""
+    return _ROW_KEYS[table](account, scope, record)
+
+
+def _key(table, account, scope, **identity) -> dict:
+    """The DynamoDB Key of the record named by the fields its key is built from."""
+    pk, sk = row_key(table, account, scope, identity)
+    return {"pk": pk, "sk": sk}
 
 
 class Store:
@@ -69,6 +122,7 @@ class Store:
 
     def __init__(self, tables: dict, dynamodb):
         self._tables = {name: dynamodb.Table(tables[name]) for name in TABLE_NAMES}
+        self._client = dynamodb.meta.client
 
     @classmethod
     def from_env(cls):
@@ -77,8 +131,79 @@ class Store:
             boto3.resource("dynamodb"),
         )
 
+    def _access_put(self, record) -> dict:
+        """An address takes a delegate row only while it has no row or an owner's, which a delegate
+        row replaces; one holding a delegate row for anyone stops the transaction."""
+        return {
+            "TableName": self._tables["access"].name,
+            "Item": {"pk": record["email"], **record},
+            "ConditionExpression": "attribute_not_exists(pk) OR #role = :owner",
+            "ExpressionAttributeNames": {"#role": "role"},
+            "ExpressionAttributeValues": {":owner": OWNER},
+        }
+
+    def _access_delete(self, account_id, record) -> dict:
+        """A delegate row goes only while it still names this account."""
+        return {
+            "TableName": self._tables["access"].name,
+            "Key": {"pk": record["email"]},
+            "ConditionExpression": "#account = :account",
+            "ExpressionAttributeNames": {"#account": "account"},
+            "ExpressionAttributeValues": {":account": account_id},
+        }
+
+    def _put_request(self, table, account_id, scope, record) -> dict:
+        if table == "access":
+            return self._access_put(record)
+        pk, sk = row_key(table, account_id, scope, record)
+        return {
+            "TableName": self._tables[table].name,
+            "Item": {"pk": pk, "sk": sk, **_to_dynamo(record)},
+        }
+
+    def _delete_request(self, table, account_id, scope, record) -> dict:
+        if table == "access":
+            return self._access_delete(account_id, record)
+        pk, sk = row_key(table, account_id, scope, record)
+        return {"TableName": self._tables[table].name, "Key": {"pk": pk, "sk": sk}}
+
+    def apply(self, account_id, writes):
+        """Writes the puts and deletes of an account's writes in one transaction, all or none.
+        Raises TooLarge, before any write, when they exceed MAX_TRANSACTION_ITEMS, and
+        AccessChanged when a condition on an access row fails, the only conditions it holds."""
+        items = [
+            {"Put": self._put_request(table, account_id, scope, record)}
+            for table, rows in writes.puts.items()
+            for scope, record in rows
+        ]
+        items.extend(
+            {"Delete": self._delete_request(table, account_id, scope, record)}
+            for table, rows in writes.deletes.items()
+            for scope, record in rows
+        )
+        if not items:
+            return
+        if len(items) > MAX_TRANSACTION_ITEMS:
+            raise TooLarge(f"{len(items)} items exceed the {MAX_TRANSACTION_ITEMS} one holds")
+        try:
+            # The resource's client serializes plain Python values, as the table calls do.
+            self._client.transact_write_items(TransactItems=items)
+        except self._client.exceptions.TransactionCanceledException as error:
+            reasons = error.response["CancellationReasons"]
+            if any(reason["Code"] == "ConditionalCheckFailed" for reason in reasons):
+                raise AccessChanged from error
+            raise
+
     def _put(self, table, pk, sk, record):
         self._tables[table].put_item(Item={"pk": pk, "sk": sk, **_to_dynamo(record)})
+
+    def _put_row(self, table, account, scope, record):
+        self._put(table, *row_key(table, account, scope, record), record)
+
+    def _update_row(self, table, account, scope, fields, remove=(), **identity):
+        """Updates the existing record named by the fields its key is built from."""
+        key = _key(table, account, scope, **identity)
+        self._update(table, key["pk"], key["sk"], fields, remove)
 
     def _update(self, table, pk, sk, fields, remove=()):
         names = {f"#f{i}": name for i, name in enumerate(fields)}
@@ -125,12 +250,21 @@ class Store:
             ConditionExpression="attribute_not_exists(pk)",
         )
 
+    def delegates(self, account) -> list:
+        """The account's delegate rows, by address."""
+        items = scan_all(
+            self._tables["access"],
+            FilterExpression=Attr("account").eq(account) & Attr("role").eq(DELEGATE),
+            ConsistentRead=True,
+        )
+        return sorted((_record(item) for item in items), key=lambda row: row["email"])
+
     def properties(self, account) -> list:
         return self._query("properties", account)
 
     def put_property(self, account, name) -> dict:
         record = {"id": secrets.token_hex(4), "name": name}
-        self._put("properties", account, record["id"], record)
+        self._put_row("properties", account, None, record)
         return record
 
     def apartments(self, account) -> list:
@@ -144,35 +278,35 @@ class Store:
             "period_start": period_start,
             "period_months": period_months,
         }
-        self._put("apartments", account, record["id"], record)
+        self._put_row("apartments", account, None, record)
         return record
 
     def meter(self, account, serial):
-        return self._get("meters", {"pk": account, "sk": serial})
+        return self._get("meters", _key("meters", account, None, serial=serial))
 
     def meters(self, account) -> list:
         return self._query("meters", account)
 
     def put_meter(self, account, meter):
-        self._put("meters", account, meter["serial"], meter)
+        self._put_row("meters", account, None, meter)
 
     def update_meter(self, account, serial, **fields):
-        self._update("meters", account, serial, fields)
+        self._update_row("meters", account, None, fields, serial=serial)
 
     def periods(self, account, apartment_id) -> list:
-        return self._query("periods", f"{account}#{apartment_id}")
+        return self._query("periods", _scoped(account, apartment_id))
 
     def put_period(self, account, apartment_id, period):
-        self._put("periods", f"{account}#{apartment_id}", period["start"], period)
+        self._put_row("periods", account, apartment_id, period)
 
     def update_period(self, account, apartment_id, start, **fields):
-        self._update("periods", f"{account}#{apartment_id}", start, fields)
+        self._update_row("periods", account, apartment_id, fields, start=start)
 
     def delete_period(self, account, apartment_id, start):
-        self._tables["periods"].delete_item(Key={"pk": f"{account}#{apartment_id}", "sk": start})
+        self._tables["periods"].delete_item(Key=_key("periods", account, apartment_id, start=start))
 
     def readings(self, account, serial) -> list:
-        return self._query("readings", f"{account}#{serial}")
+        return self._query("readings", _scoped(account, serial))
 
     def failed_photo_readings(self) -> list:
         """Every reading, across all accounts, that carries failed photos, with its account and
@@ -189,27 +323,22 @@ class Store:
         return rows
 
     def put_reading(self, account, serial, reading):
-        self._put(
-            "readings",
-            f"{account}#{serial}",
-            _reading_key(reading["date"], reading["seq"]),
-            reading,
-        )
+        self._put_row("readings", account, serial, reading)
 
     def update_reading(self, account, serial, date, seq, remove=(), **fields):
-        self._update("readings", f"{account}#{serial}", _reading_key(date, seq), fields, remove)
+        self._update_row("readings", account, serial, fields, remove, date=date, seq=seq)
 
     def tariffs(self, account) -> list:
         return self._query("tariffs", account)
 
     def put_tariff(self, account, tariff):
-        self._put("tariffs", account, tariff["effective_date"], tariff)
+        self._put_row("tariffs", account, None, tariff)
 
     def pending(self, user) -> list:
         return self._query("pending", user)
 
     def put_pending(self, user, item):
-        self._put("pending", user, item["seq"], item)
+        self._put_row("pending", None, user, item)
 
     def claim_pending(self, user, seq, version, status) -> bool:
         """Advances a pending item's version only while it still has this version and status;
@@ -240,6 +369,13 @@ class Store:
             Limit=limit,
         )
         return [_record(item) for item in reversed(page["Items"])]
+
+    def photo_messages(self, user) -> list:
+        """Every message of the user, on any day, that carries a photo's reading tag."""
+        items = query_all(
+            self._tables["messages"], **self._by_pk(user), FilterExpression=Attr("reading").exists()
+        )
+        return [_record(item) for item in items]
 
     def has_messages(self, user) -> bool:
         page = self._tables["messages"].query(**self._by_pk(user), Limit=1, Select="COUNT")

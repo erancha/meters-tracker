@@ -19,8 +19,9 @@ absolute paths, so each checkout builds its own.
 
 [`scripts/test.sh`](../scripts/test.sh) is the whole quality gate: a bash syntax check of every
 script, `ruff check` and `ruff format --check` over `src/`, `tests/` and `scripts/*.py`, then
-pytest. It creates `.venv` on its first run, installs `requirements-dev.txt` into it on every
-run, and passes its arguments to pytest (`./scripts/test.sh -q tests/test_api.py`).
+pytest, which leaves out the correction matrix below. It creates `.venv` on its first run, installs
+`requirements-dev.txt` into it on every run, and with arguments runs pytest with them alone
+(`./scripts/test.sh -q tests/test_api.py`).
 
 The suite never touches AWS or the model. moto stands in for DynamoDB and S3, a hand-written
 fake in `tests/conftest.py` records the SES calls, and `tests/fake_model.py` returns canned
@@ -29,6 +30,31 @@ clock the test sets, and seeds properties, apartments, periods, meters and readi
 `tests/test_template.py` checks the CloudFormation templates against the tables and settings
 the code expects, and `tests/test_scripts.py` runs the stack lookups of `scripts/common.sh`
 against a fake `aws` command.
+
+`tests/test_correction_matrix.py` is the correction matrix, generated from the field table
+(`FIELDS` in `src/common/fields.py`) and the table of records a correction may delete (`DELETES`
+in `src/common/corrections.py`). Its cases, exactly: every operation in eight seeded account
+states (an open
+period, a closed one with its successor, the row that closes one and opens the next, a replaced
+meter, a meter, apartment and property to merge into, a vacant apartment, no tariff, a delegate)
+with every answer (a valid value then confirm, cancel, or the corrected record changed before the
+confirm; an invalid value; none; an unknown id; an unknown field); every waiting card kind in
+every state with every operation and a valid value confirmed; the card fields with every card
+kind and a valid, an invalid and no value, in one state per card; the inverse of every set in
+every state; and sixteen fixed-seed sequences. Every confirmed case goes on to a later photo of
+each live meter and the close, both checked to have happened, then checks that units are
+conserved: each stretch between two consecutive readings of a meter is billed in exactly one
+period, or in none across a reset or a vacate between them. Outcomes other than an answer's
+default are listed in the file with the rule that words them. Each case runs in an account of
+its own over one moto store, emptied after it, since moto copies its whole tables on every
+transaction. The matrix is marked `matrix`, so a plain `pytest` and the plain `test.sh` leave it
+out. Its slices (`MATRIX_SLICES`) run as separate pytest processes, as many at once as `nproc`,
+each under three minutes and at most about 590 MB at its peak.
+`./scripts/test.sh --matrix-records` runs the quick matrix, the eight record slices
+(`QUICK_SLICES`: every operation and answer in every state, with no waiting card), in about
+6 minutes with three processors, before a squash to main. `./scripts/test.sh --matrix` runs the
+full matrix on demand, all 60 slices, in about 33 minutes, and
+`./scripts/test.sh --matrix matrix_cards_open_1` runs one slice.
 
 `tests/test_owner_story.py` is the expectation for the owner's whole story, as verified in the
 browser: linking a meter, closing its period from the next reading, pricing the close, a
@@ -51,8 +77,10 @@ or any other automation: the owner runs them by hand, when a prompt or the model
 after a deploy. Each script's header documents it in full.
 
 - [`eval-intents.sh`](../scripts/eval-intents.sh) — classifies the recorded messages in
-  `tests/intents.json` (a message, the card it answers or the account's apartment names, the day
-  it is typed on, and the expected intent and fields) and reports each case that differs. It
+  `tests/intents.json` (a message, the card it answers, the account it is sent with, the day it
+  is typed on, and the expected intent and fields) and reports each case that differs. Each case
+  is sent as the engine sends it, the card listed in the records block beside the account's
+  records, waiting cards and dropped photos. It
   needs no AWS settings and no recorded data. A message the deployed app misunderstood becomes a
   new case.
 - [`eval-readings.sh`](../scripts/eval-readings.sh) `[env] [--limit N]` — scores a model on the

@@ -5,7 +5,7 @@ timestamps are taken in that zone rather than in the Lambda's UTC clock.
 """
 
 import calendar
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Jerusalem")
@@ -25,6 +25,10 @@ def add_months(d: date, n: int) -> date:
     month += 1
     day = min(d.day, calendar.monthrange(year, month)[1])
     return date(year, month, day)
+
+
+def next_day(d: str) -> str:
+    return (parse_iso(d) + timedelta(days=1)).isoformat()
 
 
 def fmt(d: date) -> str:

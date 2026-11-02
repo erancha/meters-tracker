@@ -2,8 +2,8 @@
 and classifying chat text.
 
 Core pieces:
-- MeterReadingResult / StatementResult / IntentResult: pydantic schemas the model's answers are
-  parsed into
+- MeterReadingResult / StatementResult / IntentResult (with its Operation list): pydantic schemas
+  the model's answers are parsed into
 - Model: the Protocol the rest of the app depends on (tests use a fake)
 - ClaudeModel / OpenAIModel: one implementation per provider, each asking its API for answers
   shaped to the schema through the provider's own SDK
@@ -22,7 +22,7 @@ from typing import Literal, Protocol
 import anthropic
 import boto3
 import openai
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from common import prompts
 
@@ -60,33 +60,40 @@ class StatementResult(BaseModel):
     includes_vat: bool
 
 
+class Operation(BaseModel):
+    """One change the model asks for on an id it was given. The target is `|`-separated because
+    sort keys hold colons; value is text, typed later by the field's parser, or None on a delete and
+    on a set that clears a field. A set with no field is a bare input, which the pending card's
+    default field takes."""
+
+    action: Literal["set", "delete"]
+    target: str
+    field: str | None
+    value: str | None
+
+
 class IntentResult(BaseModel):
     intent: Literal[
         "confirm",
         "reject",
-        "correct_field",
-        "set_date",
-        "choose_property",
-        "choose_apartment",
         "choose_option",
-        "set_period",
         "close_period",
         "vacate",
         "change_period",
         "set_tariffs",
         "explain",
+        "edit",
+        "how_to",
+        "which",
+        "not_offered",
         "unknown",
     ]
-    field: str | None = None
-    value: int | None = None
     date: str | None = None
     name: str | None = None
-    apartment: str | None = None
-    serial: str | None = None
-    is_new: bool | None = None
     months: int | None = None
     electricity_price: float | None = None
     water_price: float | None = None
+    operations: list[Operation] = Field(default_factory=list)
 
 
 class ModelRefused(Exception):
@@ -108,8 +115,8 @@ class Usage:
 
 class Model(Protocol):
     """What the app needs from a model: read one meter photo, read one photo as a previous
-    statement, classify one chat message given the text describing the pending card (empty when
-    there is none)."""
+    statement, classify one chat message given the text describing the pending card and the
+    account's records (empty when there is neither)."""
 
     def read_meter(self, image: bytes, media_type: str) -> MeterReadingResult: ...
 
@@ -120,9 +127,9 @@ class Model(Protocol):
 
 def _classify_content(text: str, context: str, today: date) -> str:
     """The message to classify, after today's date, which resolves dates written without a year,
-    and before the pending card, when there is one."""
+    and before the pending card and the account's records, when there are any."""
     message = f"Today: {today.isoformat()}\n\n{text}"
-    return f"{message}\n\nPending card:\n{context}" if context else message
+    return f"{message}\n\nContext:\n{context}" if context else message
 
 
 def api_key_from_ssm(param_name: str) -> str:

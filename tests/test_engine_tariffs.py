@@ -9,6 +9,8 @@ from engine_kit import (
     UNKNOWN,
     USER,
     Kit,
+    edit,
+    edits,
     electricity,
     options,
     reading,
@@ -18,7 +20,7 @@ from engine_kit import (
 
 from common import texts
 from common.flows import card_text
-from common.model import IntentResult
+from common.model import IntentResult, Operation
 
 START = "2026-09-01"
 
@@ -94,8 +96,8 @@ def test_a_price_with_none_in_force_stays_unpriced(env, ddb):
     assert "אין תעריף בתוקף, ולכן אין חיוב." in result.replies[-1].text
 
 
-def test_set_date_moves_the_effective_date_and_recomputes_the_carried_price(env, ddb):
-    kit = Kit([_prices(electricity_price=0.7), IntentResult(intent="set_date", date=START)])
+def test_a_typed_date_moves_the_effective_date_and_recomputes_the_carried_price(env, ddb):
+    kit = Kit([_prices(electricity_price=0.7), edit("effective_date", START)])
     kit.tariff("2026-10-01", 0.6, 20)
     kit.say("חשמל 0.7")
     result = kit.say("בתוקף מ-1 בספטמבר")
@@ -110,8 +112,21 @@ def test_set_date_moves_the_effective_date_and_recomputes_the_carried_price(env,
     }
 
 
+def test_a_carried_price_corrected_while_the_card_waits_shows_it_again(env, ddb):
+    kit = Kit([_prices(electricity_price=0.7)])
+    kit.tariff("2026-01-01", 0.6, 20)
+    shown = kit.say("חשמל 0.7").snapshot.card
+    kit.store.put_tariff(ACCOUNT, {**kit.tariffs()[0], "water_per_m3": 25})
+    result = kit.choose_on(shown, "confirm")
+    assert result.replies[0].text == texts.card_changed()
+    assert "25" in card_text(result.snapshot.card)
+    assert kit.tariffs()[0]["electricity_per_kwh"] == 0.6
+    kit.choose("confirm")
+    assert [t["water_per_m3"] for t in kit.tariffs()] == [25, 25]
+
+
 def test_typing_on_the_card_updates_its_prices(env, ddb):
-    kit = Kit([_prices(0.6, 15), _prices(water_price=16)])
+    kit = Kit([_prices(0.6, 15), edit("water_price", "16")])
     kit.say("חשמל 0.6 מים 15")
     result = kit.say("מים 16")
     text = card_text(result.snapshot.card)
@@ -155,7 +170,7 @@ def test_statement_photo_shows_its_tariffs_and_saves_them_with_the_photo(env, dd
 
 
 def test_statement_without_vat_is_not_saved_until_prices_are_typed(env, ddb):
-    kit = Kit([_prices(0.65, 15.8)])
+    kit = Kit([edits(("electricity_price", "0.65"), ("water_price", "15.8"))])
     result = kit.send_statement(statement(0.5497, 13.35, includes_vat=False))
     card = result.snapshot.card
     assert options(card) == []
@@ -210,6 +225,10 @@ def _close(kit):
     return kit.choose("confirm")
 
 
+def _both_prices():
+    return edits(("electricity_price", "0.5"), ("water_price", "10"))
+
+
 def _close_intent():
     return IntentResult(intent="close_period", name="עורף")
 
@@ -245,7 +264,7 @@ def test_a_close_with_a_tariff_in_force_asks_nothing(env, ddb):
 
 
 def test_typed_tariffs_after_a_close_price_the_closed_period(env, ddb):
-    kit = Kit([_close_intent(), _prices(0.5, 10)], today=date(2026, 11, 2))
+    kit = Kit([_close_intent(), _both_prices()], today=date(2026, 11, 2))
     _closable(kit)
     _close(kit)
     result = kit.say("חשמל 0.5 מים 10")
@@ -253,12 +272,74 @@ def test_typed_tariffs_after_a_close_price_the_closed_period(env, ddb):
     assert card["kind"] == "tariffs"
     assert "בתוקף מ־31/10/2026 (תאריך סגירת התקופה)" in card_text(card)
     result = kit.choose("confirm")
+    place, period = "הגפן 7 / עורף · ", "התקופה מ־01/09/2026: "
     assert result.replies[-1].text.splitlines() == [
         "התעריפים נשמרו, בתוקף מ־31/10/2026.",
-        "הגפן 7 / עורף · חשמל, התקופה מ־01/09/2026: 600 קוט״ש, חיוב 300.00 ₪",
-        "הגפן 7 / עורף · מים, התקופה מ־01/09/2026: 30 קוב, חיוב 300.00 ₪",
+        f"{place}מונה חשמל E-392, {period}600 קוט״ש, חיוב 300.00 ₪ (במקום 600 קוט״ש, אין חיוב)",
+        f"{place}מונה מים W-1250, {period}30 קוב, חיוב 300.00 ₪ (במקום 30 קוב, אין חיוב)",
     ]
     assert kit.store.pending(USER.email) == []
+
+
+def test_saved_tariff_correction_names_every_changed_closed_period(env, ddb):
+    kit = Kit([_prices(electricity_price=0.7), edit("effective_date", "2026-01-01")])
+    apartment = kit.apartment(start="2026-05-01", closed_on="2026-06-30")
+    kit.period(apartment, "2026-07-01", closed_on="2026-08-31")
+    kit.tariff("2026-01-01", 0.6, 20)
+    kit.meter(
+        apartment,
+        "E-392",
+        "electricity",
+        [
+            reading("2026-05-01", 1000, opens="2026-05-01"),
+            reading("2026-06-30", 1100, opens="2026-07-01", closes="2026-05-01"),
+            reading("2026-08-31", 1150, closes="2026-07-01"),
+        ],
+    )
+    kit.say("חשמל 0.7")
+    kit.say("בתוקף מ-1 בינואר")
+    text = kit.choose("confirm").replies[-1].text
+    assert "70.00" in text and "60.00" in text
+    assert "35.00" in text and "30.00" in text
+
+
+def test_a_tariff_save_lists_closed_periods_and_counts_the_open_forecasts(env, ddb):
+    kit = Kit(
+        [_prices(electricity_price=0.7), edit("effective_date", "2026-01-01")],
+        today=date(2026, 8, 20),
+    )
+    kit.tariff("2026-01-01", 0.6, 20)
+    for i in range(8):
+        apartment = kit.apartment(
+            name=f"דירה {i}", property_name=f"נכס {i}", start="2026-05-01", closed_on="2026-06-30"
+        )
+        kit.period(apartment, "2026-07-01")
+        kit.meter(
+            apartment,
+            f"E-{i}",
+            "electricity",
+            [
+                reading("2026-05-01", 1000, opens="2026-05-01"),
+                reading("2026-06-30", 1100, opens="2026-07-01", closes="2026-05-01"),
+                reading("2026-08-15", 1150),
+            ],
+        )
+    kit.say("חשמל 0.7")
+    kit.say("בתוקף מ-1 בינואר")
+    lines = kit.choose("confirm").replies[-1].text.splitlines()
+    assert lines[0] == texts.tariffs_saved(date(2026, 1, 1))
+    closed = lines[1:-1]
+    assert len(closed) == 8
+    assert all("70.00" in line and "60.00" in line for line in closed)
+    assert lines[-1] == texts.forecasts_repriced(8)
+
+
+def test_prices_read_as_a_request_still_land_on_the_waiting_request(env, ddb):
+    kit = Kit([_close_intent(), _prices(0.5, 10)], today=date(2026, 11, 2))
+    _closable(kit)
+    _close(kit)
+    assert kit.say("חשמל 0.5 מים 10").snapshot.card["kind"] == "tariffs"
+    assert [i["kind"] for i in kit.store.pending(USER.email)] == ["tariffs"]
 
 
 def test_only_one_tariffs_request_waits_at_a_time(env, ddb):
@@ -297,17 +378,17 @@ def test_another_typed_request_passes_the_waiting_request(env, ddb):
     _closable(kit)
     _close(kit)
     result = kit.say("התקופה של עורף שלושה חודשים")
-    assert result.snapshot.card["kind"] == "change_period"
+    assert result.snapshot.card["kind"] == "correction"
     _, context = kit.model.classified[-1]
     assert context.startswith("חסרים תעריפים")
-    assert context.endswith("\nדירות: עורף")
+    assert "name=עורף" in context.split(f"{texts.RECORDS_TITLE}:")[1]
     kit.choose("confirm")
     assert kit.card()["kind"] == "tariffs_ask"
 
 
 def test_the_card_says_why_it_is_back_dated_to_the_close(env, ddb):
     kit = Kit(
-        [_close_intent(), _prices(0.5, 10), IntentResult(intent="set_date", date="2026-11-02")],
+        [_close_intent(), _both_prices(), edit("effective_date", "2026-11-02")],
         today=date(2026, 11, 2),
     )
     _closable(kit)
@@ -317,6 +398,74 @@ def test_the_card_says_why_it_is_back_dated_to_the_close(env, ddb):
     kit.say("מהיום")
     text = card_text(kit.card())
     assert "בתוקף מ־02/11/2026" in text and "סגירת התקופה" not in text
+
+
+def _closing_dates_moved(kit, day="2026-10-28"):
+    """Moves both closing readings of the period _close closed to the date day."""
+    targets = ("E-392", "W-1250")
+    kit.model.queue(
+        IntentResult(
+            intent="edit",
+            operations=[
+                Operation(
+                    action="set",
+                    target=f"reading|{serial}|2026-10-31#2026-10-31T08:00:00",
+                    field="date",
+                    value=day,
+                )
+                for serial in targets
+            ],
+        )
+    )
+    assert kit.say("הסגירה הייתה ב-28").snapshot.card["kind"] == "correction"
+    kit.choose("confirm")
+
+
+def test_a_close_date_corrected_while_tariffs_are_asked_moves_their_effective_date(env, ddb):
+    kit = Kit([_close_intent()], today=date(2026, 11, 2))
+    apartment = _closable(kit)
+    _close(kit)
+    _closing_dates_moved(kit)
+    kit.model.queue(_both_prices())
+    card = kit.say("חשמל 0.5 מים 10").snapshot.card
+    assert "בתוקף מ־28/10/2026 (תאריך סגירת התקופה)" in card_text(card)
+    result = kit.choose("confirm")
+    assert [t["effective_date"] for t in kit.tariffs()] == ["2026-10-28"]
+    assert result.snapshot.tariffs_missing is False
+    assert kit.periods(apartment)[0]["closed_on"] == "2026-10-28"
+
+
+def test_a_waiting_tariffs_card_follows_a_corrected_close_date(env, ddb):
+    kit = Kit([_close_intent(), _both_prices()], today=date(2026, 11, 2))
+    _closable(kit)
+    _close(kit)
+    shown = kit.say("חשמל 0.5 מים 10").snapshot.card
+    assert "בתוקף מ־31/10/2026" in card_text(shown)
+    _closing_dates_moved(kit)
+    returned = kit.card()
+    assert returned["pending"] == shown["pending"]
+    assert "בתוקף מ־28/10/2026" in card_text(returned)
+    assert kit.tariffs() == []
+
+
+def test_a_tariffs_ask_with_nothing_left_unpriced_drops(env, ddb):
+    kit = Kit([_close_intent(), _both_prices()], today=date(2026, 11, 2))
+    _closable(kit)
+    _close(kit)
+    kit.tariff("2026-01-01", 0.6, 20)
+    result = kit.say("חשמל 0.5 מים 10")
+    assert result.replies[-1].text == texts.tariffs_not_missing()
+    assert kit.store.pending(USER.email) == []
+    assert result.snapshot.tariffs_missing is False
+
+
+def test_a_statement_on_a_moved_close_takes_the_corrected_date(env, ddb):
+    kit = Kit([_close_intent()], today=date(2026, 11, 2))
+    _closable(kit)
+    _close(kit)
+    _closing_dates_moved(kit)
+    card = kit.send_statement().snapshot.card
+    assert "בתוקף מ־28/10/2026 (תאריך סגירת התקופה)" in card_text(card)
 
 
 def test_a_statement_replaces_a_waiting_tariffs_card(env, ddb):

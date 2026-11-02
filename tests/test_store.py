@@ -5,6 +5,10 @@ plain Python number types on the way out."""
 import pytest
 from botocore.exceptions import ClientError
 
+from common.access import DELEGATE, OWNER
+from common.account import Writes
+from common.store import AccessChanged
+
 
 def test_access_put_if_absent_is_conditional(store):
     assert store.access_put_if_absent("a@x.com", "acc1", "owner") is True
@@ -182,6 +186,17 @@ def test_messages_of_a_day_keeps_the_latest_within_the_limit(store):
     assert (call["Limit"], call["ScanIndexForward"]) == (2, False)
 
 
+def test_photo_messages_spans_days_and_holds_only_tagged_messages(store):
+    for at in ("2026-02-01T08:00:00", "2026-02-02T08:00:00", "2026-02-03T08:00:00"):
+        store.append_message("u3", {"at": at, "role": "user", "text": None, "image_key": at})
+    tag = {"state": "saved", "meter_type": "water", "apartment": "a", "property": "p"}
+    store.set_message_reading("u3", "2026-02-01T08:00:00", tag)
+    store.set_message_reading("u3", "2026-02-03T08:00:00", tag)
+    tagged = store.photo_messages("u3")
+    assert [m["at"] for m in tagged] == ["2026-02-01T08:00:00", "2026-02-03T08:00:00"]
+    assert tagged[0]["reading"] == tag
+
+
 def test_has_messages(store):
     assert store.has_messages("u2") is False
     store.append_message("u2", _message("2026-01-01T00:00:00", "t"))
@@ -252,3 +267,71 @@ def test_failed_photo_readings_returns_only_rows_with_a_chain(store):
         ("acc1", "M1", ["k1"]),
         ("acc2", "M9", ["k2", "k3"]),
     ]
+
+
+def _access_row(email, account="acc1", role=DELEGATE):
+    return {"email": email, "account": account, "role": role}
+
+
+def _moved_address(old="old@x.com", new="new@x.com"):
+    return Writes(
+        puts={"access": [(None, _access_row(new))]},
+        deletes={"access": [(None, _access_row(old))]},
+    )
+
+
+def test_delegates_lists_only_the_delegate_rows_of_the_account(store):
+    store.access_put_if_absent("acc1", "acc1", OWNER)
+    store.access_put_if_absent("b@x.com", "acc1", DELEGATE)
+    store.access_put_if_absent("a@x.com", "acc1", DELEGATE)
+    store.access_put_if_absent("c@x.com", "acc2", DELEGATE)
+    assert store.delegates("acc1") == [_access_row("a@x.com"), _access_row("b@x.com")]
+    assert store.delegates("acc3") == []
+
+
+def test_apply_moves_an_access_row_in_one_transaction(store):
+    store.access_put_if_absent("old@x.com", "acc1", DELEGATE)
+    store.apply("acc1", _moved_address())
+    assert store.access_get("old@x.com") is None
+    assert store.access_get("new@x.com") == _access_row("new@x.com")
+
+
+def test_apply_replaces_the_owner_row_of_another_address(store):
+    store.access_put_if_absent("old@x.com", "acc1", DELEGATE)
+    store.access_put_if_absent("new@x.com", "new@x.com", OWNER)
+    store.apply("acc1", _moved_address())
+    assert store.access_get("new@x.com") == _access_row("new@x.com")
+
+
+def test_apply_refuses_an_old_row_that_stopped_naming_the_account(store):
+    store.access_put_if_absent("old@x.com", "acc2", DELEGATE)
+    with pytest.raises(AccessChanged):
+        store.apply("acc1", _moved_address())
+    assert store.access_get("old@x.com") == _access_row("old@x.com", "acc2")
+    assert store.access_get("new@x.com") is None
+
+
+def test_apply_refuses_an_address_that_gained_a_delegate_row(store):
+    store.access_put_if_absent("old@x.com", "acc1", DELEGATE)
+    store.access_put_if_absent("new@x.com", "acc2", DELEGATE)
+    with pytest.raises(AccessChanged):
+        store.apply("acc1", _moved_address())
+    assert store.access_get("old@x.com") == _access_row("old@x.com")
+    assert store.access_get("new@x.com") == _access_row("new@x.com", "acc2")
+
+
+def test_apply_writes_nothing_else_when_an_access_condition_fails(store):
+    store.access_put_if_absent("new@x.com", "acc2", DELEGATE)
+    prop = {"id": "p1", "name": "Main street"}
+    writes = _moved_address()
+    writes.puts["properties"] = [(None, prop)]
+    with pytest.raises(AccessChanged):
+        store.apply("acc1", writes)
+    assert store.properties("acc1") == []
+
+
+def test_apply_deletes_a_waiting_item_of_any_address(store):
+    item = {"seq": "s1", "kind": "correction", "status": "awaiting", "step": "s", "version": 1}
+    store.put_pending("old@x.com", item)
+    store.apply("acc1", Writes(deletes={"pending": [("old@x.com", item)]}))
+    assert store.pending("old@x.com") == []

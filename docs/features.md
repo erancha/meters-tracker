@@ -48,6 +48,27 @@ final step fails shows a banner asking to reload and sign in again.
 - When several photos wait for confirmation, only the oldest card has working buttons. After
   an answer, the next card may sit above the latest replies.
 
+## Corrections
+
+- Anything already saved is corrected by typing it in a sentence or a number, with or without a
+  card on screen: "הקריאה הקודמת היא 843", "מספר המונה היה 2721058, לא 2721056", "דירה 3 נמצאת
+  בלאונר 18". No field picker appears.
+- A correction shows a card titled `תיקון נתונים שמורים`, ahead of any waiting card. Its lines name
+  each changed field (`... · הקריאה: 843 במקום 820`), each record it removes or reopens, warnings
+  such as a reading lower than the one before it, and every period whose consumption, forecast or
+  charge changes, with the new figures beside the old. "אישור" saves it; "בטל" leaves everything as
+  it was. Another value typed instead ("לא, 845") replaces the card. A correction the app refuses
+  shows no card, only the reason and what to do instead.
+- A correction that leaves out its new value ("הקריאה הקודמת לא נכונה") shows a question card
+  naming the value on record and how to write the new one; the typed answer fills that field and
+  shows the correction card. A typed correction on a card that lacks its value asks the same
+  question there, and the next typed value fills that field.
+- A question about how to do something gets one sentence on how, with an offer to do it here. A
+  message that fits several records lists them. A number typed with no card waiting is asked
+  about, and nothing is saved. A request the app does not offer yet, such as adding a delegate,
+  says so. Any other message gets what the assistant can do, naming the account's apartments; the
+  reply is never "לא הבנתי".
+
 ## Photos
 
 - The camera button lets the user take a photo or pick existing ones (on a phone, the system

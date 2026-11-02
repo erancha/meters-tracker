@@ -8,7 +8,17 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import NoCredentialsError
-from engine_kit import ACCOUNT, NOT_STATEMENT, UNKNOWN, Kit, electricity, statement, water
+from engine_kit import (
+    ACCOUNT,
+    NOT_STATEMENT,
+    UNKNOWN,
+    Kit,
+    edit,
+    edits,
+    electricity,
+    statement,
+    water,
+)
 
 from common import dates
 from common.model import IntentResult
@@ -47,12 +57,11 @@ def _api():
 
 def _queue(kit, today, *extra):
     for intent in (
-        IntentResult(intent="choose_property", name=PROPERTY, apartment=APARTMENT),
-        IntentResult(intent="set_period", date=start_for(today, MONTHS).isoformat()),
-        IntentResult(
-            intent="set_tariffs",
-            electricity_price=PRICES["electricity"],
-            water_price=PRICES["water"],
+        edits(("property", PROPERTY), ("apartment", APARTMENT)),
+        edit("period_start", start_for(today, MONTHS).isoformat()),
+        edits(
+            ("electricity_price", str(PRICES["electricity"])),
+            ("water_price", str(PRICES["water"])),
         ),
         *extra,
     ):

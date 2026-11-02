@@ -6,7 +6,8 @@ deployed by CloudFormation. Layout and parts: docs/architecture.md.
 
 ## Scripts (scripts/)
 
-- `test.sh [pytest args]` — bash syntax check, ruff, pytest; creates `.venv` on first run.
+- `test.sh [--matrix [slice ...] | --matrix-records | pytest args]` — bash syntax check, ruff,
+  pytest; `--matrix` runs the full correction matrix, `--matrix-records` its record slices.
 - `init-env.sh [--force]` — creates `aws-config.sh` and `params.sh` from their examples.
 - `deploy.sh [env]` — builds `build/lambda.zip`, deploys the Cognito and app stacks, writes
   `frontend/public/config.js` and publishes the frontend.

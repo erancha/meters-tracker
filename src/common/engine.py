@@ -1,17 +1,33 @@
 """The conversation engine: one turn in, replies and a snapshot out. It records every user action
 and every reply in the user's message history, then routes the action: a photo starts the meter
-photo flow, a choice goes to the pending item it names once it claims that item, text goes to the
-oldest awaiting item, and text with nothing awaiting is classified into a close, vacate,
-period-change or tariffs request, with the account's apartment names, so the request names one
-of them exactly. A standby item (a request for tariffs) waits without
-blocking the queue: text with nothing awaiting is classified with its card as context, and only
-the answers it takes go to it.
+photo flow, a choice goes to the pending item it names once it claims that item, and text is
+classified with the first awaiting item's card, when one waits, and the account's records, so an
+operation or a request names a saved record exactly. The records block also lists every waiting
+card by its seq with its fields, and the user's last dropped photos by their message's at. An
+edit's operations go to what each names, in this order and in the same turn: the card the text was
+classified with, a card behind it, a dropped photo, which is read again from its stored copy, and
+saved records, through a correction. A how-to question, a message fitting several records and a
+request the app lacks are answered alike on any card or none, and the card shows again. Any other
+answer goes to the card, and with nothing awaiting text is a close, vacate, period-change or
+tariffs request; anything else is answered by ask_back, which says what the assistant can do or
+asks a question, and never only that it did not understand. A standby item (a request for tariffs)
+waits without blocking the queue: text with nothing awaiting is classified with its card as
+context, and only the answers it takes go to it.
+
+A question comes first in the queue, whatever its seq, then a correction, so the card of a change
+to saved records never waits behind an older card, and the answer to a question asked for a change
+never reaches a card behind it. At most one of each waits, since a new one replaces it. A
+correction never marks a report due.
+
+Cards hold copies of saved records, and another person's correction can land while one waits. So
+every answer to a waiting card first refreshes it: when its text changed it is shown again and the
+answer does nothing, and when its records are gone it is dropped with the reason.
 
 A text or photo is stored before it is handled, so when handling fails the message is marked
 failed and a retry handles that same message again, with no second message. A retried photo is
 read from its stored copy and keeps the day it was sent as its reading date.
 
-The snapshot is the oldest awaiting item's card, else the oldest standby item's, plus the count of
+The snapshot is the first awaiting item's card, else the oldest standby item's, plus the count of
 items behind it and whether a request for tariffs is open, even behind other cards; the browser
 shows it and never orders the queue itself. A photo still being read after the api Lambda's time
 limit was being read by an invocation that was killed, so the snapshot turns it into a retake card
@@ -25,28 +41,47 @@ report that fails is logged and never fails the turn: the reading is already sav
 """
 
 import secrets
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
-from common import dates, report, texts
+from common import account, dates, report, texts
+from common.fields import InvalidValue, UnknownField
 from common.flows import (
+    ASK_BACK_INTENTS,
+    ASKED,
     AWAITING,
+    CARD_TARGET,
     READING,
+    READING_KINDS,
     STANDBY,
     Action,
     AlreadyHandled,
+    CardGone,
     Choice,
     MessageFailed,
     Reply,
     Snapshot,
     TurnResult,
+    ask,
+    ask_back,
+    asked_field,
+    card_reply,
+    card_text,
+    classify_context,
     close_period,
+    correction,
+    drop,
     link_meter,
+    message_context,
     meter_photo,
+    on_card,
     period_change,
-    request_context,
+    question,
+    record_operation,
     tariffs,
 )
 from common.log import get_logger
+from common.model import IntentResult
 
 logger = get_logger(__name__)
 
@@ -67,7 +102,54 @@ FLOWS = {
     close_period.KIND: close_period,
     period_change.KIND: period_change,
     tariffs.KIND: tariffs,
+    correction.KIND: correction,
+    question.KIND: question,
 }
+
+# The kinds that come first in the queue, in this order, whatever their seq.
+FIRST_KINDS = (question.KIND, correction.KIND)
+
+
+# The record name of a dropped photo's id in the records block.
+PHOTO_TARGET = "photo"
+
+
+@dataclass
+class Listed:
+    """The waiting cards and dropped photos a records block lists, by the id an operation names
+    each with after its record name."""
+
+    # Key: pending seq; value: the item, awaiting cards first in queue order, then standby ones
+    cards: dict
+    # Key: message at; value: the photo's message
+    photos: dict
+
+
+def _held_photos(item) -> list[str]:
+    """The image keys a pending item holds: a meter photo's own and those it superseded. A
+    tariffs card read from a statement photo holds nothing saved, so the photo stays reopenable,
+    and reopening it as a meter's drops the card."""
+    data = item["data"]
+    if item["kind"] in READING_KINDS:
+        return [data["image_key"], *data["failed_photos"]]
+    return []
+
+
+def _questions_and_corrections_first(items: list[dict]) -> list[dict]:
+    """The items in queue order, with any question, then any correction, moved ahead of the
+    rest."""
+
+    def rank(item):
+        kind = item["kind"]
+        return FIRST_KINDS.index(kind) if kind in FIRST_KINDS else len(FIRST_KINDS)
+
+    return sorted(items, key=rank)
+
+
+def _face(card) -> tuple:
+    """What a card shows the person, its version aside: a button keeps its id when its label
+    changes with the day, so the labels count too."""
+    return card_text(card), card["options"]
 
 
 class Engine:
@@ -96,6 +178,10 @@ class Engine:
         # Key: (apartment id, period start)
         # Value: ISO date of the report this one replaces, or None
         self._reports_due = {}
+
+    def flow(self, item):
+        """The module that runs the item's flow."""
+        return FLOWS[item["kind"]]
 
     def report_due(self, apartment_id, period_start, ignored=None):
         self._reports_due[(apartment_id, period_start)] = ignored
@@ -136,10 +222,37 @@ class Engine:
         return self._result(user, self._handle(user, message, lambda: self._text(user, action)))
 
     def _result(self, user, replies: list[Reply], image_key=None) -> TurnResult:
-        for reply in replies:
-            self._append(user, "assistant", reply.text, reply.card, reply.image_key)
+        """The turn's replies and the snapshot after it, the card it shows rebuilt first."""
+        self._say(user, replies)
+        replies = [*replies, *self._renew_shown(user)]
         self._send_reports(user)
         return TurnResult(replies, self.snapshot(user), image_key)
+
+    def _say(self, user, replies: list[Reply]):
+        for reply in replies:
+            self._append(user, "assistant", reply.text, reply.card, reply.image_key)
+
+    def _renew_shown(self, user) -> list[Reply]:
+        """Rebuilds the card the snapshot shows from the stored records, so a card is never shown
+        with records a correction, or anyone else, has changed since: a card that differs is shown
+        anew, and one whose records are gone is dropped, saying why, and the card that then shows
+        is rebuilt in turn. A card an answer took meanwhile is left to that answer. Returns the
+        replies, already recorded."""
+        replies, rebuilt = [], set()
+        while True:
+            card = self.snapshot(user).card
+            if card is None or card["pending"] in rebuilt:
+                return replies
+            rebuilt.add(card["pending"])
+            # An answer may finish the item between the snapshot and this read.
+            item = {i["seq"]: i for i in self.store.pending(user.email)}.get(card["pending"])
+            if item is None:
+                continue
+            renewed = self._renewal(user, item, [], claim=True)
+            if renewed is None:
+                return replies
+            self._say(user, renewed)
+            replies.extend(renewed)
 
     def _send_reports(self, user):
         due, self._reports_due = self._reports_due, {}
@@ -176,7 +289,7 @@ class Engine:
             )
         return self._handle(user, message, lambda: self._photo_again(user, message))
 
-    def _photo_again(self, user, message) -> list[Reply]:
+    def _photo_again(self, user, message, reopen=None) -> list[Reply]:
         image, media_type = self.files.get_image(message["image_key"])
         sent_on = message["at"][: len("YYYY-MM-DD")]
         return meter_photo.start(
@@ -189,31 +302,215 @@ class Engine:
             message["text"],
             sent_on,
             message["at"],
+            reopen,
         )
+
+    def _reopen(self, user, at, operations) -> list[Reply]:
+        """Reads the dropped photo of the message at at again with the operations' fields, once
+        it may be reopened and they all fit; a value that does not fit is asked for."""
+        state = account.load(self.store, user.account, user.role)
+        messages = {m["at"]: m for m in self._reopenable(user, state)}
+        if at not in messages:
+            return [Reply(texts.photo_not_reopenable())]
+        message = messages[at]
+        try:
+            reopen = meter_photo.reopening(
+                operations, self.clock(), account.photo_kind(message["reading"])
+            )
+        except UnknownField:
+            return [Reply(texts.photo_help())]
+        except InvalidValue as error:
+            return question.start(self, user, operations, error)
+        return self._photo_again(user, message, reopen)
 
     def _choose(self, user, action: Action) -> list[Reply]:
         item, label = self._claim(user, action.choice)
         answered = {"pending": action.choice.pending, "version": action.choice.version}
         self._append(user, "user", label, choice=answered)
-        return FLOWS[item["kind"]].answer(self, user, item, action)
+        return self._answer(user, item, action)
+
+    def _answer(self, user, item, action: Action) -> list[Reply]:
+        """Gives a waiting card its answer unless the records it copies changed since it was
+        shown: a card whose text or buttons differ now is shown again and nothing else is done,
+        since the answer was to the old one."""
+        renewed = self._renewal(user, item, [Reply(texts.card_changed())])
+        if renewed is not None:
+            return renewed
+        return self.flow(item).answer(self, user, item, action)
+
+    def _renewal(self, user, item, lead: list[Reply], claim=False) -> list[Reply] | None:
+        """Rebuilds the item's card from the stored records: None when it shows what it showed;
+        else why it was dropped, when its records are gone, or lead then the card shown anew.
+        Its copies are stored only when that shows it. With claim, an item no answer has claimed
+        is claimed before it is written, and [] says another request claimed it first."""
+        shown = _face(self.flow(item).card(item))
+        gone = self._refresh(user, item, claim)
+        if gone is not None:
+            return gone
+        flow = self.flow(item)
+        if _face(flow.card(item)) == shown:
+            return None
+        if claim and not self._claimed(user, item):
+            return []
+        return [*lead, *ask(self, user, item, item["step"], flow.card)]
+
+    def _claimed(self, user, item) -> bool:
+        """Advances the item's version as an answer's claim does, so a write that follows cannot
+        bring back an item a concurrent answer took and finished; False when it did."""
+        if not self.store.claim_pending(user.email, item["seq"], item["version"], item["status"]):
+            return False
+        item["version"] += 1
+        return True
+
+    def _refresh(self, user, item, claim=False) -> list[Reply] | None:
+        """Refreshes the item's copies; when its records are gone, drops it and returns why, or
+        [] when claim is set and another request claimed it first. A refresh that moves the item
+        to another step forgets the field its card asked for, which the new step may not have."""
+        step = item["step"]
+        try:
+            self.flow(item).refresh(self, user, item)
+        except CardGone as gone:
+            if claim and not self._claimed(user, item):
+                return []
+            return drop(self, user, item, [Reply(gone.text)])
+        if item["step"] != step:
+            item.pop(ASKED, None)
+        return None
+
+    def _reopenable(self, user, state) -> list[dict]:
+        """The user's photo messages a typed correction may read again: dropped, stored under this
+        account, since an address keeps its messages when it moves to another, and held by no
+        saved reading, tariff or waiting item, so a photo is never counted twice."""
+        held = {
+            key
+            for serial in state.readings
+            for r in state.readings[serial]
+            for key in [r["image_key"], *r.get("failed_photos", [])]
+        }
+        held.update(t["source_image_key"] for t in state.tariffs)
+        held.update(key for i in self.store.pending(user.email) for key in _held_photos(i))
+        return [
+            m
+            for m in self.store.photo_messages(user.email)
+            if m["reading"]["state"] == "dropped"
+            and m["image_key"].startswith(f"{user.account}/")
+            and m["image_key"] not in held
+        ]
+
+    def _listed(self, user, state) -> Listed:
+        cards = [*self._awaiting(user), *self._with_status(user, STANDBY)]
+        photos = sorted(self._reopenable(user, state), key=lambda m: m["at"])
+        recent = photos[-self.config["correction_dropped_photos"] :]
+        return Listed({i["seq"]: i for i in cards}, {m["at"]: m for m in recent})
+
+    def records(self, user) -> tuple[str, Listed]:
+        """The records block the classifier is given with the user's typed text, and the cards
+        and photos it lists."""
+        state = account.load(self.store, user.account, user.role)
+        listed = self._listed(user, state)
+        block = account.context(
+            state,
+            self.config["correction_recent_readings"],
+            {seq: self.flow(item).form(item) for seq, item in listed.cards.items()},
+            {at: message["reading"] for at, message in listed.photos.items()},
+        )
+        return block, listed
 
     def _text(self, user, action: Action) -> list[Reply]:
+        records, listed = self.records(user)
         awaiting = self._awaiting(user)
         if awaiting:
             item = awaiting[0]
-            return FLOWS[item["kind"]].answer(self, user, item, action)
-        names = sorted(a["name"] for a in self.store.apartments(user.account))
+            return self._dispatch(
+                user,
+                self._classify(action, records, item),
+                lambda intent: self._answer(user, item, replace(action, intent=intent)),
+                listed,
+                item,
+            )
         standby = self._with_status(user, STANDBY)
         if not standby:
-            context = request_context(names)
-            return self._request(user, self.model.classify(action.text, context, self.clock()))
+            return self._dispatch(
+                user,
+                self._classify(action, records),
+                lambda intent: self._request(user, intent),
+                listed,
+            )
         item = standby[0]
-        flow = FLOWS[item["kind"]]
-        context = request_context(names, flow.card(item))
-        intent = self.model.classify(action.text, context, self.clock())
-        if intent.intent in flow.STANDBY_ANSWERS:
-            return flow.answer_standby(self, user, item, intent)
-        return self._request(user, intent)
+        flow = self.flow(item)
+
+        def answer(intent):
+            """A standby card's text has nothing copied, so only a gone item stops the answer."""
+            if intent.intent not in flow.STANDBY_ANSWERS:
+                return self._request(user, intent)
+            gone = self._refresh(user, item)
+            return flow.answer_standby(self, user, item, intent) if gone is None else gone
+
+        return self._dispatch(user, self._classify(action, records, item), answer, listed, item)
+
+    def _classify(self, action: Action, records: str, item=None):
+        """What the model makes of typed text, given the records and item's card when there is
+        one."""
+        card_context = None
+        if item is not None:
+            flow = self.flow(item)
+            card_context = classify_context(flow.card(item), flow.form(item), asked_field(item))
+        context = message_context(records, card_context)
+        return self.model.classify(action.text, context, self.clock())
+
+    def _dispatch(self, user, intent, answer, listed: Listed, item=None) -> list[Reply]:
+        """Sends an edit's operations to what each names, and the rest of the intent to answer,
+        which takes the part on item, the card the text was classified with. A card id that
+        listed lacks is left to the correction, which answers it as any unknown id, and a photo
+        id to the reopen, which refuses one it may not read again. When only the correction
+        answers and shows no card of its own, item's card shows again, as a card edit that
+        changes nothing does. The intents ask_back answers alike everywhere skip answer, and
+        item's card shows again after the reply."""
+        if intent.intent in ASK_BACK_INTENTS:
+            shown = [] if item is None else [card_reply(self.flow(item).card(item))]
+            return [*ask_back(self, user, intent), *shown]
+        if intent.intent != "edit":
+            return answer(intent)
+        on_item, on_records = [], []
+        # Key: seq of a card behind item; value: its operations, aimed at the card
+        behind = {}
+        # Key: at of a dropped photo; value: its operations
+        photos = {}
+        for operation in intent.operations:
+            record, _, rest = operation.target.partition("|")
+            if record == PHOTO_TARGET:
+                photos.setdefault(rest, []).append(operation)
+                continue
+            if operation.target == CARD_TARGET:
+                shown = item
+            elif record == CARD_TARGET and rest in listed.cards:
+                shown = listed.cards[rest]
+                operation = operation.model_copy(update={"target": CARD_TARGET})
+            else:
+                on_records.append(operation)
+                continue
+            form = {} if shown is None else self.flow(shown).form(shown)
+            operation = record_operation(operation, form)
+            if not on_card(operation):
+                on_records.append(operation)
+            elif shown is None or shown["seq"] == item["seq"]:
+                on_item.append(operation)
+            else:
+                behind.setdefault(shown["seq"], []).append(operation)
+        replies = []
+        if on_item or not (behind or photos or on_records):
+            replies += answer(intent.model_copy(update={"operations": on_item}))
+        for seq, operations in behind.items():
+            edited = intent.model_copy(update={"operations": operations})
+            replies += self._answer(user, listed.cards[seq], Action(intent=edited))
+        for at, operations in photos.items():
+            replies += self._reopen(user, at, operations)
+        if on_records:
+            replies += correction.start(self, user, on_records)
+            shown_none = all(reply.card is None for reply in replies)
+            if item is not None and not on_item and shown_none:
+                replies.append(card_reply(self.flow(item).card(item)))
+        return replies
 
     def _claim(self, user, choice: Choice) -> tuple[dict, str]:
         """The awaiting item a choice answers, with the chosen option's label. The item is
@@ -223,7 +520,7 @@ class Engine:
         item = {i["seq"]: i for i in self.store.pending(user.email)}.get(choice.pending)
         if item is None or item["status"] != AWAITING or item["version"] != choice.version:
             raise AlreadyHandled(f"pending item {choice.pending} no longer shows that card")
-        options = FLOWS[item["kind"]].card(item)["options"]
+        options = self.flow(item).card(item)["options"]
         labels = {o["id"]: o["label"] for o in options}
         if choice.option not in labels:
             raise AlreadyHandled(f"option {choice.option} is not on the card")
@@ -239,10 +536,18 @@ class Engine:
             return period_change.change(self, user, intent)
         if intent.intent == "set_tariffs":
             return tariffs.request(self, user, intent)
-        return [Reply(texts.unknown_intent())]
+        return ask_back(self, user, intent)
+
+    def route(self, user, operations) -> list[Reply]:
+        """Sends operations that each name their own target, as an answered question's do, to
+        what each names, as an edit typed with no card on screen would go."""
+        intent = IntentResult(intent="edit", operations=operations)
+        state = account.load(self.store, user.account, user.role)
+        listed = self._listed(user, state)
+        return self._dispatch(user, intent, lambda i: self._request(user, i), listed)
 
     def _awaiting(self, user) -> list[dict]:
-        return self._with_status(user, AWAITING)
+        return _questions_and_corrections_first(self._with_status(user, AWAITING))
 
     def _with_status(self, user, status) -> list[dict]:
         return [i for i in self.store.pending(user.email) if i["status"] == status]
@@ -254,19 +559,21 @@ class Engine:
                 meter_photo.ask_retake(self, user, item)
         queue = [i for i in pending if i["status"] in (READING, AWAITING, STANDBY)]
         missing = any(i["kind"] == tariffs.KIND and i["step"] == tariffs.ASK for i in queue)
-        shown = [i for i in queue if i["status"] == AWAITING] or [
+        shown = _questions_and_corrections_first([i for i in queue if i["status"] == AWAITING]) or [
             i for i in queue if i["status"] == STANDBY
         ]
         if not shown:
             return Snapshot(None, len(queue), missing)
-        oldest = shown[0]
-        return Snapshot(FLOWS[oldest["kind"]].card(oldest), len(queue) - 1, missing)
+        first = shown[0]
+        return Snapshot(self.flow(first).card(first), len(queue) - 1, missing)
 
     def load(self, user, day=None) -> tuple[list[dict], Snapshot]:
-        """The messages of day, today when None, with the snapshot. An address with no message
-        at all gets the welcome, and the first load of today the greeting when a close is due."""
+        """The messages of day, today when None, with the snapshot, its card rebuilt first. An
+        address with no message at all gets the welcome, and the first load of today the greeting
+        when a close is due."""
         today = self.clock().isoformat()
         day = today if day is None else day
+        self._renew_shown(user)
         messages = self.store.messages(user.email, day)
         if not self.store.has_messages(user.email):
             messages.append(self._append(user, "assistant", texts.welcome()))

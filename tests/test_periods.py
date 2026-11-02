@@ -2,13 +2,16 @@
 across a meter reset, forecasts, tariffs, charges and the reclose window."""
 
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
+from common.flows import period_figures
 from common.periods import (
     apartment_meters,
     charge,
     consumption,
+    figures,
     forecast,
     is_closing_candidate,
     open_period,
@@ -149,3 +152,17 @@ def test_apartment_meters_excludes_retired_and_other_apartments():
         {"apartment_id": "a2", "retired_at": None},
     ]
     assert apartment_meters(meters, "a1") == [live]
+
+
+def test_period_figures_match_pure_figures(store):
+    tariffs = [{"effective_date": "2026-01-01", "electricity_per_kwh": 0.6, "water_per_m3": 9.5}]
+    for tariff in tariffs:
+        store.put_tariff("acc1", tariff)
+    engine = SimpleNamespace(store=store, clock=lambda: date(2026, 12, 5))
+    user = SimpleNamespace(account="acc1")
+    readings = [OPENING, MIDDLE]
+    assert figures("water", readings, PERIOD, tariffs, date(2026, 12, 5)) is not None
+    for items in (readings, [OPENING, MIDDLE, CLOSING], []):
+        assert period_figures(engine, user, "water", items, PERIOD) == figures(
+            "water", items, PERIOD, tariffs, date(2026, 12, 5)
+        )

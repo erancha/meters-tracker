@@ -3,7 +3,7 @@ reading of a known meter. A photo of no known meter family and no serial is read
 previous statement, and one that is a statement is handed to the tariffs flow, dated like a
 reading. An unknown serial is handed to the link flow. On a reading near the period's end, the
 close option or a typed vacate hands the apartment to the close flow after the reading is
-saved.
+saved. The value, date and serial take a typed edit on every step.
 
 Steps: unreadable -> reading -> one of duplicate, lower_reading, swap, propose_reclose,
 open_period, propose_close -> saved. A reading is never saved twice for one meter and date. A
@@ -13,26 +13,39 @@ leaves no pending row, and a retake replaces the unreadable card it answers, car
 photos as the ones the model failed on. A saved reading that has a previous one marks its period
 for a report; a re-close's report names the report it replaces, dated by the period's closing date
 before the move.
+
+A photo the app dropped (cancelled, not a meter, a retired serial, a statement's) is reopened by a
+typed correction: read again from its stored copy, as the kind the owner gives, its typed fields
+applied, then routed as a new photo is. A photo the owner reopens as a meter's is never taken for
+a statement or dropped as no meter, so a type the model cannot tell is asked for instead.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from common import dates, texts
 from common.dates import parse_iso
+from common.fields import PHOTO_KINDS, InvalidValue, UnknownField, field_for, parse
 from common.flows import (
+    CARD_TARGET,
     FAILURE_FIELDS,
+    POSITIONS,
     READING,
+    CardGone,
     Reply,
+    add_failed_photos,
+    apply_edits,
     ask,
+    choose_position,
     close_period,
-    correct_serial,
     current_period,
     decide,
     display_choice,
     drop,
-    edit_reading,
+    edit_read,
     failure_record,
-    intent_date,
+    form_context,
+    known_meter,
     link_meter,
     make_card,
     new_item,
@@ -47,10 +60,11 @@ from common.flows import (
     summary,
     tariffs,
 )
-from common.model import MeterReadingResult
+from common.model import MeterReadingResult, Operation, StatementResult
 from common.periods import (
     apartment_meters,
     is_closing_candidate,
+    joining_opens,
     period_end,
     period_readings,
     within_reclose_window,
@@ -58,6 +72,54 @@ from common.periods import (
 
 KIND = "meter_photo"
 SWAP_OPTIONS = ["reclose", "keep_open"]
+# The steps whose card rests on data["other"], a copy of a saved reading.
+OTHER_STEPS = ("duplicate", "lower_reading", "swap", "propose_reclose")
+STATEMENT, METER = PHOTO_KINDS
+# The fields a typed correction may give a dropped photo, in the order they apply: an unreadable
+# card's, since the photo has no card until it is read again.
+PHOTO_FIELDS = ("value", "date", "serial", "meter_type")
+
+
+@dataclass(frozen=True)
+class Reopen:
+    """What a typed correction asks of a dropped photo: the kind to read it as, and the (field,
+    typed value) pairs to apply, in PHOTO_FIELDS order; a statement has none."""
+
+    kind: str
+    edits: list[tuple[str, object]]
+
+
+def _photo_value(field, operation: Operation, today, current=texts.EMPTY_VALUE):
+    """current is the value on record as a question words it: the photo holds no field of a
+    reading before it is read again, only the kind it was read as."""
+    try:
+        return parse(field, operation.value, today)
+    except InvalidValue as error:
+        raise InvalidValue(field, error.raw, current, operation.target) from error
+
+
+def reopening(operations: list[Operation], today, kind: str) -> Reopen:
+    """The Reopen a message's operations on one dropped photo ask for; kind is how the photo was
+    read. A field given makes it a meter's photo. Raises UnknownField for an operation a photo
+    cannot take, two kinds or a statement given a meter's field among them, and InvalidValue for
+    a value that does not fit."""
+    kinds, edits = set(), []
+    for operation in operations:
+        if operation.action != "set":
+            raise UnknownField(f"{operation.action} on {operation.target}")
+        if operation.field == "kind":
+            field = field_for("photo", "kind")
+            current = texts.field_value(field.kind, kind)
+            kinds.add(_photo_value(field, operation, today, current))
+        elif operation.field in PHOTO_FIELDS:
+            field = field_for("card", operation.field)
+            edits.append((operation.field, _photo_value(field, operation, today)))
+        else:
+            raise UnknownField(f"photo.{operation.field}")
+    if len(kinds) > 1 or (STATEMENT in kinds and edits):
+        raise UnknownField(f"photo kinds {sorted(kinds)} with {len(edits)} fields")
+    [kind] = kinds or {METER}
+    return Reopen(kind, sorted(edits, key=lambda edit: PHOTO_FIELDS.index(edit[0])))
 
 
 def _date(data, key):
@@ -93,31 +155,122 @@ def card(item) -> dict:
     return make_card(item, item["step"], text(item["data"]), options(item["data"]))
 
 
+def form(item) -> dict:
+    """The fields of the photo. A known meter's type and place are saved records, so only an
+    unreadable card, whose meter is not settled yet, takes the type."""
+    data = item["data"]
+    fields = {
+        "value": data["value"],
+        "date": data["reading_date"],
+        "serial": None if _no_serial(data) else data["serial"],
+    }
+    if item["step"] == "unreadable":
+        known_type = data["meter_type"] != "unknown"
+        fields["meter_type"] = data["meter_type"] if known_type else None
+    return fields
+
+
+def default_field(item) -> str:
+    """The serial on an unreadable card that lacks one, else the reading."""
+    return "serial" if item["step"] == "unreadable" and _no_serial(item["data"]) else "value"
+
+
+def edit(engine, user, item, field, value):
+    edit_read(item["data"], field, value)
+
+
+def refresh(engine, user, item):
+    """Follows the meter the photo's serial names. A step whose reason no longer holds returns to
+    the reading card, whose confirm runs every check again."""
+    data = item["data"]
+    if data["serial"] is None:
+        return
+    meter = known_meter(engine, user, data)
+    if item["step"] == "unreadable":
+        return
+    if meter is None:
+        link_meter.take_over(engine, user, item)
+        return
+    if meter["retired_at"] is not None:
+        raise CardGone(_retired_reply(engine, user, meter))
+    _name_meter(engine, user, data, meter)
+    if not _step_holds(engine, user, item, meter):
+        item["step"] = "reading"
+
+
+def _step_holds(engine, user, item, meter) -> bool:
+    data, step = item["data"], item["step"]
+    if step in OTHER_STEPS:
+        return data["other"] in engine.store.readings(user.account, meter["serial"])
+    current = current_period(engine, user, meter["apartment_id"])
+    if step == "open_period":
+        return current is None
+    if step == "propose_close":
+        return current is not None and period_end(current).isoformat() == data["period_end"]
+    return True
+
+
+def _name_meter(engine, user, data, meter):
+    apartment, prop = place(engine, user, meter["apartment_id"])
+    data.update(meter_type=meter["type"], apartment=apartment["name"], property=prop["name"])
+
+
 def start(
-    engine, user, seq, image_key, image, media_type, note, sent_on, message_at
+    engine, user, seq, image_key, image, media_type, note, sent_on, message_at, reopen=None
 ) -> list[Reply]:
+    """reopen is None for a photo as it arrives, else the Reopen of a dropped photo read again.
+    The data's as_meter marks a photo the owner says is a meter's."""
     close_period.park_waiting(engine, user)
+    kind = None if reopen is None else reopen.kind
     data = {
         "image_key": image_key,
         "message_at": message_at,
         "read_started": dates.now().isoformat(),
         "failed_photos": [],
+        "as_meter": kind == METER,
     }
     item = new_item(seq, KIND, READING, None, data)
     engine.store.put_pending(user.email, item)
     try:
-        result = engine.model.read_meter(image, media_type)
-        statement = None
-        if result.meter_type == "unknown" and result.serial is None:
-            statement = engine.model.read_statement(image, media_type)
+        result, statement = _read(engine, image, media_type, kind)
         reading_date = _reading_date(engine, note, sent_on)
     except Exception:
         engine.store.delete_pending(user.email, seq)
         raise
-    if statement is not None and statement.is_statement:
+    if statement is not None:
         return tariffs.from_statement(engine, user, item, statement, reading_date)
     _set_read(item, result, reading_date)
-    _absorb_superseded(engine, user, item)
+    if reopen is None:
+        _absorb_superseded(engine, user, item)
+        return route(engine, user, item)
+    return _reopened(engine, user, item, reopen)
+
+
+def _read(
+    engine, image, media_type, kind
+) -> tuple[MeterReadingResult, None] | tuple[None, StatementResult]:
+    """The meter the model reads in the photo, or the statement: kind forces one, and with none a
+    photo of no known meter family and no serial that the model reads as a statement is one."""
+    if kind == STATEMENT:
+        return None, engine.model.read_statement(image, media_type)
+    result = engine.model.read_meter(image, media_type)
+    if kind is None and result.meter_type == "unknown" and result.serial is None:
+        statement = engine.model.read_statement(image, media_type)
+        if statement.is_statement:
+            return None, statement
+    return result, None
+
+
+def _reopened(engine, user, item, reopen: Reopen) -> list[Reply]:
+    """Routes a dropped photo reopened as a meter's with its typed fields. A model that read no
+    meter type failed on the photo, so it counts among the failed photos once. A statement card
+    read from the same photo leaves the queue."""
+    data = item["data"]
+    if data["meter_type"] == "unknown":
+        add_failed_photos(data, [data["image_key"]])
+    for field, value in reopen.edits:
+        edit_read(data, field, value)
+    tariffs.drop_read_from(engine, user, data["image_key"])
     return route(engine, user, item)
 
 
@@ -168,8 +321,8 @@ def _absorb_superseded(engine, user, item):
     if not absorbed:
         return
     for other in absorbed:
-        item["data"]["failed_photos"].extend(
-            [*other["data"]["failed_photos"], other["data"]["image_key"]]
+        add_failed_photos(
+            item["data"], [*other["data"]["failed_photos"], other["data"]["image_key"]]
         )
     engine.store.put_pending(user.email, item)
     for other in absorbed:
@@ -177,27 +330,39 @@ def _absorb_superseded(engine, user, item):
 
 
 def _reading_date(engine, note, sent_on) -> str:
-    """The note's date, else sent_on, since a retry may read a photo days after it was sent."""
-    if note is not None:
-        intent = engine.model.classify(note, "", parse_iso(sent_on))
-        if intent.intent == "set_date":
-            return intent_date(intent)
-    return sent_on
+    """The note's date, else sent_on, since a retry may read a photo days after it was sent. The
+    note is classified as an edit of a form holding only the date. A date that does not fit leaves
+    sent_on, which the card shows and a typed date corrects."""
+    if note is None:
+        return sent_on
+    sent_day = parse_iso(sent_on)
+    intent = engine.model.classify(note, form_context({"date": sent_on}), sent_day)
+    # A bare date has no field, and the note's form has only the date for it to fill.
+    named = [
+        o.value for o in intent.operations if o.target == CARD_TARGET and o.field in (None, "date")
+    ]
+    if intent.intent != "edit" or not named:
+        return sent_on
+    try:
+        return parse(field_for("card", "date"), named[0], sent_day)
+    except InvalidValue:
+        return sent_on
 
 
 def route(engine, user, item) -> list[Reply]:
     data = item["data"]
-    meter = None if data["serial"] is None else engine.store.meter(user.account, data["serial"])
-    if data["meter_type"] == "unknown" and meter is None:
+    meter = None if data["serial"] is None else known_meter(engine, user, data)
+    unknown_type = data["meter_type"] == "unknown" and meter is None
+    if unknown_type and not data["as_meter"]:
         return drop(engine, user, item, [Reply(texts.not_a_meter())])
     if _no_serial(data):
         data["unreadable"] = [texts.UNREADABLE_SERIAL]
         return ask(engine, user, item, "unreadable", card)
     if meter is not None and meter["retired_at"] is not None:
-        successor = _successor(engine, user, meter)
-        return drop(
-            engine, user, item, [Reply(texts.retired_meter(meter["serial"], successor["serial"]))]
-        )
+        return drop(engine, user, item, [Reply(_retired_reply(engine, user, meter))])
+    if unknown_type:
+        data["unreadable"] = [texts.UNREADABLE_TYPE]
+        return ask(engine, user, item, "unreadable", card)
     if data["value"] is None and not propose(
         data, None if meter is None else meter["display_choice"]
     ):
@@ -205,30 +370,37 @@ def route(engine, user, item) -> list[Reply]:
         return ask(engine, user, item, "unreadable", card)
     if meter is None:
         return link_meter.start(engine, user, item)
-    apartment, prop = place(engine, user, meter["apartment_id"])
-    data.update(meter_type=meter["type"], apartment=apartment["name"], property=prop["name"])
+    _name_meter(engine, user, data, meter)
     return ask(engine, user, item, "reading", card)
 
 
-def _successor(engine, user, meter) -> dict:
-    [live] = [
+# An edit on any step returns to route, so a changed value or date goes through the reading card
+# and its checks run again on confirm.
+after_edit = route
+
+
+def _retired_reply(engine, user, meter) -> str:
+    """Names the live meter of the type in the apartment; a correction can leave none."""
+    live = [
         m
         for m in apartment_meters(engine.store.meters(user.account), meter["apartment_id"])
         if m["type"] == meter["type"]
     ]
-    return live
+    if not live:
+        return texts.retired_meter_alone(meter["serial"])
+    [successor] = live
+    return texts.retired_meter(meter["serial"], successor["serial"])
 
 
 def answer(engine, user, item, action) -> list[Reply]:
     data, step = item["data"], item["step"]
-    key, intent = decide(engine, card(item), action)
+    key, intent = decide(engine, item, action)
     if key == "reject":
         return drop(engine, user, item, [Reply(texts.discarded())])
-    if step in ("reading", "unreadable") and correct_serial(data, key, intent):
-        return route(engine, user, item)
-    if step == "unreadable" and edit_reading(data, key, intent):
-        return route(engine, user, item)
-    if step == "reading" and edit_reading(data, key, intent):
+    if key == "edit":
+        return apply_edits(engine, user, item, intent.operations)
+    if step == "reading" and key in POSITIONS:
+        choose_position(data, key)
         return ask(engine, user, item, step, card)
     if step == "reading" and key == "confirm":
         return _check(engine, user, item)
@@ -313,11 +485,8 @@ def _closing_step(closing, closed, day, config) -> str | None:
 def _save(engine, user, item) -> list[Reply]:
     meter = _meter(engine, user, item["data"])
     current = current_period(engine, user, meter["apartment_id"])
-    opens = None
-    if current is not None:
-        readings = engine.store.readings(user.account, meter["serial"])
-        if all(r["opens_period"] != current["start"] for r in readings):
-            opens = current["start"]
+    readings = engine.store.readings(user.account, meter["serial"])
+    opens = joining_opens(current, readings)
     return _done(engine, user, item, save_reading(engine, user, item, opens=opens))
 
 
