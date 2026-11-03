@@ -58,6 +58,7 @@ from common.flows import (
     reading_options,
     reading_text,
     save_reading,
+    settle_back_dated,
     summary,
     tariffs,
 )
@@ -150,10 +151,20 @@ STEPS = {
 }
 
 
+# The answer each question card expects, which the browser shows as its primary button; a card
+# not listed offers confirm, or options with no usual answer.
+DEFAULTS = {
+    "lower_reading": "misread",
+    "swap": "reclose",
+    "propose_reclose": "reclose",
+    "propose_close": "close",
+}
+
+
 def card(item) -> dict:
     data, step = item["data"], item["step"]
     text, options = STEPS[step]
-    default = reading_default(data) if step == "reading" else None
+    default = reading_default(data) if step == "reading" else DEFAULTS.get(step)
     return make_card(item, step, text(data), options(data), default=default)
 
 
@@ -492,7 +503,9 @@ def _save(engine, user, item, then=None) -> list[Reply]:
     current = current_period(engine, user, meter["apartment_id"])
     readings = engine.store.readings(user.account, meter["serial"])
     opens = joining_opens(current, readings)
-    return _done(engine, user, item, save_reading(engine, user, item, opens=opens), then=then)
+    reading = save_reading(engine, user, item, opens=opens)
+    reading = settle_back_dated(engine, user, meter, reading)
+    return _done(engine, user, item, reading, then=then)
 
 
 def _replace(engine, user, item) -> list[Reply]:

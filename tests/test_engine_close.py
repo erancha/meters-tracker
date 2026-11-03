@@ -37,6 +37,7 @@ def test_reading_past_end_proposes_close(env, ddb):
     card = result.snapshot.card
     assert card["kind"] == "propose_close"
     assert options(card) == ["close", "keep_open"]
+    assert card["default"] == "close"
     assert "31/10/2026" in result.replies[-1].text
     assert len(kit.readings("E-392")) == 1
 
@@ -68,12 +69,8 @@ def test_close_flags_readings_and_reopens_next_day(env, ddb):
     assert "W-1250" in result.replies[-1].text
     assert result.snapshot.card is None
     assert len(kit.store.pending(USER.email)) == 1
-    kit.send_photo(water())
-    result = kit.choose("confirm")
-    card = result.snapshot.card
-    assert card["kind"] == "close"
-    assert "E-392" in card_text(card) and "W-1250" in card_text(card)
     assert _flags(kit, "E-392")[-1] == ("2026-11-02", None, None)
+    kit.send_photo(water())
     result = kit.choose("confirm")
     assert result.snapshot.card is None
     assert kit.store.pending(USER.email) == []
@@ -93,7 +90,7 @@ def test_close_chosen_on_a_reading_closes_at_once(env, ddb):
     result = kit.choose("close")
     assert result.snapshot.card is None
     assert kit.store.pending(USER.email) == []
-    closed = result.replies[-1].text
+    closed = result.replies[-2].text
     assert closed.startswith("התקופה של עורף נסגרה ב־02/11/2026.")
     assert "E-392" in closed and "392,691" in closed and "1,100" in closed
     assert [(p["start"], p["closed_on"]) for p in kit.periods(apartment)] == [
@@ -132,7 +129,7 @@ def test_typed_vacate_closes_without_reopen_and_next_photo_opens_period(env, ddb
     result = kit.say("הדירה ריקה")
     assert len(kit.readings("E-392")) == 2
     assert result.snapshot.card is None
-    assert "1,100" in result.replies[-1].text
+    assert "1,100" in result.replies[-2].text
     assert [(p["start"], p["closed_on"]) for p in kit.periods(apartment)] == [(START, "2026-11-02")]
     assert _flags(kit, "E-392")[-1] == ("2026-11-02", None, START)
     assert _flags(kit, "W-1250")[-1] == ("2026-10-15", None, START)
@@ -153,14 +150,34 @@ def test_typed_vacate_closes_without_reopen_and_next_photo_opens_period(env, ddb
 
 
 def test_vacate_on_the_close_card_closes_without_a_next_period(env, ddb):
-    kit = Kit([IntentResult(intent="close_period")], today=date(2026, 10, 20))
+    kit = Kit(
+        [IntentResult(intent="close_period"), IntentResult(intent="vacate")],
+        today=date(2026, 10, 20),
+    )
     apartment = _apartment(kit, [reading("2026-10-15", 1100)])
     kit.store.put_reading(ACCOUNT, "E-392", reading("2026-10-15", 392500))
     assert kit.say("סגור את התקופה").snapshot.card["kind"] == "close"
-    result = kit.choose("vacate")
+    result = kit.say("הדירה ריקה")
     assert result.snapshot.card is None
     assert [(p["start"], p["closed_on"]) for p in kit.periods(apartment)] == [(START, "2026-10-15")]
     assert _flags(kit, "W-1250")[-1] == ("2026-10-15", None, START)
+
+
+def test_a_close_chosen_on_a_reading_completes_once_the_missing_reading_is_saved(env, ddb):
+    kit = Kit(today=date(2026, 11, 2))
+    apartment = _apartment(kit)
+    kit.send_photo(electricity())
+    kit.choose("confirm")
+    result = kit.choose("close")
+    assert "W-1250" in result.replies[-1].text
+    kit.send_photo(water(1100))
+    result = kit.choose("confirm")
+    assert result.snapshot.card is None
+    assert result.replies[-2].text.startswith("התקופה של עורף נסגרה ב־02/11/2026.")
+    assert [(p["start"], p["closed_on"]) for p in kit.periods(apartment)] == [
+        (START, "2026-11-02"),
+        ("2026-11-03", None),
+    ]
 
 
 def test_close_period_intent_with_missing_meter_asks_for_photo(env, ddb):
@@ -173,7 +190,7 @@ def test_close_period_intent_with_missing_meter_asks_for_photo(env, ddb):
     kit.send_photo(water(1100))
     result = kit.choose("confirm")
     assert result.snapshot.card["kind"] == "close"
-    assert options(result.snapshot.card) == ["confirm", "vacate"]
+    assert options(result.snapshot.card) == ["confirm"]
     kit.choose("confirm")
     assert _flags(kit, "E-392")[-1] == ("2026-10-15", "2026-10-21", START)
     assert _flags(kit, "W-1250")[-1] == ("2026-10-20", "2026-10-21", START)
@@ -201,6 +218,7 @@ def test_reclose_within_window_replaces_closing_reading(env, ddb):
     result = kit.choose("confirm")
     assert result.snapshot.card["kind"] == "propose_reclose"
     assert options(result.snapshot.card) == ["reclose", "keep_open"]
+    assert result.snapshot.card["default"] == "reclose"
     assert "31/10/2026" in result.replies[-1].text
     kit.choose("reclose")
     assert _flags(kit, "E-392") == [

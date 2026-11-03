@@ -14,6 +14,8 @@ from moto.core import DEFAULT_ACCOUNT_ID
 from moto.ses.models import ses_backends
 from pypdf import PdfReader
 
+from common import texts
+from common.access import DELEGATE, User
 from common.model import IntentResult
 
 START = "2026-09-01"
@@ -160,15 +162,14 @@ def test_a_close_without_a_tariff_waits_for_the_tariff_then_reports_once(env, dd
     assert len(_sent()) == 1
 
 
-def test_a_close_confirmed_on_its_card_after_the_missing_photo_sends_one_report(env, ddb):
+def test_a_close_chosen_before_the_missing_photo_sends_one_report_once_it_is_saved(env, ddb):
     kit = Kit(today=date(2026, 10, 29))
     _apartment(kit)
     _close(kit)
     assert _sent() == []
     kit.send_photo(water(1230))
     kit.choose("confirm")
-    assert kit.card()["kind"] == "close"
-    kit.choose("confirm")
+    assert kit.card() is None
     [message] = _messages()
     assert "854.52" in _pdf_text(message)
 
@@ -212,3 +213,43 @@ def test_failed_send_is_logged_without_failing_the_turn(env, ddb, caplog):
     assert result.replies
     assert _sent() == []
     assert "sending a period report failed" in caplog.text
+
+
+def test_a_sent_report_adds_a_line_naming_the_address(env, ddb):
+    kit = Kit()
+    _closable(kit)
+    result = _close(kit)
+    assert result.replies[-1].text == texts.report_sent("עורף", date(2026, 9, 1), ACCOUNT)
+
+
+def test_a_held_report_adds_a_line_naming_what_the_bill_lacks(env, ddb):
+    kit = Kit(today=date(2026, 10, 29))
+    apartment = kit.apartment(start=START)
+    kit.tariff("2026-01-01", 0.6432, 15.62)
+    kit.meter(
+        apartment, "E-392", "electricity", [reading(START, 392000, opens=START)], display_choice=0
+    )
+    result = _close(kit)
+    gap = texts.report_gap("no_meter", "water")
+    assert texts.report_held("עורף", date(2026, 9, 1), [gap]) in [r.text for r in result.replies]
+
+
+def test_a_failed_report_reaches_both_chats_and_goes_out_on_the_next_days_load(env, ddb):
+    helper = User(email="helper@x.com", account=ACCOUNT, role=DELEGATE)
+    kit = Kit(user=helper)
+    _closable(kit)
+    ses = boto3.client("ses", region_name=REGION)
+    ses.delete_identity(Identity=SES_SENDER)
+    result = _close(kit)
+    failed = texts.report_failed("עורף", date(2026, 9, 1))
+    assert result.replies[-1].text == failed
+    owner = [m["text"] for m in kit.store.messages(ACCOUNT, "2026-10-29")]
+    assert failed in owner
+    ses.verify_email_identity(EmailAddress=SES_SENDER)
+    kit.today = date(2026, 10, 30)
+    messages, _ = kit.engine.load(helper)
+    assert texts.report_sent("עורף", date(2026, 9, 1), ACCOUNT) in [m["text"] for m in messages]
+    assert len(_sent()) == 1
+    assert "report_failed" not in kit.periods(kit.store.apartments(ACCOUNT)[0])[0]
+    kit.engine.load(helper, "2026-10-30")
+    assert len(_sent()) == 1

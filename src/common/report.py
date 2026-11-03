@@ -62,18 +62,19 @@ def _figures(engine, user, apartment_id, period) -> list[tuple[str, str, Figures
     return sorted(meters, key=lambda m: m[0])
 
 
-def missing(engine, user, apartment_id, period) -> list[str]:
-    """What the period lacks before its report is due, worded for the log; empty once it is due:
-    closed, with a live meter of each type, each closed by a closing reading and priced."""
+def missing(engine, user, apartment_id, period) -> list[tuple[str, str | None]]:
+    """What the period lacks before its report is due, as (gap, what it names) pairs that
+    texts.report_gap words; empty once it is due: closed, with a live meter of each type, each
+    closed by a closing reading and priced."""
     if period["closed_on"] is None:
-        return ["the period is open"]
+        return [("open", None)]
     meters = _figures(engine, user, apartment_id, period)
-    gaps = [f"no live {t} meter" for t in PRICES if t not in {m[0] for m in meters}]
+    gaps = [("no_meter", t) for t in PRICES if t not in {m[0] for m in meters}]
     for meter_type, serial, figures in meters:
         if figures is None or not figures.consumption.final:
-            gaps.append(f"no closing reading of {serial}")
+            gaps.append(("no_closing", serial))
         elif figures.amount is None:
-            gaps.append(f"no {meter_type} price on the closing date")
+            gaps.append(("no_price", meter_type))
     return gaps
 
 

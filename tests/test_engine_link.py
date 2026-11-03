@@ -163,6 +163,67 @@ def test_second_meter_of_apartment_skips_period_question(env, ddb):
     assert [p["start"] for p in kit.periods(apartment)] == ["2026-10-01"]
 
 
+def test_a_reading_after_the_joined_period_ends_asks_for_its_date(env, ddb):
+    kit = Kit(
+        [
+            edit("property", "הגפן 7"),
+            edit("apartment", "עורף"),
+            IntentResult(intent="confirm"),
+            edit("date", "2026-09-01"),
+        ],
+        today=date(2026, 11, 3),
+    )
+    apartment = kit.apartment(start="2026-09-01")
+    kit.meter(
+        apartment, "E-392", "electricity", [reading("2026-09-01", 392000, opens="2026-09-01")], 0
+    )
+    kit.send_photo(water(843))
+    kit.say("הגפן 7")
+    card = kit.say("עורף").snapshot.card
+    assert card["kind"] == "link"
+    assert options(card) == []
+    assert card["default"] is None
+    assert texts.reading_after_period(date(2026, 10, 31)) in card["lines"]
+    assert kit.say("אישור").snapshot.card["kind"] == "link"
+    assert kit.readings("W-1250") == []
+    card = kit.say("1/9").snapshot.card
+    assert options(card) == ["confirm"]
+    kit.choose("confirm")
+    [saved] = kit.readings("W-1250")
+    assert (saved["date"], saved["opens_period"]) == ("2026-09-01", "2026-09-01")
+
+
+def test_a_late_meter_joins_the_closed_period_its_readings_fall_in(env, ddb):
+    kit = Kit(
+        [edit("property", "הגפן 7"), edit("apartment", "עורף"), edit("date", "2026-09-01")],
+        today=date(2026, 11, 3),
+    )
+    apartment = kit.apartment(start="2026-09-01", closed_on="2026-11-03")
+    kit.period(apartment, "2026-11-04")
+    kit.meter(
+        apartment,
+        "E-392",
+        "electricity",
+        [
+            reading("2026-09-01", 392000, opens="2026-09-01"),
+            reading("2026-11-03", 393000, opens="2026-11-04", closes="2026-09-01"),
+        ],
+        0,
+    )
+    kit.send_photo(water(843))
+    kit.say("הגפן 7")
+    kit.say("עורף")
+    card = kit.say("1/9").snapshot.card
+    assert texts.reading_in_closed_period(date(2026, 9, 1)) in card["lines"]
+    kit.choose("confirm")
+    kit.send_photo(water(866))
+    kit.choose("confirm")
+    assert [(r["date"], r["opens_period"], r["closes_period"]) for r in kit.readings("W-1250")] == [
+        ("2026-09-01", "2026-09-01", None),
+        ("2026-11-03", "2026-11-04", "2026-09-01"),
+    ]
+
+
 def test_same_type_meter_proposes_replacement_and_retires_old(env, ddb):
     kit = Kit([edit("property", "הגפן 7"), edit("apartment", "עורף")])
     apartment = kit.apartment(start="2026-10-01")
@@ -378,8 +439,9 @@ def test_a_start_before_the_photo_dates_the_opening_reading_at_the_start(env, dd
     kit.send_photo(electricity())
     kit.say("הגפן 7")
     kit.say("עורף")
-    result = kit.say("1/9")
-    assert "תאריך: 01/09/2026" in card_text(result.snapshot.card)
+    lines = kit.say("1/9").snapshot.card["lines"]
+    assert "קריאת פתיחה לתקופה מ־01/09/2026 לחודשיים" in lines
+    assert "תאריך: 01/09/2026" not in lines
     kit.choose("top")
     [saved] = kit.readings("E-392")
     assert (saved["date"], saved["opens_period"]) == ("2026-09-01", "2026-09-01")
@@ -393,3 +455,39 @@ def test_property_correction_on_apartment_question_keeps_asking_apartment(env, d
     card = result.snapshot.card
     assert card["kind"] == "apartment"
     assert "לאונר 18" in card_text(card)
+
+
+def test_the_place_questions_offer_existing_names_as_buttons(env, ddb):
+    kit = Kit()
+    kit.apartment(name="קדמית", property_name="לאונר 18")
+    card = kit.send_photo(water(serial="W-9")).snapshot.card
+    assert [o["label"] for o in card["options"]] == ["לאונר 18"]
+    card = kit.choose("name_0").snapshot.card
+    assert card["kind"] == "apartment"
+    assert [o["label"] for o in card["options"]] == ["קדמית"]
+    assert kit.choose("name_0").snapshot.card["kind"] == "link"
+
+
+def test_a_typed_name_close_to_an_existing_one_asks_which_was_meant(env, ddb):
+    kit = Kit([edit("property", "לאונר"), edit("apartment", "קדמת")])
+    kit.apartment(name="קדמית", property_name="לאונר 18")
+    kit.send_photo(water(serial="W-9"))
+    card = kit.say("לאונר").snapshot.card
+    assert card["kind"] == "property_near"
+    assert [(o["id"], o["label"]) for o in card["options"]] == [
+        ("near_match", "לאונר 18"),
+        ("near_new", "נכס חדש: לאונר"),
+    ]
+    assert card["default"] == "near_match"
+    assert kit.choose("near_match").snapshot.card["kind"] == "apartment"
+    assert kit.say("קדמת").snapshot.card["kind"] == "apartment_near"
+    card = kit.choose("near_new").snapshot.card
+    assert card["kind"] == "period"
+    assert "קדמת בלאונר 18" in card["title"]
+
+
+def test_a_typed_name_close_to_nothing_is_new_at_once(env, ddb):
+    kit = Kit([edit("property", "הגפן 7")])
+    kit.apartment(name="קדמית", property_name="לאונר 18")
+    kit.send_photo(water(serial="W-9"))
+    assert kit.say("הגפן 7").snapshot.card["kind"] == "apartment"

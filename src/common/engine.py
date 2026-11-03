@@ -35,10 +35,13 @@ and the queue clears. "Today" is the injected clock throughout, including the da
 pending seq and message timestamp, so the once-a-day greeting and the reading dates agree on what
 day it is.
 
-Flows mark a period for a report during a turn: a close, a re-close, and a tariff that completes a
-closed period's prices. Once the turn's replies are stored the engine sends each marked report
-that report.missing finds due, and logs what any other lacks. A report that fails is logged and
-never fails the turn: the reading is already saved.
+Flows mark a period for a report during a turn: a close, a re-close, a tariff that completes a
+closed period's prices, and a late meter's reading that closes a closed period for it. After the
+turn's replies the engine sends each marked report that report.missing finds due, and adds a line
+to the turn per report: sent, held with what the bill lacks, or failed. A report that fails is
+logged and never fails the turn, since the reading is already saved; it is marked on its period,
+shown in the owner's chat too when a delegate triggered it, and sent again on the first chat load
+of a later day.
 """
 
 import secrets
@@ -46,6 +49,8 @@ from dataclasses import dataclass, replace
 from datetime import timedelta
 
 from common import account, dates, report, texts
+from common.access import OWNER, User
+from common.dates import parse_iso
 from common.fields import InvalidValue, UnknownField
 from common.flows import (
     ASK_BACK_INTENTS,
@@ -77,6 +82,7 @@ from common.flows import (
     meter_photo,
     on_card,
     period_change,
+    place,
     question,
     record_operation,
     tariffs,
@@ -224,9 +230,9 @@ class Engine:
 
     def _result(self, user, replies: list[Reply], image_key=None) -> TurnResult:
         """The turn's replies and the snapshot after it, the card it shows rebuilt first."""
-        self._say(user, replies)
-        replies = [*replies, *self._renew_shown(user)]
-        self._send_reports(user)
+        reported = self._send_reports(user)
+        self._say(user, [*replies, *reported])
+        replies = [*replies, *reported, *self._renew_shown(user)]
         return TurnResult(replies, self.snapshot(user), image_key)
 
     def _say(self, user, replies: list[Reply]):
@@ -255,30 +261,63 @@ class Engine:
             self._say(user, renewed)
             replies.extend(renewed)
 
-    def _send_reports(self, user):
-        """Sends the report of each marked period that is due, and logs what any other lacks."""
+    def _send_reports(self, user) -> list[Reply]:
+        """Sends the report of each marked period that is due; a line per report for the turn."""
         due, self._reports_due = self._reports_due, {}
-        for (apartment_id, period_start), ignored in due.items():
-            try:
-                periods = self.store.periods(user.account, apartment_id)
-                [period] = [p for p in periods if p["start"] == period_start]
-                gaps = report.missing(self, user, apartment_id, period)
-                if gaps:
-                    logger.info(
-                        "period report held apartment=%s period=%s missing=%s",
-                        apartment_id,
-                        period_start,
-                        "; ".join(gaps),
-                    )
-                    continue
-                built = report.build(self, user, apartment_id, period, ignored)
-                report.send(built, self.mailer, user.account)
-            except Exception:
-                logger.exception(
-                    "sending a period report failed apartment=%s period=%s",
+        return [
+            self._send_report(user, apartment_id, period_start, ignored)
+            for (apartment_id, period_start), ignored in due.items()
+        ]
+
+    def _send_report(self, user, apartment_id, period_start, ignored) -> Reply:
+        """Sends one period's report to the account's owner, or says what it still lacks. Any
+        failure is the report's alone: the turn goes on, and the period keeps the mark that a
+        later chat load sends it again by, until a send succeeds."""
+        apartment, _ = place(self, user, apartment_id)
+        start = parse_iso(period_start)
+        try:
+            periods = self.store.periods(user.account, apartment_id)
+            [period] = [p for p in periods if p["start"] == period_start]
+            gaps = report.missing(self, user, apartment_id, period)
+            if gaps:
+                logger.info(
+                    "period report held apartment=%s period=%s missing=%s",
                     apartment_id,
                     period_start,
+                    gaps,
                 )
+                worded = [texts.report_gap(gap, named) for gap, named in gaps]
+                return Reply(texts.report_held(apartment["name"], start, worded))
+            built = report.build(self, user, apartment_id, period, ignored)
+            report.send(built, self.mailer, user.account)
+        except Exception:
+            logger.exception(
+                "sending a period report failed apartment=%s period=%s",
+                apartment_id,
+                period_start,
+            )
+            self.store.update_period(
+                user.account, apartment_id, period_start, report_failed=True, report_ignored=ignored
+            )
+            failed = texts.report_failed(apartment["name"], start)
+            if user.role != OWNER:
+                owner = User(email=user.account, account=user.account, role=OWNER)
+                self._append(owner, "assistant", failed)
+            return Reply(failed)
+        if "report_failed" in period:
+            self.store.update_period(
+                user.account, apartment_id, period_start, remove=("report_failed", "report_ignored")
+            )
+        return Reply(texts.report_sent(apartment["name"], start, user.account))
+
+    def _resend_failed_reports(self, user) -> list[Reply]:
+        """Sends again every report a failure marked on its period."""
+        return [
+            self._send_report(user, apartment["id"], p["start"], p["report_ignored"])
+            for apartment in self.store.apartments(user.account)
+            for p in self.store.periods(user.account, apartment["id"])
+            if "report_failed" in p
+        ]
 
     def _handle(self, user, message, handler) -> list[Reply]:
         """Runs a stored message's handler; any failure marks the message and raises
@@ -594,6 +633,8 @@ class Engine:
             due = close_period.due_for_close(self, user)
             if due:
                 messages.append(self._append(user, "assistant", texts.greeting(due)))
+            for reply in self._resend_failed_reports(user):
+                messages.append(self._append(user, "assistant", reply.text))
         return messages, self.snapshot(user)
 
     def _append(self, user, role, text, card=None, image_key=None, choice=None) -> dict:

@@ -51,12 +51,15 @@ from common.model import Operation
 from common.periods import (
     PRICES,
     Figures,
+    covers,
     figures,
     flags_in_order,
     joining_opens,
+    misdated,
     new_period,
     open_period,
     period_readings,
+    rebuild_flags,
 )
 from common.store import MAX_TRANSACTION_ITEMS, reading_key
 
@@ -106,6 +109,19 @@ class FigureChange:
             parse_iso(self.start),
             self.before_type,
             self.before,
+            self.after,
+        )
+
+    @property
+    def priced(self) -> str:
+        """The period's figures after the change alone, for a tariff, which changes only the
+        charge on units the line already names."""
+        return texts.priced_line(
+            self.property,
+            self.apartment,
+            self.meter_type,
+            self.serial,
+            parse_iso(self.start),
             self.after,
         )
 
@@ -261,10 +277,6 @@ def _set_type(state: Account, target: Target, value: str):
         meter["display_choice"] = None
 
 
-def _covers(period, day: str) -> bool:
-    return period["start"] <= day and (period["closed_on"] is None or day <= period["closed_on"])
-
-
 def _copy_periods(state: Account, source, apartment_id):
     """Gives the apartment copies of the source's periods; none when one would overlap the
     apartment's own first period, which check refuses, since a skipped period would lose the
@@ -274,30 +286,6 @@ def _copy_periods(state: Account, source, apartment_id):
     if own and any(p["closed_on"] is None or p["closed_on"] >= own[0]["start"] for p in periods):
         return
     state.periods[apartment_id] = [*[dict(p) for p in periods], *own]
-
-
-def _rebuild_flags(readings, periods):
-    """Flags the readings from the periods' dates, as a close would have: a period's first reading
-    opens it and a closed period's last reading closes it. A closing reading also opens a period
-    that starts straight after, since no consumption falls between the two. A closed period that
-    holds fewer than two readings gets no flags, since it would count to the meter's last reading
-    as if open; its reading stands for the meter when the next period starts."""
-    for r in readings:
-        r.update(opens_period=None, closes_period=None)
-    standing, ended = None, None
-    for period in periods:
-        counted = [r for r in readings if _covers(period, r["date"])]
-        if standing is not None and period["start"] <= next_day(ended):
-            counted = [standing, *[r for r in counted if r is not standing]]
-        closed = period["closed_on"] is not None
-        standing, ended = None, period["closed_on"]
-        if closed and len(counted) < 2:
-            standing = next(iter(counted), None)
-        elif counted:
-            counted[0]["opens_period"] = period["start"]
-            if closed:
-                standing = counted[-1]
-                standing["closes_period"] = period["start"]
 
 
 def _closing_rows(state: Account, apartment_id, start) -> list:
@@ -330,9 +318,9 @@ def _set_apartment(state: Account, target: Target, value: str):
     readings = state.readings[meter["serial"]]
     closed_starts = {r["closes_period"] for r in readings}
     left = [p for p in state.periods[source] if p["start"] in closed_starts]
-    if readings and not any(_covers(p, readings[0]["date"]) for p in state.periods[value]):
+    if readings and not any(covers(p, readings[0]["date"]) for p in state.periods[value]):
         _copy_periods(state, source, value)
-    _rebuild_flags(readings, state.periods[value])
+    rebuild_flags(readings, state.periods[value])
     for period in left:
         _follow_closing_readings(state, source, period)
     for period in list(state.periods[value]):
@@ -348,13 +336,25 @@ def _set_retired_at(state: Account, target: Target, value: str | None):
 
 
 def _set_reading_date(state: Account, target: Target, value: str):
+    """A closing reading's period follows it. Any other reading whose new date leaves a counted
+    reading before its period's start re-flags the meter from the period dates, and a period
+    whose closing reading that moves follows it."""
     serial = target.parts[0]
     reading = _record(state, target)
     reading["date"] = value
-    _sort_readings(state.readings[serial])
+    readings = state.readings[serial]
+    _sort_readings(readings)
+    apartment_id = account.records(state, "meter")[serial]["apartment_id"]
+    periods = state.periods[apartment_id]
     if reading["closes_period"] is not None:
-        apartment_id = account.records(state, "meter")[serial]["apartment_id"]
         account.realign(state, apartment_id, reading["closes_period"], reading["opens_period"])
+    elif any(misdated(readings, p) for p in periods):
+        closed_starts = {r["closes_period"] for r in readings}
+        rebuild_flags(readings, periods)
+        closed_starts |= {r["closes_period"] for r in readings}
+        for period in list(periods):
+            if period["start"] in closed_starts:
+                _follow_closing_readings(state, apartment_id, period)
 
 
 def _refuse_open_elsewhere(state: Account, apartment_id, kept: list):
@@ -464,7 +464,7 @@ def _rebuild_restored(state: Account, meter):
     """A retired meter took no part in the closes after it left, so back live it takes its flags
     from the periods. Left as they were, its opening in a closed period would have no closing, and
     its next photos would count there too."""
-    _rebuild_flags(state.readings[meter["serial"]], state.periods[meter["apartment_id"]])
+    rebuild_flags(state.readings[meter["serial"]], state.periods[meter["apartment_id"]])
 
 
 def _drop_if_emptied(state: Account, meter, opened: set):
@@ -498,7 +498,7 @@ def _takes_opening(periods: list, joined: list, reading) -> bool:
     if first is None or first["opens_period"] is None or reading["date"] >= first["date"]:
         return False
     period = next(p for p in periods if p["start"] == first["opens_period"])
-    return first["closes_period"] in (None, period["start"]) and _covers(period, reading["date"])
+    return first["closes_period"] in (None, period["start"]) and covers(period, reading["date"])
 
 
 def _set_reading_serial(state: Account, target: Target, value: str):
@@ -518,7 +518,7 @@ def _set_reading_serial(state: Account, target: Target, value: str):
     if kept["type"] == meter["type"] and _takes_opening(periods, joined, reading):
         reading["opens_period"] = joined[0]["opens_period"]
         joined[0]["opens_period"] = None
-    elif current is not None and _covers(current, reading["date"]):
+    elif current is not None and covers(current, reading["date"]):
         reading["opens_period"] = joining_opens(current, joined)
     else:
         reading["opens_period"] = None
@@ -1095,6 +1095,19 @@ def _overlaps(state: Account) -> set[tuple]:
     return found
 
 
+def _misdated_rows(state: Account) -> dict:
+    """Each reading counted in a period it is dated before, keyed by the row rather than the
+    meter, so a renamed meter keeps its key.
+    Key: (period start, the reading's seq)
+    Value: (the meter's serial, the reading's date)"""
+    return {
+        (p["start"], r["seq"]): (m["serial"], r["date"])
+        for m in state.meters
+        for p in state.periods[m["apartment_id"]]
+        for r in misdated(state.readings[m["serial"]], p)
+    }
+
+
 def _misordered_flags(state: Account) -> set[tuple]:
     """(serial, period start) pairs whose flags period_readings could not read."""
     return {
@@ -1129,10 +1142,10 @@ def _unclosed_openings(state: Account) -> dict:
 
 
 def _new_faults(find, before: Account, after: Account) -> list[tuple]:
-    """The ((start, seq), serial) pairs find holds of after and not of before, matched by the
-    opening row, so renaming a meter does not make an old fault new."""
+    """The ((start, seq), value) pairs find holds of after and not of before, matched by the
+    reading row, so renaming a meter does not make an old fault new."""
     earlier = find(before)
-    return [(key, serial) for key, serial in sorted(find(after).items()) if key not in earlier]
+    return [(key, value) for key, value in sorted(find(after).items()) if key not in earlier]
 
 
 def _opening_refusals(before: Account, after: Account) -> list[str]:
@@ -1316,7 +1329,7 @@ def _uncovered_refusals(before: Account, after: Account, starts: dict) -> list[s
         for source, days in _arrivals(before, after, meter):
             if not periods or _took_copies(before, after, source, apartment_id, starts):
                 continue
-            uncovered = [d for d in days if not any(_covers(p, d) for p in periods)]
+            uncovered = [d for d in days if not any(covers(p, d) for p in periods)]
             if uncovered:
                 name = apartments[apartment_id]["name"]
                 refusals.append(texts.reassign_uncovered(name, [parse_iso(d) for d in uncovered]))
@@ -1434,6 +1447,10 @@ def check(before: Account, after: Account, starts: dict) -> tuple[list[str], lis
         *[
             texts.closing_before_opening(serial, parse_iso(start))
             for serial, start in _new(_misordered_flags, before, after)
+        ],
+        *[
+            texts.reading_outside_period(serial, parse_iso(day), parse_iso(start))
+            for (start, _), (serial, day) in _new_faults(_misdated_rows, before, after)
         ],
         *_opening_refusals(before, after),
         *[texts.delegate_exists(a) for a in _new(_repeated_delegates, before, after)],

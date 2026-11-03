@@ -11,6 +11,8 @@ Core pieces:
 - new_period: a period's row as it opens
 - period_readings / flags_in_order / joining_opens: a meter's readings in a period, whether its
   flags there make sense, and what a joining reading opens
+- covers / rebuild_flags / misdated: whether a period holds a day, a meter's flags derived from
+  the period dates as a close sets them, and the counted readings dated before their period
 - consumption / charge: units in a period and their price
 - figures: one meter's Consumption, price and amount for a period, from the tariffs and today's
   date it is handed
@@ -20,7 +22,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from itertools import pairwise
 
-from common.dates import add_months, parse_iso
+from common.dates import add_months, next_day, parse_iso
 
 PRICES = {"electricity": "electricity_per_kwh", "water": "water_per_m3"}
 
@@ -74,6 +76,46 @@ def period_readings(readings: list, period: dict) -> list:
     if last < first:
         raise ValueError(f"period {start} closes before it opens")
     return readings[first : last + 1]
+
+
+def covers(period, day: str) -> bool:
+    return period["start"] <= day and (period["closed_on"] is None or day <= period["closed_on"])
+
+
+def rebuild_flags(readings, periods):
+    """Flags the readings from the periods' dates, as a close would have: a period's first reading
+    opens it and a closed period's last reading closes it. A closing reading also opens a period
+    that starts straight after, since no consumption falls between the two. A closed period that
+    holds fewer than two readings gets no flags, since it would count to the meter's last reading
+    as if open; its reading stands for the meter when the next period starts."""
+    for r in readings:
+        r.update(opens_period=None, closes_period=None)
+    standing, ended = None, None
+    for period in periods:
+        counted = [r for r in readings if covers(period, r["date"])]
+        if standing is not None and period["start"] <= next_day(ended):
+            counted = [standing, *[r for r in counted if r is not standing]]
+        closed = period["closed_on"] is not None
+        standing, ended = None, period["closed_on"]
+        if closed and len(counted) < 2:
+            standing = next(iter(counted), None)
+        elif counted:
+            counted[0]["opens_period"] = period["start"]
+            if closed:
+                standing = counted[-1]
+                standing["closes_period"] = period["start"]
+
+
+def misdated(readings: list, period: dict) -> list:
+    """The readings counted in the period after its opening reading that are dated before its
+    start. The opening reading itself may precede the start, since a closing reading opens the
+    period straight after it and a reading taken before a period begins stands for the meter on
+    its start; a later reading dated that early belongs to the period before. Flags out of order
+    hold no counted readings to judge; flags_in_order names that fault."""
+    if not flags_in_order(readings, period):
+        return []
+    later = period_readings(readings, period)[1:]
+    return [r for r in later if r["date"] < period["start"]]
 
 
 def joining_opens(current: dict | None, readings: list) -> str | None:

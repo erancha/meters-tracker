@@ -610,6 +610,8 @@ EXPECTED: dict[tuple[str, str, str], str] = {
     ("period.closed_on", "shared_row", "*"): "closed_on_follows_readings",
     ("period.closed_on", "shared_row", "missing"): "nothing_to_correct",
     ("period.closed_on", "vacant", "missing"): "card",
+    # E's earlier reading closes May-June, which leaves its 30/06 reading counted in July-August.
+    ("period.closing", "closed_next", "*"): "reading_outside_period",
     ("period.closing", "delegate", "*"): "no_closing_reading",
     ("period.closing", "merge_target", "*"): "no_closing_reading",
     ("period.closing", "no_tariff", "*"): "no_closing_reading",
@@ -653,7 +655,7 @@ EXPECTED: dict[tuple[str, str, str], str] = {
     ("reading.serial", "delegate", "*"): "same_day_clash",
     ("reading.serial", "no_tariff", "*"): "same_day_clash",
     ("reading.serial", "open", "*"): "same_day_clash",
-    ("reading.serial", "shared_row", "*"): "same_day_clash",
+    ("reading.serial", "shared_row", "*"): "reading_outside_period+same_day_clash",
     ("reading.serial", "vacant", "*"): "same_day_clash",
     ("tariff.effective_date", "no_tariff", "*"): "unknown_record",
     ("tariff.effective_date", "no_tariff", "invalid"): "unknown_record",
@@ -1006,9 +1008,13 @@ PHOTO_STEPS = (
 
 def _photograph(run: Run, meter, value, last: bool) -> bool:
     """Sends the meter's photo and answers its own cards until it is saved; True when the close
-    was taken. A close parked for want of a reading resumes once a photo is saved, as a close
-    card, which is confirmed. A card of any other kind on the photo's way fails the case."""
+    was taken. A close parked for want of a reading resumes once a photo is saved: one chosen on
+    a reading's card closes then with no card, any other as a close card, which is confirmed. A
+    card of any other kind on the photo's way fails the case."""
     waiting = run.pending_seqs()
+    parked = {
+        i["seq"] for i in run.kit.store.pending(run.user.email) if i["kind"] == "close_period"
+    }
     run.kit.send_photo(_photo(meter, value))
     (seq,) = run.pending_seqs() - waiting
     closed = False
@@ -1022,6 +1028,8 @@ def _photograph(run: Run, meter, value, last: bool) -> bool:
     card = run.kit.card()
     if card is not None and card["kind"] == "close":
         run.choose_on(card, "confirm")
+        closed = True
+    elif parked - run.pending_seqs():
         closed = True
     return closed
 
@@ -1317,7 +1325,6 @@ EXPECTED_CHANGED: dict[tuple[str, str], str] = {
     ("meter.serial", "vacant"): "gone",
     ("period.closed_on", "closed_next"): "saved",
     ("period.closed_on", "vacant"): "saved",
-    ("period.closing", "closed_next"): "saved",
     ("period.start", "closed_next"): "gone",
     ("period.start", "delegate"): "gone",
     ("period.start", "merge_target"): "gone",
@@ -1649,9 +1656,10 @@ def expected_card_outcome(case: Case) -> str:
 
 # A record operation whose outcome a waiting card's own setup changes. Key: (operation name,
 # card); value: the outcome. A request for tariffs waits only after a close, so the state's open
-# period is closed by then and its closing reading and vacancy can be corrected.
+# period is closed by then and its vacancy can be corrected; an earlier closing reading there
+# leaves the later one counted in the next period, as in closed_next.
 EXPECTED_WITH_CARD = {
-    ("period.closing", "tariffs_ask"): "card",
+    ("period.closing", "tariffs_ask"): "reading_outside_period",
     ("period.vacant", "tariffs_ask"): "card",
     # Another person's card makes that person a delegate in every state.
     ("delegate.address", "other_person"): "card",

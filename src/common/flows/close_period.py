@@ -3,14 +3,15 @@ opening reading, and by default opens the next period the day after the latest o
 those same readings as its opening readings. A vacated apartment is closed without a next period.
 A close whose closing readings have no tariff in force asks for tariffs after it.
 
-A close the owner chose on a reading's card closes at once; any other close shows its card listing
-each meter's closing reading and writes only on that card's answer. The close's reply lists the
-closing readings. While a meter has no reading to close with, the item is parked at the waiting
-step: it shows no card, and the next saved reading of that apartment resumes it. Asking to close
-that apartment again shows the waiting close as a card whose only option cancels it; the next photo
-parks it again, so the photo's own card is not queued behind it. A close marks its period for a
-report, so the final figures reach the owner however the close was reached. Also here: the list of
-apartments the daily greeting names.
+A close the owner chose on a reading's card closes with no card, at once or when its last missing
+reading is saved; any other close shows its card listing each meter's closing reading and writes
+only on that card's answer. The close's reply lists the closing readings. While a meter has no
+reading to close with, the item is parked at the waiting step: it shows no card, and the next
+saved reading of that apartment resumes it. Asking to close that apartment again shows the
+waiting close as a card whose only option cancels it; the next photo parks it again, so the
+photo's own card is not queued behind it. A close marks its period for a report, so the final
+figures reach the owner however the close was reached. Also here: the list of apartments the
+daily greeting names.
 """
 
 from datetime import date
@@ -50,7 +51,9 @@ def card(item) -> dict:
     if item["step"] == WAITING:
         text = texts.close_waiting(data["apartment"], data["missing"])
         return make_card(item, "close_waiting", text, [])
-    options = ["vacate"] if data["vacate"] else ["confirm", "vacate"]
+    # A vacate is the exception, so the card offers it only when it was asked for; a typed one
+    # still answers the confirm card.
+    options = ["vacate"] if data["vacate"] else ["confirm"]
     text = texts.close_card(
         data["apartment"], parse_iso(data["period_start"]), dated_rows(data["closing"])
     )
@@ -124,7 +127,7 @@ def start(engine, user, apartment_id, vacate, at_once=False) -> list[Reply]:
     asked_again = item is not None
     if item is None:
         item = new_item(engine.stamp(), KIND, AWAITING, CLOSE, {"apartment_id": apartment_id})
-    item["data"]["vacate"] = vacate
+    item["data"].update(vacate=vacate, at_once=at_once)
     return _advance(engine, user, item, decided=False, offer_cancel=asked_again, at_once=at_once)
 
 
@@ -137,10 +140,11 @@ def park_waiting(engine, user):
 
 
 def resume(engine, user, item) -> list[Reply]:
-    """Retries a parked close after a reading was saved; None means nothing was parked."""
+    """Retries a parked close after a reading was saved; None means nothing was parked. A close
+    the owner chose on a reading's card closes once its last reading is in, with no card."""
     if item is None:
         return []
-    return _advance(engine, user, item, decided=False)
+    return _advance(engine, user, item, decided=False, at_once=item["data"]["at_once"])
 
 
 def answer(engine, user, item, action) -> list[Reply]:

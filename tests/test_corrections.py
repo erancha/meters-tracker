@@ -2528,3 +2528,35 @@ def test_a_delegate_renaming_a_meter_removes_nothing():
 
 def test_the_owner_deletes_a_meter_with_its_readings():
     assert _plan(_delete("meter|W1")).refusals != [texts.owner_only()]
+
+
+def test_a_reading_counted_in_a_period_it_predates_is_refused():
+    before = _account()
+    before.meters.append(_meter("W2", "a2"))
+    before.periods["a2"] = [_period("2026-07-01")]
+    before.readings["W2"] = [_reading("2026-06-01", "w1", 100, opens="2026-07-01")]
+    after = _account()
+    after.meters.append(_meter("W2", "a2"))
+    after.periods["a2"] = [_period("2026-07-01")]
+    after.readings["W2"] = [
+        _reading("2026-06-01", "w1", 100, opens="2026-07-01"),
+        _reading("2026-06-15", "w2", 110),
+    ]
+    refusals, _ = check(before, after, _starts_of_copy(before, after))
+    assert refusals == [texts.reading_outside_period("W2", date(2026, 6, 15), date(2026, 7, 1))]
+
+
+def test_a_date_moved_into_a_closed_period_moves_the_meters_flags_there():
+    before = _account()
+    before.meters.append(_meter("W2", "a2"))
+    before.periods["a2"] = [_period("2026-05-01", "2026-06-30"), _period("2026-07-01")]
+    before.readings["W2"] = [
+        _reading("2026-05-01", "w1", 100, opens="2026-07-01"),
+        _reading("2026-07-10", "w2", 130),
+    ]
+    planned = _plan(_set("reading|W2|2026-07-10#w2", "date", "2026-06-30"), before=before)
+    assert planned.refusals == []
+    assert _flags(planned.after, "W2") == [
+        ("2026-05-01", "2026-05-01", None),
+        ("2026-06-30", "2026-07-01", "2026-05-01"),
+    ]

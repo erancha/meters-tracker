@@ -44,6 +44,19 @@ final step fails shows a banner asking to reload and sign in again.
   beside it.
 - A reading card for a two-number display has only the two numbers as buttons: the marked one,
   the upper at first, is primary, and pressing either saves the reading with that number.
+- Each question card highlights the answer it expects: closing the period on a reading near the
+  period's end, closing again on a reading just after a close, and "misread" on a reading lower
+  than the one before. A card whose options are even, such as the period start, highlights none.
+- The new-meter questions offer each existing property and apartment as a button. A typed name
+  that is a prefix of an existing one, or two letters or fewer from it, gets a card asking which
+  was meant, with the existing name highlighted and a button for a new one by the typed name.
+- The new-meter summary shows the reading's date once when it is the period's start. A reading
+  dated after the end of the period it would open gets no confirm button: the card asks for its
+  date. One dated inside a closed period says that a later reading inside it adds the meter to
+  that period.
+- The close card offers only confirm. "The apartment is empty", typed, closes without a next
+  period. A close chosen on a reading's card that waited for another meter's photo closes once
+  that photo is confirmed, with no card.
 - Only the card the server is waiting on has working buttons. An answered card shows the
   answer in place, as a done mark for the primary option or the marked chip for another.
 - A pressed option shows on its card at once, with no bubble of its own. While that answer is
@@ -127,6 +140,10 @@ no lines and no missing tariffs shows no strip.
 - Once a period is closed and both its meters are read and priced, the owner gets one email with
   a PDF of the apartment's period attached. When the tariff is missing at the close, saving it
   sends the email. Readings during the period send nothing.
+- The chat says what happened to the report in the same turn: a line that it was emailed and to
+  which address, a line naming what the bill still lacks (a meter, a closing reading, a price),
+  or a line that sending failed. A failure shows in the owner's chat too when a delegate's
+  answer caused it, and the report goes out on the first chat load of a later day.
 - Every report of one apartment has the subject `[<property> / <apartment>] קריאות מונים`, so
   Gmail groups them into one conversation; the date and the total are in the body.
 - The PDF shows the property, the apartment, the period and its closing date, then a table

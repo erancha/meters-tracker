@@ -27,6 +27,7 @@ Building blocks:
 - new_item / make_card / ask / drop / decide: a new pending item, card rendering, the pending
   write, reading a choice or text
 - tag_photo: the reading field on a photo's message, kept current by ask and drop
+- settle_back_dated: a late meter's flags in a closed period it now has readings in
 - classify_context / form_context / message_context: what the classifier is given with typed text
   (a card's text, fields, asked field and buttons, then the account's records)
 - ask_back / not_understood: the reply to a message that is no change the app can make, with no
@@ -63,11 +64,13 @@ from common.model import IntentResult
 from common.periods import (
     Figures,
     consumption,
+    covers,
     figures,
     new_period,
     open_period,
     period_readings,
     price_in,
+    rebuild_flags,
 )
 
 READING = "reading"
@@ -531,6 +534,37 @@ def save_reading(engine, user, item, opens=None, closes=None) -> dict:
     }
     engine.store.put_reading(user.account, data["serial"], reading)
     return reading
+
+
+def settle_back_dated(engine, user, meter, reading) -> dict:
+    """A reading dated inside a closed period the meter has no closing reading in re-flags the
+    meter from the period dates, as the close would have had the meter been there; a period it
+    then closes is due for its report. A meter that closes the period keeps its flags, since a
+    back-dated reading displaces a closing reading only by the user's choice. Returns the reading
+    as stored after."""
+    account, serial = user.account, meter["serial"]
+    periods = engine.store.periods(account, meter["apartment_id"])
+    readings = engine.store.readings(account, serial)
+    closed_by_meter = {r["closes_period"] for r in readings}
+    if not any(
+        p["closed_on"] is not None
+        and p["start"] not in closed_by_meter
+        and covers(p, reading["date"])
+        for p in periods
+    ):
+        return reading
+    before = {r["seq"]: (r["opens_period"], r["closes_period"]) for r in readings}
+    rebuild_flags(readings, periods)
+    for r in readings:
+        opens, closes = r["opens_period"], r["closes_period"]
+        if (opens, closes) == before[r["seq"]]:
+            continue
+        engine.store.update_reading(
+            account, serial, r["date"], r["seq"], opens_period=opens, closes_period=closes
+        )
+        if closes is not None and closes != before[r["seq"]][1]:
+            engine.report_due(meter["apartment_id"], closes)
+    return next(r for r in readings if r["seq"] == reading["seq"])
 
 
 def price_on(engine, user, meter_type, d) -> float | None:

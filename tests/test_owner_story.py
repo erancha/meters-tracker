@@ -170,7 +170,6 @@ def _link_electricity(owner):
         "בצג שני מספרים. איזה מהם הקריאה?",
         "עליון: 37,937 (מסומן)",
         "תחתון: 37,940",
-        "תאריך: 01/09/2026",
         "קריאת פתיחה לתקופה מ־01/09/2026 לחודשיים",
     ]
     assert _labelled(card) == [("top", "המספר העליון"), ("bottom", "המספר התחתון")]
@@ -217,13 +216,15 @@ def _close_by_reading(owner):
     assert options(card) == ["close", "keep_open"]
 
     result = owner.choose("close")
-    summary, closed, ask = result.replies
+    summary, closed, ask, held = result.replies
     assert "קריאה נוכחית: 39,269 (29/10/2026)" in summary.text
     assert closed.card is None
     assert closed.text == texts.closed(
         APARTMENT, TODAY, NEXT_START, [("electricity", SERIAL, CLOSING, TODAY)]
     )
     assert ask.card["kind"] == "tariffs_ask"
+    lacks = [texts.report_gap("no_meter", "water"), texts.report_gap("no_price", "electricity")]
+    assert held.text == texts.report_held(APARTMENT, date(2026, 9, 1), lacks)
     assert (result.snapshot.card, result.snapshot.waiting) == (ask.card, 0)
     assert result.snapshot.card["options"] == []
     assert _periods(owner) == [("2026-09-01", 2, "2026-10-29"), ("2026-10-30", 2, None)]
@@ -257,9 +258,10 @@ def _price_by_typing(owner):
     assert result.snapshot.card is None
     charge = (
         f"{PROPERTY} / {APARTMENT} · מונה חשמל 2721058, התקופה מ־01/09/2026: "
-        "1,332 קוט״ש, חיוב 856.74 ₪ (במקום 1,332 קוט״ש, אין חיוב)"
+        "1,332 קוט״ש, חיוב 856.74 ₪"
     )
-    assert _texts(result) == ["התעריפים נשמרו, בתוקף מ־29/10/2026.\n" + charge]
+    held = texts.report_held(APARTMENT, date(2026, 9, 1), [texts.report_gap("no_meter", "water")])
+    assert _texts(result) == ["התעריפים נשמרו, בתוקף מ־29/10/2026.\n" + charge, held]
     [tariff] = owner.kit.tariffs()
     assert tariff["effective_date"] == "2026-10-29"
     assert (tariff["electricity_per_kwh"], tariff["water_per_m3"]) == tuple(PRICES.values())
@@ -277,7 +279,8 @@ def _link_water(owner):
     card = result.snapshot.card
     assert (card["kind"], result.snapshot.waiting) == ("property", 0)
     assert card["title"] == f"מונה מים {WATER_SERIAL} עדיין לא מקושר לדירה. לאיזה נכס הוא שייך?"
-    assert card["lines"] == [f"נכסים קיימים: {PROPERTY}", "או כתובת של נכס חדש."]
+    assert card["lines"] == ["אפשר לבחור נכס קיים, או לכתוב כתובת של נכס חדש."]
+    assert _labelled(card) == [("name_0", PROPERTY)]
 
     both = edits(("property", PROPERTY), ("apartment", APARTMENT))
     card = owner.say(PLACE, both).snapshot.card
@@ -319,7 +322,7 @@ def _ask_close(owner):
         f"מונה חשמל {SERIAL} · קריאת סגירה 39,500 (15/11/2026)",
         f"מונה מים {WATER_SERIAL} · קריאת סגירה 1,262 (15/11/2026)",
     ]
-    assert _labelled(card) == [("confirm", "אישור"), ("vacate", "סגירה, הדירה ריקה")]
+    assert _labelled(card) == [("confirm", "אישור")]
 
 
 def _closing_rows():
@@ -415,7 +418,9 @@ def test_a_typed_close_shows_the_close_card_and_closes_on_confirm(env, ddb):
     _read_both_later(owner)
     _ask_close(owner)
     result = owner.choose("confirm")
-    assert _texts(result) == [texts.closed(APARTMENT, LATER, date(2026, 11, 16), _closing_rows())]
+    closed = texts.closed(APARTMENT, LATER, date(2026, 11, 16), _closing_rows())
+    sent = texts.report_sent(APARTMENT, date(2026, 10, 30), ACCOUNT)
+    assert _texts(result) == [closed, sent]
     assert result.snapshot.card is None
     assert _periods(owner)[1:] == [("2026-10-30", 2, "2026-11-15"), ("2026-11-16", 2, None)]
 
@@ -427,6 +432,7 @@ def test_a_typed_vacate_on_the_close_card_closes_without_a_next_period(env, ddb)
     _read_both_later(owner)
     _ask_close(owner)
     result = owner.say("הדירה ריקה", IntentResult(intent="vacate"))
-    assert _texts(result) == [texts.closed(APARTMENT, LATER, None, _closing_rows())]
+    sent = texts.report_sent(APARTMENT, date(2026, 10, 30), ACCOUNT)
+    assert _texts(result) == [texts.closed(APARTMENT, LATER, None, _closing_rows()), sent]
     assert result.snapshot.card is None
     assert _periods(owner)[1:] == [("2026-10-30", 2, "2026-11-15")]

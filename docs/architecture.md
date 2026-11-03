@@ -200,15 +200,19 @@ recorded messages in
   own account, keyed by that address, with a conditional write so two first requests agree.
   Data belongs to the account; the message history and the pending queue belong to the
   signed-in address ([ADR 0002](adr/0002-google-sign-in-and-delegation.md)).
-- **Period report.** A close, a re-close, or a tariff that first prices a closed period marks it
-  for a report during a turn. Once the turn's replies are stored the engine sends each marked
-  report that `report.missing` finds due: a closed period with both meters closed and priced.
+- **Period report.** A close, a re-close, a tariff that first prices a closed period, or a late
+  meter's reading that closes a closed period for it marks the period for a report during a turn.
+  After the turn's replies the engine sends each marked report that `report.missing` finds due: a
+  closed period with both meters closed and priced. Each marked report adds a line to the turn:
+  sent, held with what the bill lacks, or failed.
   `src/common/report.py` takes the figures from `period_figures`, the code the chat's summary
   uses, and draws a one-page PDF with fpdf2. It shapes the Hebrew with HarfBuzz and a DejaVu Sans
   font shipped under `src/common/fonts/`, and is imported only when a report is drawn.
   `src/common/notify.py` sends it as raw MIME, base64 encoded, under the fixed subject of
   [ADR 0004](adr/0004-fixed-email-subject.md). A failed report is logged and never fails the turn,
-  since the reading is already saved.
+  since the reading is already saved. It is marked on its period row (`report_failed`, with the
+  report it replaces), and the first chat load of a later day sends it again and clears the
+  mark.
 - **Dates.** Every stored and shown date is a calendar date in Asia/Jerusalem
   (`src/common/dates.py`), and the engine takes "today" from an injected clock, so tests fix
   the day.
@@ -233,7 +237,8 @@ owns in each table, and a real-model check reads the readings that carry failed 
 - `meters` — pk account, sk serial: `apartment_id`, `type` (`water` or `electricity`),
   `display_choice`, `label_hint`, `retired_at`.
 - `periods` — pk `account#apartment_id`, sk start date: `months`, `closed_on`,
-  `last_reminded_on`.
+  `last_reminded_on`, and while its report waits to be sent again, `report_failed` and
+  `report_ignored`.
 - `readings` — pk `account#serial`, sk `date#seq`: `value`, `image_key`, `recorded_by`,
   `opens_period`, `closes_period`, `resets`, and, only when non-empty, `failed_photos` (the
   keys of the photos the model failed on) and `model` (the model that failed).

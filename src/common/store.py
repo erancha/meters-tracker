@@ -209,15 +209,19 @@ class Store:
         names = {f"#f{i}": name for i, name in enumerate(fields)}
         names.update({f"#r{i}": name for i, name in enumerate(remove)})
         values = {f":v{i}": _to_dynamo(value) for i, value in enumerate(fields.values())}
-        expression = "SET " + ", ".join(f"#f{i} = :v{i}" for i in range(len(fields)))
+        clauses = []
+        if fields:
+            clauses.append("SET " + ", ".join(f"#f{i} = :v{i}" for i in range(len(fields))))
         if remove:
-            expression += " REMOVE " + ", ".join(f"#r{i}" for i in range(len(remove)))
+            clauses.append("REMOVE " + ", ".join(f"#r{i}" for i in range(len(remove))))
+        # DynamoDB refuses an empty values map, which an update that only removes has.
+        given = {"ExpressionAttributeValues": values} if values else {}
         self._tables[table].update_item(
             Key={"pk": pk, "sk": sk},
-            UpdateExpression=expression,
+            UpdateExpression=" ".join(clauses),
             ConditionExpression="attribute_exists(pk)",
             ExpressionAttributeNames=names,
-            ExpressionAttributeValues=values,
+            **given,
         )
 
     def _get(self, table, key):
@@ -299,8 +303,8 @@ class Store:
     def put_period(self, account, apartment_id, period):
         self._put_row("periods", account, apartment_id, period)
 
-    def update_period(self, account, apartment_id, start, **fields):
-        self._update_row("periods", account, apartment_id, fields, start=start)
+    def update_period(self, account, apartment_id, start, remove=(), **fields):
+        self._update_row("periods", account, apartment_id, fields, remove, start=start)
 
     def delete_period(self, account, apartment_id, start):
         self._tables["periods"].delete_item(Key=_key("periods", account, apartment_id, start=start))

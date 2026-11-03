@@ -273,10 +273,11 @@ def test_typed_tariffs_after_a_close_price_the_closed_period(env, ddb):
     assert "בתוקף מ־31/10/2026 (תאריך סגירת התקופה)" in card_text(card)
     result = kit.choose("confirm")
     place, period = "הגפן 7 / עורף · ", "התקופה מ־01/09/2026: "
-    assert result.replies[-1].text.splitlines() == [
+    assert result.replies[-1].text == texts.report_sent("עורף", date(2026, 9, 1), ACCOUNT)
+    assert result.replies[-2].text.splitlines() == [
         "התעריפים נשמרו, בתוקף מ־31/10/2026.",
-        f"{place}מונה חשמל E-392, {period}600 קוט״ש, חיוב 300.00 ₪ (במקום 600 קוט״ש, אין חיוב)",
-        f"{place}מונה מים W-1250, {period}30 קוב, חיוב 300.00 ₪ (במקום 30 קוב, אין חיוב)",
+        f"{place}מונה חשמל E-392, {period}600 קוט״ש, חיוב 300.00 ₪",
+        f"{place}מונה מים W-1250, {period}30 קוב, חיוב 300.00 ₪",
     ]
     assert kit.store.pending(USER.email) == []
 
@@ -299,8 +300,8 @@ def test_saved_tariff_correction_names_every_changed_closed_period(env, ddb):
     kit.say("חשמל 0.7")
     kit.say("בתוקף מ-1 בינואר")
     text = kit.choose("confirm").replies[-1].text
-    assert "70.00" in text and "60.00" in text
-    assert "35.00" in text and "30.00" in text
+    assert "70.00" in text and "35.00" in text
+    assert "60.00" not in text and "30.00" not in text
 
 
 def test_a_tariff_save_lists_every_period_whose_charge_it_changes(env, ddb):
@@ -330,8 +331,9 @@ def test_a_tariff_save_lists_every_period_whose_charge_it_changes(env, ddb):
     assert lines[0] == texts.tariffs_saved(date(2026, 1, 1))
     changed = lines[1:]
     assert len(changed) == 16
-    assert sum("70.00" in line and "60.00" in line for line in changed) == 8
-    assert sum("35.00" in line and "30.00" in line for line in changed) == 8
+    assert sum("70.00" in line for line in changed) == 8
+    assert sum("35.00" in line for line in changed) == 8
+    assert not any("במקום" in line for line in changed)
     assert not any("צפי" in line for line in lines)
 
 
@@ -516,7 +518,7 @@ def test_a_close_chosen_on_a_reading_asks_for_tariffs_at_once(env, ddb):
     kit.send_photo(electricity(top=392700, bottom=392702))
     assert kit.choose("confirm").snapshot.card["kind"] == "propose_close"
     result = kit.choose("close")
-    assert result.replies[-2].text.startswith("התקופה של עורף נסגרה")
+    assert result.replies[-3].text.startswith("התקופה של עורף נסגרה")
     assert result.snapshot.card["kind"] == "tariffs_ask"
     assert [i["kind"] for i in kit.store.pending(USER.email)] == ["tariffs"]
 

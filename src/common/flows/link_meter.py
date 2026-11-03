@@ -5,7 +5,10 @@ Steps: property -> apartment -> period (only when the apartment has no open peri
 next_step derives the step from what is filled, so a typed answer and a correction are the same
 thing on any step: an edit of a field, then next_step. A property or apartment edit forgets the
 period answered for the earlier name, so a typo is fixed by typing the name again rather than by
-cancelling.
+cancelling. The property and apartment questions offer the existing names as buttons, and a new
+typed name close to an existing one first asks which was meant (property_near, apartment_near).
+A summary whose reading is dated after the period it would open ends offers no confirm and asks
+for the reading's date.
 Nothing is written until the final confirm, or a number pressed on a two-number display; then
 the property, apartment and period are created as needed, the meter and its opening reading are
 saved, and a live meter of the same type in the apartment is retired as replaced on the
@@ -37,21 +40,24 @@ from common.flows import (
     reading_default,
     reading_options,
     save_reading,
+    settle_back_dated,
     summary,
 )
-from common.periods import apartment_meters
+from common.periods import apartment_meters, covers, period_end
 
 KIND = "link_meter"
 DEFAULT_FIELDS = {
     "property": "property",
+    "property_near": "property",
     "apartment": "apartment",
+    "apartment_near": "apartment",
     "period": "period_start",
     "link": "value",
 }
 
 
 def _link_text(d):
-    return texts.link_confirm(
+    title, lines = texts.link_confirm(
         d["meter_type"],
         d["serial"],
         d["property"],
@@ -66,26 +72,62 @@ def _link_text(d):
         d["months"],
         d["replaced_serial"],
     )
+    if _after_period(d):
+        lines.append(texts.reading_after_period(_period_end(d)))
+    elif d["closed_start"] is not None:
+        lines.append(texts.reading_in_closed_period(parse_iso(d["closed_start"])))
+    return title, lines
+
+
+def _period_end(d):
+    return period_end({"start": d["period_start"], "months": d["months"]})
+
+
+def _after_period(d) -> bool:
+    """True when the reading is dated after the last day of the period it would open, which no
+    reading may open; the card then asks for the reading's date."""
+    return parse_iso(d["reading_date"]) > _period_end(d)
+
+
+def _link_options(d) -> list[str]:
+    return [] if _after_period(d) else reading_options(d)
 
 
 # The period-start options in the order the card offers them. A stored map comes back with its
 # keys in an order of the store's own, so no card reads its order from one.
 START_OPTIONS = tuple(texts.START_LABELS)
 
+NEAR_OPTIONS = ["near_match", "near_new"]
+# A typed name this many letters from an existing one is taken for a slip of that one.
+NEAR_EDITS = 2
+
+
+def _name_options(d) -> dict[str, str]:
+    """Option id -> the existing name its button answers the question with."""
+    return {f"name_{i}": name for i, name in enumerate(d["choices"])}
+
+
+def _near_text(d):
+    field, typed, match = d["near"]
+    return texts.near_name(field, typed, match)
+
+
 STEPS = {
     "property": (
         lambda d: texts.link_property(d["meter_type"], d["serial"], d["choices"]),
-        lambda d: [],
+        lambda d: list(_name_options(d)),
     ),
+    "property_near": (_near_text, lambda d: NEAR_OPTIONS),
     "apartment": (
         lambda d: texts.link_apartment(d["property"], d["choices"]),
-        lambda d: [],
+        lambda d: list(_name_options(d)),
     ),
+    "apartment_near": (_near_text, lambda d: NEAR_OPTIONS),
     "period": (
         lambda d: texts.link_period(d["apartment"], d["property"], d["months"]),
         lambda d: [option for option in START_OPTIONS if option in d["starts"]],
     ),
-    "link": (_link_text, reading_options),
+    "link": (_link_text, _link_options),
 }
 
 
@@ -93,8 +135,17 @@ def card(item) -> dict:
     data, step = item["data"], item["step"]
     kind = "replaced" if step == "link" and data["replaced_serial"] is not None else step
     text, options = STEPS[step]
-    labels = texts.start_labels(data["starts"]) if step == "period" else None
-    default = reading_default(data) if step == "link" else None
+    default = reading_default(data) if step == "link" and not _after_period(data) else None
+    if step == "period":
+        labels = texts.start_labels(data["starts"])
+    elif step in ("property", "apartment"):
+        labels = _name_options(data)
+    elif step in ("property_near", "apartment_near"):
+        field, typed, match = data["near"]
+        labels = {"near_match": match, "near_new": texts.new_name(field, typed)}
+        default = "near_match"
+    else:
+        labels = None
     return make_card(item, kind, text(data), options(data), labels, default)
 
 
@@ -117,6 +168,8 @@ def form(item) -> dict:
 
 
 def default_field(item) -> str:
+    if item["step"] == "link" and _after_period(item["data"]):
+        return "date"
     return DEFAULT_FIELDS[item["step"]]
 
 
@@ -187,6 +240,9 @@ def _begin(item):
         period_start=None,
         months=None,
         period_new=True,
+        closed_start=None,
+        near=None,
+        accepted_new=[],
     )
 
 
@@ -203,14 +259,52 @@ def next_step(engine, user, item) -> list[Reply]:
 
 
 def _question(engine, user, data) -> str:
-    """The step of the first question with no answer, else the summary, matching the names."""
+    """The step of the first question with no answer, else the summary, matching the names. A
+    typed name close to an existing one asks which was meant before it counts as new."""
+    data["near"] = None
     _match_property(engine, user, data)
     if data["property"] is None:
         return "property"
+    if data["near"] is not None:
+        return "property_near"
     if data["apartment"] is None:
         return "apartment"
     _match_apartment(engine, user, data)
+    if data["near"] is not None:
+        return "apartment_near"
     return "period" if data["period_start"] is None else "link"
+
+
+def _close_name(typed: str, names: list[str]) -> str | None:
+    """The existing name a typed one most likely slipped from: one it is a prefix of, else one
+    within NEAR_EDITS letters of it; None when nothing is that close."""
+    prefixed = [n for n in names if n.startswith(typed)]
+    if prefixed:
+        return prefixed[0]
+    distances = {n: _edit_distance(typed, n) for n in names}
+    near = [n for n in names if distances[n] <= NEAR_EDITS]
+    return min(near, key=distances.__getitem__) if near else None
+
+
+def _edit_distance(a: str, b: str) -> int:
+    """The fewest single-letter insertions, deletions and substitutions turning a into b."""
+    row = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        previous, row[0] = row[0], i
+        for j, cb in enumerate(b, 1):
+            previous, row[j] = row[j], min(row[j] + 1, row[j - 1] + 1, previous + (ca != cb))
+    return row[-1]
+
+
+def _mark_near(data, field, names):
+    """Holds the existing name a new typed name slipped from, unless the owner already chose
+    the typed name as new."""
+    typed = data[field]
+    if typed in data["accepted_new"]:
+        return
+    match = _close_name(typed, names)
+    if match is not None:
+        data["near"] = [field, typed, match]
 
 
 after_edit = next_step
@@ -223,15 +317,41 @@ def answer(engine, user, item, action) -> list[Reply]:
         return drop(engine, user, item, [Reply(texts.discarded())])
     if key == "edit":
         return apply_edits(engine, user, item, intent.operations)
+    if step in ("property", "apartment") and key in _name_options(data):
+        edit(engine, user, item, step, _name_options(data)[key])
+        return next_step(engine, user, item)
+    if step in ("property_near", "apartment_near") and key in NEAR_OPTIONS:
+        field, typed, match = data["near"]
+        if key == "near_match":
+            edit(engine, user, item, field, match)
+        else:
+            data["accepted_new"].append(typed)
+        return next_step(engine, user, item)
     if step == "period" and key in data["starts"]:
         _start_period(data, data["starts"][key])
         return next_step(engine, user, item)
+    if step == "link" and key in (*POSITIONS, "confirm") and _after_period(data):
+        return not_understood(card(item), key)
     if step == "link" and key in POSITIONS:
         choose_position(data, key)
         return _link(engine, user, item)
     if step == "link" and key == "confirm":
         return _link(engine, user, item)
     return not_understood(card(item), key)
+
+
+def _closed_start(engine, user, apartment_id, day) -> str | None:
+    """The start of the closed period that holds the reading's date before its closing day; the
+    reading counts there once a later reading of the meter inside it closes it for the meter.
+    None when no closed period holds the date that way: a reading dated on a closing day stands
+    for the meter on the next period, as the closing readings do."""
+    periods = engine.store.periods(user.account, apartment_id)
+    held = [
+        p["start"]
+        for p in periods
+        if p["closed_on"] is not None and covers(p, day) and day < p["closed_on"]
+    ]
+    return next(iter(held), None)
 
 
 def _start_period(data, start):
@@ -263,6 +383,8 @@ def _match_property(engine, user, data):
         return
     matches = [p for p in properties if p["name"] == data["property"]]
     data.update(property_new=not matches, property_id=None, choices=[])
+    if not matches:
+        _mark_near(data, "property", [p["name"] for p in properties])
     if matches:
         [prop] = matches
         data["property_id"] = prop["id"]
@@ -281,6 +403,8 @@ def _match_apartment(engine, user, data):
         for a in engine.store.apartments(user.account)
         if a["property_id"] == data["property_id"] and a["name"] == data["apartment"]
     ]
+    if not matches:
+        _mark_near(data, "apartment", data["choices"])
     today = engine.clock()
     # Option id -> the start date it offers; on the first of a month both would be today.
     starts = {"start_today": today.isoformat()}
@@ -304,7 +428,9 @@ def _match_apartment(engine, user, data):
     if current is not None:
         data.update(period_start=current["start"], months=current["months"], period_new=False)
         _date_at_photo(data)
+        data["closed_start"] = _closed_start(engine, user, apartment["id"], data["reading_date"])
         return
+    data["closed_start"] = None
     if not data["period_new"]:
         _forget_period(data)
     if data["months"] is None:
@@ -344,6 +470,7 @@ def _link(engine, user, item) -> list[Reply]:
     }
     engine.store.put_meter(account, meter)
     reading = save_reading(engine, user, item, opens=data["period_start"])
+    reading = settle_back_dated(engine, user, meter, reading)
     if data["replaced_serial"] is not None:
         engine.store.update_meter(account, data["replaced_serial"], retired_at=data["reading_date"])
     return drop(engine, user, item, [summary(engine, user, meter, reading)], state="saved")

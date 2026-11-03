@@ -149,6 +149,7 @@ def test_backdated_before_closing_offers_swap(env, ddb):
     result = kit.choose("confirm")
     assert result.snapshot.card["kind"] == "swap"
     assert options(result.snapshot.card) == ["reclose", "keep_open"]
+    assert result.snapshot.card["default"] == "reclose"
     assert len(kit.readings("W-1250")) == 2
     kit.choose("reclose")
     assert [(r["date"], r["opens_period"], r["closes_period"]) for r in kit.readings("W-1250")] == [
@@ -186,6 +187,7 @@ def test_lower_reading_asks_misread_or_replaced(env, ddb):
     result = kit.choose("confirm")
     assert result.snapshot.card["kind"] == "lower_reading"
     assert options(result.snapshot.card) == ["misread", "replaced", "reset"]
+    assert result.snapshot.card["default"] == "misread"
     assert len(kit.readings("W-1250")) == 1
     kit.choose("reset")
     saved = kit.readings("W-1250")[-1]

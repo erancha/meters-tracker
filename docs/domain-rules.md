@@ -68,12 +68,20 @@ the day the photo was sent, which a retry on a later day keeps.
   month, which is left out on the first of a month; a typed date also answers) and length (default
   `default_period_months`, or the apartment's own length when it exists). A new period that starts
   before the photo's date dates the opening reading at the start, since the photo then stands for
-  the meter on that day; a later start keeps the photo's date. The final card shows everything that
-  will be created; on confirmation the property, apartment and period are created as needed, the
-  meter is saved, and its reading becomes the period's opening reading. A live meter of the same
-  type in that apartment is retired, dated the new reading's date; each keeps its own consumption.
-  When another photo of the same serial was linked while this one waited, it shows next as an
-  ordinary reading card for that meter.
+  the meter on that day; a later start keeps the photo's date, and a date equal to the start shows
+  once, on the opening line. The questions offer the existing names as buttons. A typed name that
+  is not an existing one but is a prefix of one, or within two single-letter edits of one, asks
+  whether that name was meant; a name chosen as new is not asked about again. A reading dated after
+  the last day of the period it would open is refused on the summary, which asks for its date. A
+  reading dated inside a closed period, before its close, stands for the meter on the next period
+  until a later reading of the meter inside the closed period arrives; that reading's save flags
+  the meter's readings from the period dates as the close would have, so the closed period gets the
+  meter's opening and closing readings and is marked for its report. The final card shows
+  everything that will be created; on confirmation the property, apartment and period are created
+  as needed, the meter is saved, and its reading becomes the period's opening reading. A live
+  meter of the same type in that apartment is retired, dated the new reading's date; each keeps
+  its own consumption. When another photo of the same serial was linked while this one waited, it
+  shows next as an ordinary reading card for that meter.
 - **Known serial.** The card proposes the reading; the user confirms, picks the other number,
   or types a corrected value, a date, or a cancel. Cards carry no reject button: corrections and
   cancels are typed.
@@ -163,7 +171,10 @@ message giving another value for what the card shows ("לא, 845") is such a new
   starts before the one before it closed: a period may start on its neighbour's closing day,
   since one closing reading can stand for both.
 - **A reading's value, date or reset.** The meter's figures in each period it counts in are
-  recomputed. A date that crosses a period moves the reading's flags with it.
+  recomputed. A date that crosses a period moves the reading's flags with it. A reading counted in
+  a period after its opening reading may not be dated before the period's start: a date change
+  that leaves one so flags the meter's readings again from the period dates, and a result that
+  still holds one is refused.
 - **A reading on another meter.** It moves with its flags rebuilt against the target meter's
   periods; moving a meter's last reading follows the rule of deleting it.
 - **Delete a reading.** An opening flag passes to the meter's next reading in that period. A
@@ -281,9 +292,11 @@ reports the closed period.
   apartment's next ordinary saved reading resumes it. Asking to close that apartment again
   shows the parked close as a card whose only option cancels it; the next photo parks it again,
   so the photo's own card comes first. A close chosen on a reading's card (the close option, or
-  a typed vacate) closes at once, since the owner has just confirmed the reading; any other
-  close, including a parked one resumed, shows a card listing every closing reading, and if the
-  readings change before it is answered, the card is shown again with the new ones.
+  a typed vacate) closes at once, since the owner has just confirmed the reading, or, when parked,
+  once its last missing reading is saved; any other close shows a card listing every closing
+  reading, and if the readings change before it is answered, the card is shown again with the new
+  ones. The card offers confirm alone, or vacate alone for a typed vacate; a typed vacate on a
+  confirm card closes without a next period.
 - **On closing** each closing reading is flagged as closing the period, `closed_on` is the
   latest closing reading's date, and the next period opens the day after with the same length,
   the closing readings flagged as its opening readings. A close always opens the next period the
@@ -324,8 +337,12 @@ reports the closed period.
   and each type has a price in force on the closing date. The step that completes it sends the
   report: the close, or saving the tariff that prices the closed period for the first time. A
   reading in an open period, a correction, and a tariff that reprices an already priced period
-  send nothing. A period that lacks any of these sends nothing, and the log names what it lacks.
-  An apartment with only one type of meter gets no report.
+  send nothing. A period that lacks any of these sends nothing, and the turn that marked it adds
+  a line naming what it lacks. An apartment with only one type of meter gets no report. A late
+  meter's reading that closes a closed period for it marks the period too.
+- **Outcome.** The turn that sends a report adds a line naming the address it went to. A failed
+  send adds a line saying so, in the owner's chat as well when a delegate caused it, marks the
+  period, and the first chat load of a later day sends the report again until it goes out.
 - **Figures.** Each live meter shows its opening reading, its closing reading, its units, its
   price and its cost, all as in the section above.
 - **Total.** The sum of the costs.
@@ -357,5 +374,7 @@ the effective date.
 - **One at a time.** A statement photo replaces whichever tariffs card waits, the request or a
   tariffs card, so at most one tariffs card waits at a time.
 - **Saving** writes the row under its effective date, replacing a row of the same date, and the
-  reply lists each period, closed or open, whose charge the row changes, per meter, with the
-  figures before and after as a correction's card shows them.
+  reply lists each period, closed or open, whose charge the row changes, per meter, with its
+  units and its charge now. The earlier charge is left out: a tariff changes only the charge on
+  units the line already names, and a correction's card is where figures stand beside the ones
+  they replace.

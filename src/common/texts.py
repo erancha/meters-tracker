@@ -52,18 +52,21 @@ def meter_name(meter_type, serial) -> str:
     return f"מונה {METER_KINDS[meter_type]} {serial}"
 
 
+DATE_LINE = "תאריך: {}"
+
+
 def reading_card(
     meter_type, serial, apartment, property_name, value, d: date, alternatives, position
 ):
     title = f"{meter_name(meter_type, serial)} · {property_name} / {apartment}"
     if alternatives is None:
-        return title, [f"קריאה: {number(value)} {UNITS[meter_type]}", f"תאריך: {fmt(d)}"]
+        return title, [f"קריאה: {number(value)} {UNITS[meter_type]}", DATE_LINE.format(fmt(d))]
     choices = [
         f"{POSITION_NAMES[p]}: {number(alternatives[p])}" + (" (מסומן)" if p == position else "")
         for p in POSITION_NAMES
         if p in alternatives
     ]
-    return title, ["בצג שני מספרים. איזה מהם הקריאה?", *choices, f"תאריך: {fmt(d)}"]
+    return title, ["בצג שני מספרים. איזה מהם הקריאה?", *choices, DATE_LINE.format(fmt(d))]
 
 
 def not_a_meter() -> str:
@@ -211,6 +214,35 @@ def summary_after_save(
     return "\n".join(lines)
 
 
+# What a held report's period still lacks, by report.missing's gap.
+REPORT_GAPS = {
+    "open": lambda _: "התקופה עדיין פתוחה",
+    "no_meter": lambda meter_type: f"אין מונה {METER_KINDS[meter_type]} פעיל",
+    "no_closing": lambda serial: f"חסרה קריאת סגירה של מונה {serial}",
+    "no_price": lambda meter_type: f"חסר מחיר {METER_KINDS[meter_type]} בתאריך הסגירה",
+}
+
+
+def report_gap(gap, named) -> str:
+    return REPORT_GAPS[gap](named)
+
+
+def report_sent(apartment, start: date, address) -> str:
+    return f"דוח התקופה של {apartment} מ־{fmt(start)} נשלח במייל ל־{address}."
+
+
+def report_held(apartment, start: date, gaps: list[str]) -> str:
+    return f"דוח התקופה של {apartment} מ־{fmt(start)} יישלח כשיושלם: {', '.join(gaps)}."
+
+
+def report_failed(apartment, start: date) -> str:
+    return (
+        f"שליחת דוח התקופה של {apartment} מ־{fmt(start)} נכשלה. "
+        "אנסה לשלוח אותו שוב בפתיחה הראשונה של הצ׳אט מחר; אם זה חוזר, כדאי לבדוק "
+        "שכתובת המייל של החשבון אומתה."
+    )
+
+
 def report_subject(property_name, apartment) -> str:
     return f"[{property_name} / {apartment}] קריאות מונים"
 
@@ -254,15 +286,30 @@ def report_table(meters: list[tuple[str, str, object]]) -> list[list[str]]:
 def link_property(meter_type, serial, property_names):
     title = f"{meter_name(meter_type, serial)} עדיין לא מקושר לדירה. לאיזה נכס הוא שייך?"
     if property_names:
-        return title, ["נכסים קיימים: " + ", ".join(property_names), "או כתובת של נכס חדש."]
+        return title, ["אפשר לבחור נכס קיים, או לכתוב כתובת של נכס חדש."]
     return title, ["אין עדיין נכסים. מהי כתובת הנכס?"]
 
 
 def link_apartment(property_name, apartment_names):
     title = f"לאיזו דירה ב{property_name}?"
     if apartment_names:
-        return title, ["דירות קיימות: " + ", ".join(apartment_names), "או מזהה של דירה חדשה."]
+        return title, ["אפשר לבחור דירה קיימת, או לכתוב מזהה של דירה חדשה."]
     return title, ["אין עדיין דירות בנכס. מהו מזהה הדירה?"]
+
+
+# By the link question's field: the noun for the record it asks about, and "new" in that noun's
+# gender, for the button that keeps a typed name as new.
+NAME_KINDS = {"property": ("נכס", "חדש"), "apartment": ("דירה", "חדשה")}
+
+
+def near_name(field, typed, match):
+    noun, _ = NAME_KINDS[field]
+    return f"האם התכוונת ל{noun} {match}?", [f"לא מצאתי {noun} בשם {typed}."]
+
+
+def new_name(field, typed) -> str:
+    noun, new = NAME_KINDS[field]
+    return f"{noun} {new}: {typed}"
 
 
 # What a question card asks, for an owner who says they do not understand it; by card kind.
@@ -353,6 +400,14 @@ def start_labels(starts: dict[str, str]) -> dict[str, str]:
     return {o: START_LABELS[o].format(fmt_day_month(parse_iso(d))) for o, d in starts.items()}
 
 
+def reading_after_period(end: date) -> str:
+    return f"התאריך אחרי סוף התקופה ב־{fmt(end)}. מה תאריך הקריאה?"
+
+
+def reading_in_closed_period(start: date) -> str:
+    return f"התאריך בתוך התקופה הסגורה מ־{fmt(start)}. קריאה נוספת מתוכה תצרף אליה את המונה."
+
+
 def link_confirm(
     meter_type,
     serial,
@@ -376,6 +431,9 @@ def link_confirm(
         lines.append(f"נכס חדש: {property_name}")
     if apartment_new:
         lines.append(f"דירה חדשה: {apartment}")
+    # A reading dated on the period's start shows its date once, on the opening line.
+    if d == period_start:
+        reading_lines.remove(DATE_LINE.format(fmt(d)))
     lines += [*reading_lines, f"קריאת פתיחה לתקופה מ־{fmt(period_start)} {months_phrase(months)}"]
     if replaced_serial is not None:
         lines.append(f"המונה {replaced_serial} יוחלף במונה הזה ויסומן כלא פעיל.")
@@ -451,16 +509,21 @@ def _figures_text(meter_type, figures) -> str:
     return ", ".join(parts)
 
 
+def priced_line(property_name, apartment, meter_type, serial, start: date, figures) -> str:
+    """One meter's period as a tariff now prices it."""
+    return (
+        f"{property_name} / {apartment} · {meter_name(meter_type, serial)}, "
+        f"התקופה מ־{fmt(start)}: {_figures_text(meter_type, figures)}"
+    )
+
+
 def figure_line(
     property_name, apartment, meter_type, serial, start: date, before_type, before, after
 ) -> str:
     """One meter's period whose figures a correction changes; before and after are its Figures,
     each worded in the units of that side's meter type."""
-    return (
-        f"{property_name} / {apartment} · {meter_name(meter_type, serial)}, "
-        f"התקופה מ־{fmt(start)}: {_figures_text(meter_type, after)} "
-        f"(במקום {_figures_text(before_type, before)})"
-    )
+    now = priced_line(property_name, apartment, meter_type, serial, start, after)
+    return f"{now} (במקום {_figures_text(before_type, before)})"
 
 
 def correction_card(lines: list[str]):
@@ -639,6 +702,13 @@ def periods_overlap(apartment, start: date) -> str:
     return (
         f"התקופה של {apartment} מ־{fmt(start)} הייתה חופפת לתקופה סמוכה, ולכן התיקון לא נשמר. "
         "אפשר לתקן קודם את התאריכים של התקופה הסמוכה, ואז לתקן שוב."
+    )
+
+
+def reading_outside_period(serial, d: date, start: date) -> str:
+    return (
+        f"במונה {serial} הקריאה מ־{fmt(d)} הייתה נספרת בתקופה מ־{fmt(start)}, "
+        "שהתאריך שלה מחוץ לה, ולכן התיקון לא נשמר. אפשר לתקן את התאריך או את התקופה."
     )
 
 

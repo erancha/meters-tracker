@@ -260,7 +260,7 @@ def _save(engine, user, item) -> list[Reply]:
     after.tariffs = engine.store.tariffs(user.account)
     changes = corrections.repriced(before, after, engine.clock())
     _mark_first_priced(engine, after, changes)
-    lines = [texts.tariffs_saved(parse_iso(data["effective_date"])), *(c.line for c in changes)]
+    lines = [texts.tariffs_saved(parse_iso(data["effective_date"])), *(c.priced for c in changes)]
     return drop(engine, user, item, [Reply("\n".join(lines))])
 
 
