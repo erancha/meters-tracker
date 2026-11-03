@@ -24,9 +24,6 @@ UNITS = {"electricity": "קוט״ש", "water": "קוב"}
 POSITION_NAMES = {"top": "עליון", "bottom": "תחתון"}
 # How a photo was read, by the value of its kind field.
 PHOTO_KIND_NAMES = {"statement": "חשבון קודם", "meter": "מונה"}
-FINAL_LABEL = "חישוב סופי"
-OUTLOOK_LABEL = "צפי לסוף התקופה"
-NO_FIGURE = "—"
 
 
 # What the classifier reads above a card's fields, buttons and the account's records, and what
@@ -222,44 +219,33 @@ def report_ignore_note(d: date) -> str:
     return f"דוח מתוקן: יש להתעלם מהדוח מיום {fmt(d)}"
 
 
-def report_heading(property_name, apartment, start: date, end: date, latest: date, final) -> list:
+def report_heading(property_name, apartment, start: date, end: date, closed_on: date) -> list:
     return [
         f"{property_name} / {apartment}",
-        FINAL_LABEL if final else OUTLOOK_LABEL,
         f"תקופה: {fmt(start)} - {fmt(end)}",
-        f"תאריך הקריאה האחרונה: {fmt(latest)}",
+        f"תאריך הסגירה: {fmt(closed_on)}",
     ]
 
 
-def report_total(total, final) -> str:
-    amount = "לא ניתן לחשב" if total is None else _shekels(total)
-    return f"סה״כ ({FINAL_LABEL if final else OUTLOOK_LABEL}): {amount}"
+def report_total(total) -> str:
+    return f"סה״כ: {_shekels(total)}"
 
 
 def _report_column(meter_type, figures) -> list[str]:
-    if figures is None:
-        return ["אין קריאה בתקופה", *[NO_FIGURE] * 4]
     c, unit = figures.consumption, UNITS[meter_type]
-    amount = NO_FIGURE if figures.amount is None else _shekels(figures.amount)
     return [
         dated_value(c.opening),
         dated_value(c.last),
         f"{number(c.units)} {unit}",
         price_text(meter_type, figures.price),
-        amount,
+        _shekels(figures.amount),
     ]
 
 
-def report_table(meters: list[tuple[str, str, object]], final) -> list[list[str]]:
+def report_table(meters: list[tuple[str, str, object]]) -> list[list[str]]:
     """The report's rows: a header naming each (type, serial, figures) meter, then one row per
     figure with a column per meter."""
-    labels = [
-        "קריאת פתיחה",
-        "קריאת סגירה" if final else "קריאה אחרונה",
-        "צריכה",
-        "תעריף",
-        "עלות",
-    ]
+    labels = ["קריאת פתיחה", "קריאת סגירה", "צריכה", "תעריף", "עלות"]
     columns = [_report_column(t, figures) for t, _, figures in meters]
     header = ["", *[meter_name(t, serial) for t, serial, _ in meters]]
     return [header, *[list(row) for row in zip(labels, *columns)]]

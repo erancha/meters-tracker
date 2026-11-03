@@ -200,12 +200,13 @@ recorded messages in
   own account, keyed by that address, with a conditional write so two first requests agree.
   Data belongs to the account; the message history and the pending queue belong to the
   signed-in address ([ADR 0002](adr/0002-google-sign-in-and-delegation.md)).
-- **Period report.** A flow marks a period for a report during a turn, and the engine sends it
-  once the turn's replies are stored, so a reading that also closes its period sends one report,
-  with the final figures. `src/common/report.py` takes the figures from `period_figures`, the code
-  the chat's summary uses, and draws a one-page PDF with fpdf2. It shapes the Hebrew with HarfBuzz
-  and a DejaVu Sans font shipped under `src/common/fonts/`, and is imported only when a report is
-  drawn. `src/common/notify.py` sends it as raw MIME, base64 encoded, under the fixed subject of
+- **Period report.** A close, a re-close, or a tariff that first prices a closed period marks it
+  for a report during a turn. Once the turn's replies are stored the engine sends each marked
+  report that `report.missing` finds due: a closed period with both meters closed and priced.
+  `src/common/report.py` takes the figures from `period_figures`, the code the chat's summary
+  uses, and draws a one-page PDF with fpdf2. It shapes the Hebrew with HarfBuzz and a DejaVu Sans
+  font shipped under `src/common/fonts/`, and is imported only when a report is drawn.
+  `src/common/notify.py` sends it as raw MIME, base64 encoded, under the fixed subject of
   [ADR 0004](adr/0004-fixed-email-subject.md). A failed report is logged and never fails the turn,
   since the reading is already saved.
 - **Dates.** Every stored and shown date is a calendar date in Asia/Jerusalem

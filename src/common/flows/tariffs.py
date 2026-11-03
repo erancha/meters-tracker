@@ -13,7 +13,7 @@ A price not given carries forward from the tariff in force on the effective date
 whenever the date or the given prices change; with none in force that meter type stays unpriced
 (None). A statement whose prices exclude VAT shows them but offers no save until prices are
 typed. Saving reports each period, closed or open, whose charge the new row changes, in the same
-comparison a correction's card shows.
+comparison a correction's card shows, and marks for a report each closed period it prices first.
 """
 
 from common import account, corrections, texts
@@ -259,5 +259,16 @@ def _save(engine, user, item) -> list[Reply]:
     after = before.copy()
     after.tariffs = engine.store.tariffs(user.account)
     changes = corrections.repriced(before, after, engine.clock())
+    _mark_first_priced(engine, after, changes)
     lines = [texts.tariffs_saved(parse_iso(data["effective_date"])), *(c.line for c in changes)]
     return drop(engine, user, item, [Reply("\n".join(lines))])
+
+
+def _mark_first_priced(engine, after, changes):
+    """Marks for a report each closed period in which the new row prices a meter for the first
+    time. A period already reported had every meter priced, so none is marked twice."""
+    apartment_of = {m["serial"]: m["apartment_id"] for m in after.meters}
+    for change in changes:
+        first_priced = change.before.amount is None and change.after.amount is not None
+        if change.after.consumption.final and first_priced:
+            engine.report_due(apartment_of[change.serial], change.start)

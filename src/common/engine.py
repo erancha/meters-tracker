@@ -35,9 +35,10 @@ and the queue clears. "Today" is the injected clock throughout, including the da
 pending seq and message timestamp, so the once-a-day greeting and the reading dates agree on what
 day it is.
 
-Flows mark a period for a report during a turn and the engine sends it once the turn's replies are
-stored, so a reading that also closes its period sends one report, with the final figures. A
-report that fails is logged and never fails the turn: the reading is already saved.
+Flows mark a period for a report during a turn: a close, a re-close, and a tariff that completes a
+closed period's prices. Once the turn's replies are stored the engine sends each marked report
+that report.missing finds due, and logs what any other lacks. A report that fails is logged and
+never fails the turn: the reading is already saved.
 """
 
 import secrets
@@ -255,10 +256,22 @@ class Engine:
             replies.extend(renewed)
 
     def _send_reports(self, user):
+        """Sends the report of each marked period that is due, and logs what any other lacks."""
         due, self._reports_due = self._reports_due, {}
         for (apartment_id, period_start), ignored in due.items():
             try:
-                built = report.build(self, user, apartment_id, period_start, ignored)
+                periods = self.store.periods(user.account, apartment_id)
+                [period] = [p for p in periods if p["start"] == period_start]
+                gaps = report.missing(self, user, apartment_id, period)
+                if gaps:
+                    logger.info(
+                        "period report held apartment=%s period=%s missing=%s",
+                        apartment_id,
+                        period_start,
+                        "; ".join(gaps),
+                    )
+                    continue
+                built = report.build(self, user, apartment_id, period, ignored)
                 report.send(built, self.mailer, user.account)
             except Exception:
                 logger.exception(

@@ -39,8 +39,8 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
   readings.
 - Prices are typed in the chat or read from a photo of a previous statement; closing a period
   with no prices on record asks for them.
-- After a confirmed reading that has a previous one, and after a close, the owner gets an email
-  with a PDF of the apartment's period: both meters, the costs, and whether the total is final.
+- Once a period is closed and both its meters are read and priced, the owner gets one email with
+  a PDF of the apartment's period: both meters, their costs and the total.
 - What is planned next, such as a daily reminder, is in the
   repository's [issues](https://github.com/erancha/meters-tracker/issues).
 

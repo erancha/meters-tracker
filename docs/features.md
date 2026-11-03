@@ -121,14 +121,13 @@ no lines and no missing tariffs shows no strip.
 
 ## Report email
 
-- After a confirmed reading that has a previous one, and after a close, the owner gets one email
-  with a PDF of the apartment's period attached. A meter's first reading sends nothing.
+- Once a period is closed and both its meters are read and priced, the owner gets one email with
+  a PDF of the apartment's period attached. When the tariff is missing at the close, saving it
+  sends the email. Readings during the period send nothing.
 - Every report of one apartment has the subject `[<property> / <apartment>] קריאות מונים`, so
   Gmail groups them into one conversation; the date and the total are in the body.
-- The PDF shows the property, the apartment, the period and the date of the latest reading, then
-  a table with a column per meter: opening reading, closing or latest reading, units, price
-  and cost. A total closes it, marked as final or as an outlook. A meter with no reading in
-  the period is named as such, and a total that cannot be calculated says so.
+- The PDF shows the property, the apartment, the period and its closing date, then a table
+  with a column per meter: opening reading, closing reading, units, price and cost, and a total.
 - After a re-close, the body and the top of the PDF name the date of the report to ignore.
 
 ## Account menu

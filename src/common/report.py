@@ -1,14 +1,15 @@
-"""The apartment's period report: both meters' figures, from the code the chat's summary uses, as
-a PDF emailed to the owner.
+"""The apartment's period report: both meters' closing figures, from the code the chat's summary
+uses, as a PDF emailed to the owner once the period's bill is complete.
 
 Building blocks:
+- missing: what a period still lacks before its report is due, empty once it is
 - PeriodReport: one report's plain values
-- build: reads the period's figures from the store
+- build: reads a due period's figures from the store
 - render: draws the report as a one-page right-to-left PDF
 - send: mails the PDF under the apartment's fixed subject
 
-A live meter with no reading in the period stays in the report, named as such, and leaves the total
-uncalculated, as does a missing price: a total over part of the apartment would read as complete.
+A report is due only for a closed period of an apartment with a live meter of each type, each with
+its closing reading and a price on the closing date, so every report states a whole bill.
 """
 
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from pathlib import Path
 from common import texts
 from common.dates import parse_iso
 from common.flows import Figures, period_figures, place
-from common.periods import apartment_meters, period_end
+from common.periods import PRICES, apartment_meters, period_end
 
 FONTS = Path(__file__).parent / "fonts"
 FONT = "DejaVu"
@@ -34,47 +35,61 @@ class PeriodReport:
     apartment: str
     start: date
     end: date
-    latest: date
-    # (meter type, serial, figures), figures None for a meter with no reading in the period.
-    meters: list[tuple[str, str, Figures | None]]
-    total: float | None
-    final: bool
+    closed_on: date
+    # (meter type, serial, figures) of each live meter, sorted by type
+    meters: list[tuple[str, str, Figures]]
+    total: float
     ignored: date | None
 
     def heading(self) -> list[str]:
         return texts.report_heading(
-            self.property_name, self.apartment, self.start, self.end, self.latest, self.final
+            self.property_name, self.apartment, self.start, self.end, self.closed_on
         )
 
     def body(self) -> str:
         note = [] if self.ignored is None else [texts.report_ignore_note(self.ignored)]
-        return "\n".join([*note, *self.heading(), texts.report_total(self.total, self.final)])
+        return "\n".join([*note, *self.heading(), texts.report_total(self.total)])
 
 
-def build(engine, user, apartment_id, period_start, ignored) -> PeriodReport:
-    """ignored is the ISO date of the report this one replaces, or None."""
-    apartment, prop = place(engine, user, apartment_id)
-    periods = engine.store.periods(user.account, apartment_id)
-    [period] = [p for p in periods if p["start"] == period_start]
+def _figures(engine, user, apartment_id, period) -> list[tuple[str, str, Figures | None]]:
+    """(type, serial, figures) of each live meter of the apartment in the period, sorted by
+    type; figures is None for a meter with no reading there."""
     meters = []
     for meter in apartment_meters(engine.store.meters(user.account), apartment_id):
         readings = engine.store.readings(user.account, meter["serial"])
         figures = period_figures(engine, user, meter["type"], readings, period)
         meters.append((meter["type"], meter["serial"], figures))
-    meters.sort(key=lambda m: m[0])
-    figures = [f for _, _, f in meters]
-    read = [f for f in figures if f is not None]
-    complete = len(read) == len(figures)
-    priced = complete and all(f.amount is not None for f in read)
+    return sorted(meters, key=lambda m: m[0])
+
+
+def missing(engine, user, apartment_id, period) -> list[str]:
+    """What the period lacks before its report is due, worded for the log; empty once it is due:
+    closed, with a live meter of each type, each closed by a closing reading and priced."""
+    if period["closed_on"] is None:
+        return ["the period is open"]
+    meters = _figures(engine, user, apartment_id, period)
+    gaps = [f"no live {t} meter" for t in PRICES if t not in {m[0] for m in meters}]
+    for meter_type, serial, figures in meters:
+        if figures is None or not figures.consumption.final:
+            gaps.append(f"no closing reading of {serial}")
+        elif figures.amount is None:
+            gaps.append(f"no {meter_type} price on the closing date")
+    return gaps
+
+
+def build(engine, user, apartment_id, period, ignored) -> PeriodReport:
+    """The report of a period that missing found due; ignored is the ISO date of the report
+    this one replaces, or None."""
+    apartment, prop = place(engine, user, apartment_id)
+    meters = _figures(engine, user, apartment_id, period)
     return PeriodReport(
         prop["name"],
         apartment["name"],
         parse_iso(period["start"]),
         period_end(period),
-        max(parse_iso(f.consumption.last["date"]) for f in read),
+        parse_iso(period["closed_on"]),
         meters,
-        round(sum(f.amount for f in read), 2) if priced else None,
-        complete and all(f.consumption.final for f in read),
+        round(sum(f.amount for _, _, f in meters), 2),
         None if ignored is None else parse_iso(ignored),
     )
 
@@ -93,25 +108,24 @@ def render(report: PeriodReport) -> bytes:
         pdf.set_font(FONT, style=style, size=size)
         pdf.cell(0, LINE_HEIGHT, text, align="R", new_x="LMARGIN", new_y="NEXT")
 
-    title, status, *details = report.heading()
+    title, *details = report.heading()
     line(title, "B", TITLE_SIZE)
     if report.ignored is not None:
         pdf.set_text_color(*ALERT_RGB)
         line(texts.report_ignore_note(report.ignored), "B", TITLE_SIZE)
         pdf.set_text_color(0)
-    line(status, "B")
     for detail in details:
         line(detail)
     pdf.ln(LINE_HEIGHT)
     pdf.set_font(FONT, size=BODY_SIZE)
     with pdf.table(text_align="RIGHT") as table:
-        for row in texts.report_table(report.meters, report.final):
+        for row in texts.report_table(report.meters):
             cells = table.row()
             # The first column reads first, so in a right-to-left table it is drawn last.
             for cell in reversed(row):
                 cells.cell(cell)
     pdf.ln(LINE_HEIGHT)
-    line(texts.report_total(report.total, report.final), "B", TITLE_SIZE)
+    line(texts.report_total(report.total), "B", TITLE_SIZE)
     return bytes(pdf.output())
 
 
@@ -121,5 +135,5 @@ def send(report: PeriodReport, mailer, recipient):
         texts.report_subject(report.property_name, report.apartment),
         report.body(),
         render(report),
-        f"meters-{report.latest.isoformat()}.pdf",
+        f"meters-{report.closed_on.isoformat()}.pdf",
     )

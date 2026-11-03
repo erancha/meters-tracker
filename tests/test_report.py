@@ -1,6 +1,6 @@
-"""The period report: which confirmed readings email the owner, and what the attached PDF says.
-Each test drives the engine and reads the raw message SES received, so the PDF checked is the one
-the owner gets."""
+"""The period report: when the owner is emailed, once per period after it is closed and fully
+priced, and what the attached PDF says. Each test drives the engine and reads the raw message SES
+received, so the PDF checked is the one the owner gets."""
 
 import email
 from datetime import date
@@ -9,15 +9,15 @@ from io import BytesIO
 
 import boto3
 from conftest import REGION, SES_SENDER
-from engine_kit import ACCOUNT, Kit, electricity, reading, water
+from engine_kit import ACCOUNT, Kit, edits, electricity, reading, water
 from moto.core import DEFAULT_ACCOUNT_ID
 from moto.ses.models import ses_backends
 from pypdf import PdfReader
 
+from common.model import IntentResult
+
 START = "2026-09-01"
 SUBJECT = "[הגפן 7 / עורף] קריאות מונים"
-FINAL = "חישוב סופי"
-OUTLOOK = "צפי לסוף התקופה"
 
 
 def _sent():
@@ -38,10 +38,12 @@ def _body(message) -> str:
     return message.get_body(("plain",)).get_content()
 
 
-def _apartment(kit, water_readings=()):
-    """An apartment with both meters opened at START and prices on record."""
+def _apartment(kit, water_readings=(), priced=True):
+    """An apartment with both meters opened at START, and prices on record unless priced is
+    False."""
     apartment = kit.apartment(start=START)
-    kit.tariff("2026-01-01", 0.6432, 15.62)
+    if priced:
+        kit.tariff("2026-01-01", 0.6432, 15.62)
     kit.meter(
         apartment, "E-392", "electricity", [reading(START, 392000, opens=START)], display_choice=0
     )
@@ -54,18 +56,38 @@ def _confirm_electricity(kit, value=392300):
     return kit.choose("confirm")
 
 
-def test_confirmed_reading_with_a_previous_one_mails_the_owner_one_pdf(env, ddb):
-    kit = Kit(today=date(2026, 10, 1))
-    _apartment(kit)
-    _confirm_electricity(kit)
+def _close(kit, value=392600):
+    """Confirms an electricity reading on 29/10, two days before the period's end, and closes
+    the period with it; the water meter's 28/10 reading is its closing reading."""
+    _confirm_electricity(kit, value)
+    return kit.choose("close")
+
+
+def _closable(kit, **kwargs):
+    kit.today = date(2026, 10, 29)
+    return _apartment(kit, [reading("2026-10-28", 1230)], **kwargs)
+
+
+def test_a_closed_and_priced_period_mails_the_owner_one_pdf(env, ddb):
+    kit = Kit()
+    _closable(kit)
+    _close(kit)
     [sent] = _sent()
     assert sent.destinations == [ACCOUNT]
     assert sent.raw_data.isascii()
     [message] = _messages()
     assert message["From"] == SES_SENDER
     assert message["Subject"] == SUBJECT
-    assert _pdf_text(message)
     assert 'dir="rtl"' in message.get_body(("html",)).get_content()
+
+
+def test_a_reading_in_an_open_period_sends_nothing(env, ddb):
+    kit = Kit(today=date(2026, 10, 1))
+    _apartment(kit)
+    _confirm_electricity(kit)
+    kit.today = date(2026, 10, 5)
+    _confirm_electricity(kit, 392350)
+    assert _sent() == []
 
 
 def test_opening_reading_of_a_new_meter_sends_nothing(env, ddb):
@@ -78,107 +100,77 @@ def test_opening_reading_of_a_new_meter_sends_nothing(env, ddb):
     assert _sent() == []
 
 
-def test_every_report_of_an_apartment_carries_the_same_subject(env, ddb):
-    kit = Kit(today=date(2026, 10, 1))
-    _apartment(kit)
-    _confirm_electricity(kit)
-    kit.today = date(2026, 10, 5)
-    _confirm_electricity(kit, 392350)
-    assert [m["Subject"] for m in _messages()] == [SUBJECT, SUBJECT]
-
-
-def test_report_charges_both_meters_on_their_consumption_so_far(env, ddb):
-    """Electricity: 300 units at 0.6432 is 192.96. Water: 30 units at 15.62 is 468.60."""
-    kit = Kit(today=date(2026, 10, 1))
-    _apartment(kit, [reading("2026-09-16", 1230)])
-    _confirm_electricity(kit)
+def test_the_report_shows_both_meters_closing_figures_and_the_total(env, ddb):
+    """Electricity: 600 units at 0.6432 is 385.92. Water: 30 units at 15.62 is 468.60."""
+    kit = Kit()
+    _closable(kit)
+    _close(kit)
     [message] = _messages()
     text = _pdf_text(message)
     for expected in (
         "הגפן",
         "עורף",
-        "01/10/2026",
+        "29/10/2026",
         "E-392",
         "392,000",
-        "392,300",
-        "300",
+        "392,600",
+        "600",
         "0.6432",
-        "192.96",
+        "385.92",
         "W-1250",
         "1,200",
         "1,230",
         "15.62",
         "468.60",
-        "661.56",
-        OUTLOOK,
+        "854.52",
+        "קריאת סגירה",
     ):
         assert expected in text
-    assert FINAL not in text
     body = _body(message)
-    assert "01/10/2026" in body
-    assert OUTLOOK in body
+    for absent in ("צפי", "חישוב סופי", "לא ניתן לחשב", "אין קריאה בתקופה"):
+        assert absent not in text and absent not in body
+    assert "854.52" in body
 
 
-def test_meter_with_no_reading_in_the_period_is_named_and_leaves_no_total(env, ddb):
-    kit = Kit(today=date(2026, 10, 1))
+def test_a_close_of_an_apartment_with_one_meter_type_sends_nothing(env, ddb, caplog):
+    kit = Kit(today=date(2026, 10, 29))
     apartment = kit.apartment(start=START)
     kit.tariff("2026-01-01", 0.6432, 15.62)
-    kit.meter(apartment, "E-392", "electricity", [], display_choice=0)
-    kit.meter(
-        apartment,
-        "W-1250",
-        "water",
-        [reading(START, 1200, opens=START), reading("2026-09-16", 1230)],
-    )
-    kit.send_photo(water(1260))
-    kit.choose("confirm")
-    [message] = _messages()
-    text = _pdf_text(message)
-    assert "E-392" in text
-    assert "אין קריאה בתקופה" in text
-    assert "לא ניתן לחשב" in text
-    assert OUTLOOK in text
-
-
-def test_period_with_no_tariff_says_so(env, ddb):
-    kit = Kit(today=date(2026, 10, 1))
-    apartment = kit.apartment(start=START)
     kit.meter(
         apartment, "E-392", "electricity", [reading(START, 392000, opens=START)], display_choice=0
     )
-    _confirm_electricity(kit)
+    _close(kit)
+    assert kit.periods(apartment)[0]["closed_on"] == "2026-10-29"
+    assert _sent() == []
+    assert "period report held" in caplog.text and "water" in caplog.text
+
+
+def test_a_close_without_a_tariff_waits_for_the_tariff_then_reports_once(env, ddb):
+    later_prices = IntentResult(intent="set_tariffs", electricity_price=0.7, water_price=16)
+    kit = Kit([edits(("electricity_price", "0.6432"), ("water_price", "15.62")), later_prices])
+    _closable(kit, priced=False)
+    _close(kit)
+    assert _sent() == []
+    kit.say("חשמל 0.6432 מים 15.62")
+    kit.choose("confirm")
     [message] = _messages()
-    text = _pdf_text(message)
-    assert "אין תעריף" in text
-    assert "לא ניתן לחשב" in text
+    assert "854.52" in _pdf_text(message)
+    kit.say("חשמל 0.7 מים 16")
+    kit.choose("confirm")
+    assert len(_sent()) == 1
 
 
-def test_reading_that_closes_the_period_sends_one_final_report(env, ddb):
-    """Electricity: 600 units at 0.6432 is 385.92. Water: 30 units at 15.62 is 468.60."""
-    kit = Kit(today=date(2026, 10, 29))
-    _apartment(kit, [reading("2026-10-28", 1230)])
-    _confirm_electricity(kit, 392600)
-    kit.choose("close")
-    [message] = _messages()
-    text = _pdf_text(message)
-    assert FINAL in text
-    assert OUTLOOK not in text
-    assert "854.52" in text
-    assert FINAL in _body(message)
-
-
-def test_close_confirmed_on_its_card_sends_the_final_report(env, ddb):
+def test_a_close_confirmed_on_its_card_after_the_missing_photo_sends_one_report(env, ddb):
     kit = Kit(today=date(2026, 10, 29))
     _apartment(kit)
-    _confirm_electricity(kit, 392600)
-    kit.choose("close")
+    _close(kit)
+    assert _sent() == []
     kit.send_photo(water(1230))
     kit.choose("confirm")
     assert kit.card()["kind"] == "close"
     kit.choose("confirm")
-    *_, last = _messages()
-    assert len(_sent()) == 3
-    assert FINAL in _pdf_text(last)
+    [message] = _messages()
+    assert "854.52" in _pdf_text(message)
 
 
 def test_reclose_report_names_the_report_to_ignore(env, ddb):
@@ -209,15 +201,14 @@ def test_reclose_report_names_the_report_to_ignore(env, ddb):
     assert "יש להתעלם מהדוח מיום 31/10/2026" in _body(message)
     [note] = [line for line in _pdf_text(message).splitlines() if "להתעלם" in line]
     assert "31/10/2026" in note
-    assert FINAL in _pdf_text(message)
 
 
 def test_failed_send_is_logged_without_failing_the_turn(env, ddb, caplog):
-    kit = Kit(today=date(2026, 10, 1))
-    _apartment(kit)
+    kit = Kit()
+    _closable(kit)
     boto3.client("ses", region_name=REGION).delete_identity(Identity=SES_SENDER)
-    result = _confirm_electricity(kit)
-    assert len(kit.readings("E-392")) == 2
+    result = _close(kit)
+    assert kit.periods(kit.store.apartments(ACCOUNT)[0])[0]["closed_on"] == "2026-10-29"
     assert result.replies
     assert _sent() == []
     assert "sending a period report failed" in caplog.text

@@ -317,15 +317,18 @@ reports the closed period.
 
 ## Period report
 
-- **When.** A confirmed reading that has a previous one sends one report, and so does a close. A
-  meter's first reading sends nothing. A reading before every period has none to report.
-- **Figures.** Each live meter shows its opening reading, its closing or latest reading, its units,
-  its price and its cost, all as in the section above. A meter with no reading in the
-  period is named as such.
-- **Total.** The sum of the costs. A meter with no reading, or no price, leaves it uncalculated,
-  shown as such. The report is final only when every meter's figures are.
-- **Re-close.** The report names the one to ignore by the period's closing date before the move,
-  the date that report carried.
+- **When.** Once per period, when its bill is complete: the period is closed, the apartment has a
+  live electricity meter and a live water meter, each with its closing reading for the period,
+  and each type has a price in force on the closing date. The step that completes it sends the
+  report: the close, or saving the tariff that prices the closed period for the first time. A
+  reading in an open period, a correction, and a tariff that reprices an already priced period
+  send nothing. A period that lacks any of these sends nothing, and the log names what it lacks.
+  An apartment with only one type of meter gets no report.
+- **Figures.** Each live meter shows its opening reading, its closing reading, its units, its
+  price and its cost, all as in the section above.
+- **Total.** The sum of the costs.
+- **Re-close.** It sends the corrected report, which names the one to ignore by the period's
+  closing date before the move, the date that report carried.
 
 ## Tariffs
 
