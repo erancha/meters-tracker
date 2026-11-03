@@ -17,7 +17,7 @@ deployed by CloudFormation. Layout and parts: docs/architecture.md.
 - `set-model-key.sh <anthropic|openai>` — writes that provider's key to SSM
   `/meters-tracker/llm/<provider>/api-key`.
 - `aws-helper.sh` — CloudWatch logs by target, with `[env]` as in `deploy.sh`;
-  `--logs api --errors --since 1d` is the health check.
+  `--errors --since 1d` is the health check, over every function.
 - `read-meter.sh <image>` — one photo through the real model; needs `LLM_MODEL` and
   `LLM_API_KEY`.
 - `reset-account.sh [env] <email> [--yes]` — deletes the account's rows and photos in the stack;

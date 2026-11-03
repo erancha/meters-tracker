@@ -156,8 +156,13 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
   CloudWatch logs by alias (`api`, `presignup`) or `<stack>:<logical-id>`, in the stack pair a
   bare `env` suffix names, as for `deploy.sh`. A failed lookup stops with one message naming the
   stack and the fix.
-  `./scripts/aws-helper.sh --logs api --errors --since 1d` is the quickest health check;
-  `--costs --since 1d` sums the model spend ([Logs](#logs)).
+  `./scripts/aws-helper.sh --errors --since 1d`, the warnings and errors of every function in
+  both stacks, is the quickest health check;
+  `--costs --since 1d` sums the model spend ([Logs](#logs)). `--ses-status` lists each address
+  SES knows with its verification status and says whether the account is still in the SES
+  sandbox; `--ses-verify <email>...` mails each address a new verification link, for a user whose
+  report could not be sent; `--ses-unverify <email>...` deletes each address's SES identity, to
+  see a report fail on purpose, and refuses `SES_SENDER`.
 - [`test.sh`](../scripts/test.sh) — the quality gate, above.
 - [`init-env.sh`](../scripts/init-env.sh) — creates the two settings files, above.
 - [`read-meter.sh <image>`](../scripts/read-meter.sh) — sends one photo through the real model

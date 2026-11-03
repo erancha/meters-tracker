@@ -297,3 +297,88 @@ def test_helper_sums_the_model_calls_by_day_and_kind(helper):
     assert ["read_meter", "1", "1000", "100", "0.0100"] in rows
     assert ["total", "3", "3000", "300", "0.0600"] in rows
     assert "PRICE_PER_MILLION in src/common/model.py" in result.stderr
+
+
+def test_helper_lists_each_address_with_its_verification_status(helper):
+    result = helper("--ses-status", stdout="a@x.com\tSUCCESS\nb@x.com\tPENDING")
+    assert result.returncode == 0, result.stderr
+    assert "a@x.com\tSUCCESS\nb@x.com\tPENDING" in result.stdout
+    calls = helper.calls.read_text()
+    assert "sesv2 list-email-identities " in calls
+    assert "sesv2 get-account " in calls
+
+
+def test_helper_requests_verification_of_each_named_address(helper):
+    result = helper("--ses-verify", "a@x.com", "b@x.com")
+    assert result.returncode == 0, result.stderr
+    calls = helper.calls.read_text().splitlines()
+    assert "ses verify-email-identity --email-address a@x.com" in calls
+    assert "ses verify-email-identity --email-address b@x.com" in calls
+    assert "verification email sent to b@x.com" in result.stdout
+
+
+@pytest.mark.parametrize("option", ["--ses-verify", "--ses-unverify"])
+@pytest.mark.parametrize("addresses", [[], ["a@x.com", "dev"]])
+def test_helper_refuses_a_verify_without_addresses_only(helper, option, addresses):
+    result = helper(option, *addresses)
+    assert result.returncode == 2
+    assert not helper.calls.exists()
+
+
+def _params(tmp_path, sender):
+    (tmp_path / "scripts" / "params.sh").write_text(
+        "export GOOGLE_CLIENT_ID=id\nexport GOOGLE_CLIENT_SECRET=secret\n"
+        f"export LLM_MODEL=anthropic:claude-opus-5-5\nexport SES_SENDER={sender}\n"
+    )
+
+
+def test_helper_unverifies_each_named_address(helper, tmp_path):
+    _params(tmp_path, "sender@x.com")
+    result = helper("--ses-unverify", "a@x.com", "b@x.com")
+    assert result.returncode == 0, result.stderr
+    calls = helper.calls.read_text().splitlines()
+    assert "ses delete-identity --identity a@x.com" in calls
+    assert "ses delete-identity --identity b@x.com" in calls
+    assert "./scripts/aws-helper.sh --ses-verify b@x.com" in result.stdout
+
+
+def test_helper_refuses_to_unverify_the_sender(helper, tmp_path):
+    _params(tmp_path, "sender@x.com")
+    result = helper("--ses-unverify", "a@x.com", "sender@x.com")
+    assert result.returncode == 1
+    assert "SES_SENDER" in result.stderr
+    assert not helper.calls.exists()
+
+
+@pytest.mark.parametrize(
+    "args, pattern",
+    [
+        (["--errors"], " --filter-pattern ?ERROR ?WARNING"),
+        (["--logs", "--errors"], " --filter-pattern ?ERROR ?WARNING"),
+        (["--logs"], ""),
+    ],
+)
+def test_helper_without_a_target_tails_every_function_of_both_stacks(helper, args, pattern):
+    result = helper(*args, "--since", "1d", stdout="ApiFunction\tfn-1")
+    assert result.returncode == 0, result.stderr
+    calls = helper.calls.read_text()
+    assert "--stack-name meters-tracker " in calls
+    assert "--stack-name meters-tracker-cognito " in calls
+    tails = [c for c in calls.splitlines() if c.startswith("logs tail ")]
+    assert tails == [f"logs tail /aws/lambda/fn-1 --since 1d --format short{pattern}"] * 2
+    assert "== meters-tracker ApiFunction ==" in result.stdout
+
+
+def test_helper_refuses_to_follow_every_function(helper):
+    result = helper("--errors", "--follow")
+    assert result.returncode == 2
+    assert "--follow" in result.stderr
+    assert not helper.calls.exists()
+
+
+def test_helper_takes_the_word_after_logs_as_env_when_it_is_no_target(helper):
+    result = helper("--logs", "dev", stdout="ApiFunction\tfn-1")
+    assert result.returncode == 0, result.stderr
+    calls = helper.calls.read_text()
+    assert "--stack-name meters-tracker-dev " in calls
+    assert "--stack-name meters-tracker-dev-cognito " in calls
