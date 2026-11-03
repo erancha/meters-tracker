@@ -1,7 +1,7 @@
 /**
  * The day's activity beside the chat, under the day's name: a collapsible section of photos still
- * waiting and one of saved readings, each shown only when it has lines, each line focusing its
- * message in the thread.
+ * waiting, open from the start, and one of saved readings, each shown only when it has lines, each
+ * line focusing its message in the thread.
  * An open request for tariffs shows above them, and focuses its card when that is in the thread.
  * LineList and TariffsAlert render the lines and the alert wherever the day's activity is shown.
  */
@@ -34,13 +34,14 @@ export function TariffsAlert({ ask, onFocus }: {
       </button>;
 }
 
-function Section({ title, lines, onFocus }: {
+function Section({ kind, title, lines, onFocus }: {
+  kind: "held" | "saved";
   title: string;
   lines: Line[];
   onFocus: (at: string) => void;
 }) {
   return (
-    <details>
+    <details className={kind} open={kind === "held"}>
       <summary>{title}</summary>
       <LineList lines={lines} onFocus={onFocus} />
     </details>
@@ -60,10 +61,10 @@ export function Sidebar({ messages, tariffsMissing, onFocus, day }: {
       <h2>{texts.dayTitle} · {shownDay(day)}</h2>
       {tariffsMissing && <TariffsAlert ask={tariffsAsk(messages)} onFocus={onFocus} />}
       {held.length > 0 && (
-        <Section title={texts.heldCount(held.length)} lines={held} onFocus={onFocus} />
+        <Section kind="held" title={texts.heldCount(held.length)} lines={held} onFocus={onFocus} />
       )}
       {saved.length > 0 && (
-        <Section title={texts.savedCount(saved.length)} lines={saved} onFocus={onFocus} />
+        <Section kind="saved" title={texts.savedCount(saved.length)} lines={saved} onFocus={onFocus} />
       )}
       {saved.length === 0 && held.length === 0 && <p>{texts.noReadingsToday}</p>}
     </aside>

@@ -58,6 +58,19 @@ describe("Sidebar", () => {
     expect(summary.closest("details")).toHaveAttribute("open");
   });
 
+  it("opens the waiting section from the start", () => {
+    setup([photo(AT, { state: "awaiting", ...place })]);
+
+    expect(screen.getByText(texts.heldCount(1)).closest("details")).toHaveAttribute("open");
+  });
+
+  it("marks the waiting and saved sections for their colors", () => {
+    setup([saved(AT), photo(LATER, { state: "awaiting", ...place })]);
+
+    expect(screen.getByText(texts.heldCount(1)).closest("details")).toHaveClass("held");
+    expect(screen.getByText(texts.savedCount(1)).closest("details")).toHaveClass("saved");
+  });
+
   it("writes a saved line as time, property / apartment and meter type, newest first", () => {
     setup([saved(AT), saved(LATER)]);
 

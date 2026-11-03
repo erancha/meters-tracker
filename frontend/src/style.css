@@ -8,9 +8,13 @@ body { margin: 0; background: #f6f8f9; }
   --ink: #1d2a33; --muted: #6b7a84; --hair: #dde4e8; --card: #fff;
   --elec: #a8670c; --elec-soft: #fdf1dc; --water: #1f6fb8; --water-soft: #e3effa;
   --warn: #8a4b00; --warn-soft: #fff4e0; --ok: #2c7a3f;
-  --total: #c0392b;
+  --red: #c0392b; --total: var(--red);
   font-family: system-ui, "Segoe UI", Arial, sans-serif; color: var(--ink); background: #f6f8f9;
   font-size: 15px; line-height: 1.45; direction: rtl;
+}
+/* The chat shares the page's background, so only a border marks where the column ends. */
+@media (min-width: 72rem) {
+  #root:not(:has(.landing)) { box-sizing: border-box; border-inline: 1px solid var(--hair); }
 }
 #root p { margin: 0; }
 #root p + p, #root p + .chips, #root .chips + p, #root dl + p, #root p + dl { margin-top: 0.45rem; }
@@ -175,6 +179,8 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 #root .sidebar h2 { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
 #root .sidebar details + details { margin-top: 0.6rem; }
 #root .sidebar summary { font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+#root .sidebar details.held, #root .sidebar details.held .day-lines button { color: var(--red); }
+#root .sidebar details.saved, #root .sidebar details.saved .day-lines button { color: var(--ok); }
 #root .day-lines { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.1rem; }
 #root .day-lines button { font: inherit; font-size: 0.8rem; width: 100%; padding: 0.2rem 0.3rem; border: 0; border-radius: 6px; background: none; color: var(--ink); text-align: start; cursor: pointer; }
 #root .day-lines button:hover { background: var(--accent-soft); }

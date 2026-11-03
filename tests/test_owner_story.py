@@ -145,7 +145,7 @@ def _ask_property(owner, result, serial):
 def _ask_period(result):
     card = result.snapshot.card
     assert card["kind"] == "period"
-    assert card["title"] == f"מאיזה תאריך להתחיל את התקופה של {APARTMENT} ב{PROPERTY}?"
+    assert card["title"] == f"מאיזה תאריך להתחיל את התקופה של {PROPERTY} / {APARTMENT}?"
     assert _labelled(card) == [
         ("start_today", "29/10 (היום)"),
         ("start_month", "01/11 (תחילת חודש)"),

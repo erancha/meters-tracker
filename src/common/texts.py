@@ -387,7 +387,7 @@ def tariffs_cancelled() -> str:
 
 def link_period(apartment, property_name, months):
     return (
-        f"מאיזה תאריך להתחיל את התקופה של {apartment} ב{property_name}?",
+        f"מאיזה תאריך להתחיל את התקופה של {property_name} / {apartment}?",
         [f"התקופה {months_phrase(months)}.", "אפשר לבחור, או לכתוב תאריך או אורך אחרים."],
     )
 
