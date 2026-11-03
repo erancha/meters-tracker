@@ -224,7 +224,7 @@ def _close_by_reading(owner):
     )
     assert ask.card["kind"] == "tariffs_ask"
     lacks = [texts.report_gap("no_meter", "water"), texts.report_gap("no_price", "electricity")]
-    assert held.text == texts.report_held(APARTMENT, date(2026, 9, 1), lacks)
+    assert held.text == texts.report_held(PROPERTY, APARTMENT, date(2026, 9, 1), lacks)
     assert (result.snapshot.card, result.snapshot.waiting) == (ask.card, 0)
     assert result.snapshot.card["options"] == []
     assert _periods(owner) == [("2026-09-01", 2, "2026-10-29"), ("2026-10-30", 2, None)]
@@ -260,7 +260,9 @@ def _price_by_typing(owner):
         f"{PROPERTY} / {APARTMENT} · מונה חשמל 2721058, התקופה מ־01/09/2026: "
         "1,332 קוט״ש, חיוב 856.74 ₪"
     )
-    held = texts.report_held(APARTMENT, date(2026, 9, 1), [texts.report_gap("no_meter", "water")])
+    held = texts.report_held(
+        PROPERTY, APARTMENT, date(2026, 9, 1), [texts.report_gap("no_meter", "water")]
+    )
     assert _texts(result) == ["התעריפים נשמרו, בתוקף מ־29/10/2026.\n" + charge, held]
     [tariff] = owner.kit.tariffs()
     assert tariff["effective_date"] == "2026-10-29"
@@ -419,7 +421,7 @@ def test_a_typed_close_shows_the_close_card_and_closes_on_confirm(env, ddb):
     _ask_close(owner)
     result = owner.choose("confirm")
     closed = texts.closed(APARTMENT, LATER, date(2026, 11, 16), _closing_rows())
-    sent = texts.report_sent(APARTMENT, date(2026, 10, 30), ACCOUNT)
+    sent = texts.report_sent(PROPERTY, APARTMENT, date(2026, 10, 30), ACCOUNT)
     assert _texts(result) == [closed, sent]
     assert result.snapshot.card is None
     assert _periods(owner)[1:] == [("2026-10-30", 2, "2026-11-15"), ("2026-11-16", 2, None)]
@@ -432,7 +434,7 @@ def test_a_typed_vacate_on_the_close_card_closes_without_a_next_period(env, ddb)
     _read_both_later(owner)
     _ask_close(owner)
     result = owner.say("הדירה ריקה", IntentResult(intent="vacate"))
-    sent = texts.report_sent(APARTMENT, date(2026, 10, 30), ACCOUNT)
+    sent = texts.report_sent(PROPERTY, APARTMENT, date(2026, 10, 30), ACCOUNT)
     assert _texts(result) == [texts.closed(APARTMENT, LATER, None, _closing_rows()), sent]
     assert result.snapshot.card is None
     assert _periods(owner)[1:] == [("2026-10-30", 2, "2026-11-15")]

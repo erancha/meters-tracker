@@ -140,10 +140,11 @@ no lines and no missing tariffs shows no strip.
 - Once a period is closed and both its meters are read and priced, the owner gets one email with
   a PDF of the apartment's period attached. When the tariff is missing at the close, saving it
   sends the email. Readings during the period send nothing.
-- The chat says what happened to the report in the same turn: a line that it was emailed and to
-  which address, a line naming what the bill still lacks (a meter, a closing reading, a price),
-  or a line that sending failed. A failure shows in the owner's chat too when a delegate's
-  answer caused it, and the report goes out on the first chat load of a later day.
+- The chat says what happened to the report in the same turn, in a line naming the period as
+  `<property> / <apartment>` and its start date: that it was emailed and to which address, what
+  the bill still lacks (a meter, a closing reading, a price), or that sending failed. A failure
+  shows in the owner's chat too when a delegate's answer caused it, and the report goes out on
+  the first chat load of a later day.
 - Every report of one apartment has the subject `[<property> / <apartment>] קריאות מונים`, so
   Gmail groups them into one conversation; the date and the total are in the body.
 - The PDF shows the property, the apartment, the period and its closing date, then a table

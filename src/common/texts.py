@@ -227,19 +227,24 @@ def report_gap(gap, named) -> str:
     return REPORT_GAPS[gap](named)
 
 
-def report_sent(apartment, start: date, address) -> str:
-    return f"דוח התקופה של {apartment} מ־{fmt(start)} נשלח במייל ל־{address}."
+def _report_period(property_name, apartment, start: date) -> str:
+    return f"דוח התקופה של {property_name} / {apartment} מ־{fmt(start)}"
 
 
-def report_held(apartment, start: date, gaps: list[str]) -> str:
-    return f"דוח התקופה של {apartment} מ־{fmt(start)} יישלח כשיושלם: {', '.join(gaps)}."
+def report_sent(property_name, apartment, start: date, address) -> str:
+    return f"{_report_period(property_name, apartment, start)} נשלח במייל ל־{address}."
 
 
-def report_failed(apartment, start: date) -> str:
+def report_held(property_name, apartment, start: date, gaps: list[str]) -> str:
+    period = _report_period(property_name, apartment, start)
+    return f"{period} יישלח כשיושלם: {', '.join(gaps)}."
+
+
+def report_failed(property_name, apartment, start: date, address) -> str:
     return (
-        f"שליחת דוח התקופה של {apartment} מ־{fmt(start)} נכשלה. "
+        f"שליחת {_report_period(property_name, apartment, start)} נכשלה. "
         "אנסה לשלוח אותו שוב בפתיחה הראשונה של הצ׳אט מחר; אם זה חוזר, כדאי לבדוק "
-        "שכתובת המייל של החשבון אומתה."
+        f"שהכתובת {address} אומתה."
     )
 
 

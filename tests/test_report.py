@@ -219,7 +219,34 @@ def test_a_sent_report_adds_a_line_naming_the_address(env, ddb):
     kit = Kit()
     _closable(kit)
     result = _close(kit)
-    assert result.replies[-1].text == texts.report_sent("עורף", date(2026, 9, 1), ACCOUNT)
+    assert result.replies[-1].text == texts.report_sent("הגפן 7", "עורף", date(2026, 9, 1), ACCOUNT)
+
+
+def test_each_report_line_names_the_property_and_the_apartment(env, ddb):
+    kit = Kit()
+    _closable(kit)
+    ses = boto3.client("ses", region_name=REGION)
+    ses.delete_identity(Identity=SES_SENDER)
+    failed = _close(kit).replies[-1].text
+    assert failed.startswith("שליחת דוח התקופה של הגפן 7 / עורף מ־01/09/2026 נכשלה.")
+    assert f"לבדוק שהכתובת {ACCOUNT} אומתה" in failed
+    ses.verify_email_identity(EmailAddress=SES_SENDER)
+    kit.today = date(2026, 10, 30)
+    messages, _ = kit.engine.load(kit.user)
+    assert f"דוח התקופה של הגפן 7 / עורף מ־01/09/2026 נשלח במייל ל־{ACCOUNT}." in [
+        m["text"] for m in messages
+    ]
+
+
+def test_a_held_report_line_names_the_property_and_the_apartment(env, ddb):
+    kit = Kit(today=date(2026, 10, 29))
+    apartment = kit.apartment(start=START)
+    kit.tariff("2026-01-01", 0.6432, 15.62)
+    kit.meter(
+        apartment, "E-392", "electricity", [reading(START, 392000, opens=START)], display_choice=0
+    )
+    held = _close(kit).replies[-1].text
+    assert held.startswith("דוח התקופה של הגפן 7 / עורף מ־01/09/2026 יישלח כשיושלם:")
 
 
 def test_a_held_report_adds_a_line_naming_what_the_bill_lacks(env, ddb):
@@ -231,7 +258,9 @@ def test_a_held_report_adds_a_line_naming_what_the_bill_lacks(env, ddb):
     )
     result = _close(kit)
     gap = texts.report_gap("no_meter", "water")
-    assert texts.report_held("עורף", date(2026, 9, 1), [gap]) in [r.text for r in result.replies]
+    assert texts.report_held("הגפן 7", "עורף", date(2026, 9, 1), [gap]) in [
+        r.text for r in result.replies
+    ]
 
 
 def test_a_failed_report_reaches_both_chats_and_goes_out_on_the_next_days_load(env, ddb):
@@ -241,14 +270,16 @@ def test_a_failed_report_reaches_both_chats_and_goes_out_on_the_next_days_load(e
     ses = boto3.client("ses", region_name=REGION)
     ses.delete_identity(Identity=SES_SENDER)
     result = _close(kit)
-    failed = texts.report_failed("עורף", date(2026, 9, 1))
+    failed = texts.report_failed("הגפן 7", "עורף", date(2026, 9, 1), ACCOUNT)
     assert result.replies[-1].text == failed
     owner = [m["text"] for m in kit.store.messages(ACCOUNT, "2026-10-29")]
     assert failed in owner
     ses.verify_email_identity(EmailAddress=SES_SENDER)
     kit.today = date(2026, 10, 30)
     messages, _ = kit.engine.load(helper)
-    assert texts.report_sent("עורף", date(2026, 9, 1), ACCOUNT) in [m["text"] for m in messages]
+    assert texts.report_sent("הגפן 7", "עורף", date(2026, 9, 1), ACCOUNT) in [
+        m["text"] for m in messages
+    ]
     assert len(_sent()) == 1
     assert "report_failed" not in kit.periods(kit.store.apartments(ACCOUNT)[0])[0]
     kit.engine.load(helper, "2026-10-30")

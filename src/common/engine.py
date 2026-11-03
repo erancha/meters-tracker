@@ -273,7 +273,8 @@ class Engine:
         """Sends one period's report to the account's owner, or says what it still lacks. Any
         failure is the report's alone: the turn goes on, and the period keeps the mark that a
         later chat load sends it again by, until a send succeeds."""
-        apartment, _ = place(self, user, apartment_id)
+        apartment, prop = place(self, user, apartment_id)
+        names = prop["name"], apartment["name"]
         start = parse_iso(period_start)
         try:
             periods = self.store.periods(user.account, apartment_id)
@@ -287,7 +288,7 @@ class Engine:
                     gaps,
                 )
                 worded = [texts.report_gap(gap, named) for gap, named in gaps]
-                return Reply(texts.report_held(apartment["name"], start, worded))
+                return Reply(texts.report_held(*names, start, worded))
             built = report.build(self, user, apartment_id, period, ignored)
             report.send(built, self.mailer, user.account)
         except Exception:
@@ -299,7 +300,7 @@ class Engine:
             self.store.update_period(
                 user.account, apartment_id, period_start, report_failed=True, report_ignored=ignored
             )
-            failed = texts.report_failed(apartment["name"], start)
+            failed = texts.report_failed(*names, start, user.account)
             if user.role != OWNER:
                 owner = User(email=user.account, account=user.account, role=OWNER)
                 self._append(owner, "assistant", failed)
@@ -308,7 +309,7 @@ class Engine:
             self.store.update_period(
                 user.account, apartment_id, period_start, remove=("report_failed", "report_ignored")
             )
-        return Reply(texts.report_sent(apartment["name"], start, user.account))
+        return Reply(texts.report_sent(*names, start, user.account))
 
     def _resend_failed_reports(self, user) -> list[Reply]:
         """Sends again every report a failure marked on its period."""

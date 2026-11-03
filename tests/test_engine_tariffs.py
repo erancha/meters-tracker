@@ -273,7 +273,7 @@ def test_typed_tariffs_after_a_close_price_the_closed_period(env, ddb):
     assert "בתוקף מ־31/10/2026 (תאריך סגירת התקופה)" in card_text(card)
     result = kit.choose("confirm")
     place, period = "הגפן 7 / עורף · ", "התקופה מ־01/09/2026: "
-    assert result.replies[-1].text == texts.report_sent("עורף", date(2026, 9, 1), ACCOUNT)
+    assert result.replies[-1].text == texts.report_sent("הגפן 7", "עורף", date(2026, 9, 1), ACCOUNT)
     assert result.replies[-2].text.splitlines() == [
         "התעריפים נשמרו, בתוקף מ־31/10/2026.",
         f"{place}מונה חשמל E-392, {period}600 קוט״ש, חיוב 300.00 ₪",
