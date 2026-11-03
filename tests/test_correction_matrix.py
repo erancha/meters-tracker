@@ -747,6 +747,26 @@ def _sent() -> int:
     return len(ses_backends[DEFAULT_ACCOUNT_ID][REGION].sent_messages)
 
 
+@dataclass(frozen=True)
+class Outbox:
+    """The mail state a confirmation starts from: the emails sent so far and the periods whose
+    report is due, as (apartment id, period start)."""
+
+    sent: int
+    due: frozenset[tuple[str, str]]
+
+
+def _outbox(run: "Run") -> Outbox:
+    stored = run.load()
+    due = frozenset(
+        (apartment_id, p["start"])
+        for apartment_id, periods in stored.periods.items()
+        for p in periods
+        if not report.missing(run.kit.engine, run.user, apartment_id, p)
+    )
+    return Outbox(_sent(), due)
+
+
 # ---------------------------------------------------------------------------------------------
 # Running a case
 
@@ -1134,10 +1154,11 @@ def _expected_after(run: Run, before: Account, planned) -> Account:
     return after
 
 
-def _check_saved(run: Run, before: Account, operations, sent_before: int):
+def _check_saved(run: Run, before: Account, operations, outbox: Outbox):
     """After a confirmation: the tables are the plan's after, the invariants hold, the figures
     are the stored rows', and no report went out. A dropped photo read as a statement saves the
-    statement's tariff instead of a plan."""
+    statement's tariff instead of a plan, and that tariff sends the report of each period it
+    makes due."""
     stored = run.load()
     if run.case.op.record == "photo":
         added = [t for t in stored.tariffs if t not in before.tariffs]
@@ -1151,7 +1172,8 @@ def _check_saved(run: Run, before: Account, operations, sent_before: int):
         assert _same(stored, _expected_after(run, before, planned)), run.case.id
         assert not _figures_faults(planned, stored, run.kit.today), run.case.id
     assert not invariant_faults(stored), f"{run.case.id}: {invariant_faults(stored)}"
-    assert _sent() == sent_before, f"{run.case.id}: a correction sent a report"
+    completed = _outbox(run).due - outbox.due if run.case.op.record == "photo" else frozenset()
+    assert _sent() == outbox.sent + len(completed), f"{run.case.id}: reports {completed} expected"
     return stored
 
 
@@ -1181,7 +1203,7 @@ def run_record_case(world, case: Case):
             run.say(IntentResult(intent="reject"))
         assert _same(run.load(), before), case.id
         return run
-    sent = _sent()
+    outbox = _outbox(run)
     if answer == "cancel":
         run.say(IntentResult(intent="reject"))
         assert _same(run.load(), before), case.id
@@ -1202,7 +1224,7 @@ def run_record_case(world, case: Case):
             run.confirm()
     else:
         run.confirm()
-    carry_on(run, _check_saved(run, before, operations, sent))
+    carry_on(run, _check_saved(run, before, operations, outbox))
     return run
 
 
@@ -1293,6 +1315,8 @@ EXPECTED_CHANGED: dict[tuple[str, str], str] = {
     ("meter.serial", "replaced"): "gone",
     ("meter.serial", "shared_row"): "gone",
     ("meter.serial", "vacant"): "gone",
+    ("period.closed_on", "closed_next"): "saved",
+    ("period.closed_on", "vacant"): "saved",
     ("period.closing", "closed_next"): "saved",
     ("period.start", "closed_next"): "gone",
     ("period.start", "delegate"): "gone",
@@ -1601,9 +1625,9 @@ def run_card_case(world, case: Case):
     expected = expected_card_outcome(case)
     assert outcome == expected, f"{case.id}: {outcome} != {expected}"
     if outcome in ("card", "tariffs"):
-        sent = _sent()
+        outbox = _outbox(run)
         returned = run.confirm().snapshot.card
-        _check_saved(run, before, operations, sent)
+        _check_saved(run, before, operations, outbox)
         if case.card == "other_person":
             # The other person is shown the card when their chat loads.
             returned = run.kit.engine.load(_delegate(run))[1].card
@@ -2155,9 +2179,9 @@ def run_sequence(world, seed: int):
         if outcome != "card":
             assert _same(run.load(), current), run.case.id
             continue
-        sent = _sent()
+        outbox = _outbox(run)
         run.confirm()
-        _check_saved(run, current, [operation], sent)
+        _check_saved(run, current, [operation], outbox)
     carry_on(run, run.load())
 
 
