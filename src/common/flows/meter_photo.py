@@ -54,6 +54,7 @@ from common.flows import (
     place,
     propose,
     put_period,
+    reading_default,
     reading_options,
     reading_text,
     save_reading,
@@ -150,8 +151,10 @@ STEPS = {
 
 
 def card(item) -> dict:
-    text, options = STEPS[item["step"]]
-    return make_card(item, item["step"], text(item["data"]), options(item["data"]))
+    data, step = item["data"], item["step"]
+    text, options = STEPS[step]
+    default = reading_default(data) if step == "reading" else None
+    return make_card(item, step, text(data), options(data), default=default)
 
 
 def form(item) -> dict:
@@ -400,7 +403,7 @@ def answer(engine, user, item, action) -> list[Reply]:
         return apply_edits(engine, user, item, intent.operations)
     if step == "reading" and key in POSITIONS:
         choose_position(data, key)
-        return ask(engine, user, item, step, card)
+        return _check(engine, user, item)
     if step == "reading" and key == "confirm":
         return _check(engine, user, item)
     if step == "duplicate" and key == "confirm":

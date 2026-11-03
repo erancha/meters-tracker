@@ -199,7 +199,7 @@ def test_misread_keeps_display_choice_unsaved(env, ddb):
         apartment, "E-392", "electricity", [reading("2026-10-01", 392700, opens="2026-10-01")]
     )
     kit.send_photo(electricity())
-    kit.choose("confirm")
+    kit.choose("top")
     result = kit.choose("misread")
     assert result.snapshot.card["kind"] == "unreadable"
     assert kit.store.meter(ACCOUNT, "E-392")["display_choice"] is None
@@ -388,7 +388,6 @@ def test_choosing_the_other_display_number_is_not_a_failure(env, ddb):
     _electric_apartment(kit, display_choice=None)
     kit.send_photo(electricity())
     kit.choose("bottom")
-    kit.choose("confirm")
     assert "failed_photos" not in kit.readings("E-392")[-1]
 
 

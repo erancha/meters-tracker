@@ -173,11 +173,8 @@ def _link_electricity(owner):
         "תאריך: 01/09/2026",
         "קריאת פתיחה לתקופה מ־01/09/2026 לחודשיים",
     ]
-    assert _labelled(card) == [
-        ("top", "המספר העליון"),
-        ("bottom", "המספר התחתון"),
-        ("confirm", "אישור"),
-    ]
+    assert _labelled(card) == [("top", "המספר העליון"), ("bottom", "המספר התחתון")]
+    assert card["default"] == "top"
 
     corrected = owner.say("הספרה האחרונה היא 8", edit("serial", SERIAL)).snapshot.card
     assert corrected["kind"] == "link"
@@ -185,13 +182,7 @@ def _link_electricity(owner):
     assert corrected["lines"] == card["lines"]
 
     top = IntentResult(intent="choose_option", name="המספר העליון")
-    chosen = owner.say("העליון", top).snapshot.card
-    assert chosen["kind"] == "link"
-    # The other number stays on the card, so the choice can be taken back until confirmation.
-    assert chosen["lines"] == card["lines"]
-    assert options(chosen) == ["top", "bottom", "confirm"]
-
-    result = owner.choose("confirm")
+    result = owner.say("העליון", top)
     assert result.snapshot.card is None
     assert _texts(result) == [
         f"{PROPERTY} / {APARTMENT} · חשמל\nקריאה נוכחית: 37,937 (01/09/2026)\n"

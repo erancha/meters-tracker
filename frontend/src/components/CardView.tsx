@@ -1,7 +1,8 @@
 /**
  * A card block of the chat: title, lines, and the options. With a choose handler the options are
- * buttons (confirm is the primary button, the others are chips). Once answered, the chosen
- * option shows in place: a done mark for confirm, the marked chip for the others.
+ * buttons (the card's default option is the primary button, the others are chips). Once
+ * answered, the chosen option shows in place: a done mark for the default, the marked chip for
+ * the others.
  */
 import type { Card, CardOption } from "../types";
 
@@ -11,8 +12,8 @@ export function CardView({ card, onChoose, answer = null, disabled = false }: {
   answer?: string | null;
   disabled?: boolean;
 }) {
-  const confirm = card.options.find((o) => o.id === "confirm");
-  const others = card.options.filter((o) => o.id !== "confirm");
+  const primary = card.options.find((o) => o.id === card.default);
+  const others = card.options.filter((o) => o !== primary);
   const answered = answer !== null;
   const shown = onChoose !== undefined || answered;
   return (
@@ -28,12 +29,12 @@ export function CardView({ card, onChoose, answer = null, disabled = false }: {
           ))}
         </div>
       )}
-      {shown && confirm !== undefined && (!answered || answer === confirm.label) && (
+      {shown && primary !== undefined && (!answered || answer === primary.label) && (
         <div className="actions">
           {answered
-            ? <span className="done">✓ {confirm.label}</span>
+            ? <span className="done">✓ {primary.label}</span>
             : <button type="button" className="primary" disabled={disabled}
-                      onClick={() => onChoose?.(confirm)}>{confirm.label}</button>}
+                      onClick={() => onChoose?.(primary)}>{primary.label}</button>}
         </div>
       )}
     </>

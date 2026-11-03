@@ -39,10 +39,13 @@ final step fails shows a banner asking to reload and sign in again.
 
 ## Cards
 
-- A reply that needs an answer is a card: a title, its lines, and buttons. Confirm is the
-  primary button; the other options are chips beside it.
+- A reply that needs an answer is a card: a title, its lines, and buttons. The card's expected
+  answer, confirm where it offers one, is the primary button; the other options are chips
+  beside it.
+- A reading card for a two-number display has only the two numbers as buttons: the marked one,
+  the upper at first, is primary, and pressing either saves the reading with that number.
 - Only the card the server is waiting on has working buttons. An answered card shows the
-  answer in place, as a done mark for confirm or the marked chip for another option.
+  answer in place, as a done mark for the primary option or the marked chip for another.
 - A pressed option shows on its card at once, with no bubble of its own. While that answer is
   on its way, the waiting card's buttons are disabled; photo uploads do not disable them.
 - When several photos wait for confirmation, only the oldest card has working buttons. After

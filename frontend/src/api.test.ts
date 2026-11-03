@@ -62,7 +62,7 @@ describe("createApi", () => {
 
   it("carries the snapshot of a 409 body on the ApiError", async () => {
     const stale = { card: { kind: "confirm", pending: "p", version: 2, title: "t", lines: [],
-                            options: [] }, waiting: 1 };
+                            options: [], default: null }, waiting: 1 };
     stubFetch(new Response(JSON.stringify({ error: "already_handled", snapshot: stale }),
                            { status: 409 }));
 

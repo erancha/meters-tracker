@@ -139,9 +139,9 @@ def walk(api: Api, open_photo: Path, close_photo: Path, statement_photo, today, 
     _expect(f"type {PLACE}", api.text(PLACE), "period")
     start = start_for(today, months)
     card = _expect(f"type the start {fmt(start)}", api.text(fmt(start)), "link")
-    if "top" in [o["id"] for o in card["options"]]:
-        card = _expect("choose the top number", api.choose(card, "top"), "link")
-    _expect("confirm the link", api.choose(card, "confirm"), None)
+    # The default saves on either card: a number on a two-number display, else confirm.
+    option = card["default"]
+    _expect(f"save the link by {option}", api.choose(card, option), None)
     card = _expect("send the closing photo", api.photo(close_photo), "reading")
     card = _expect("confirm the reading", api.choose(card, "confirm"), "propose_close")
     _expect("close the period", api.choose(card, "close"), "tariffs_ask")

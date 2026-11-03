@@ -54,10 +54,12 @@ the day the photo was sent, which a retry on a later day keeps.
   or had the same serial.
 - **Retired meter.** A photo of a retired meter is refused, naming the live meter that replaced
   it, when its apartment has one of its type.
-- **Two-number display.** With no saved choice, the card offers both numbers with the top one
-  selected, and pressing the other one moves the mark until the card is confirmed. The position of
-  the first saved reading becomes the meter's display choice, and later photos propose that
-  position's number directly.
+- **Two-number display.** With no saved choice, the card offers both numbers as its only
+  buttons, the top one marked as the default, and pressing either saves the reading with that
+  number. A display showing the same number twice gets a one-number card with confirm, and its
+  reading leaves the choice unsaved. The position of the first saved reading chosen from two
+  numbers becomes the meter's display choice, and later photos propose that position's number
+  directly.
 - **Unknown serial.** A link flow (`src/common/flows/link_meter.py`) asks for the property and then
   the apartment, existing or new by name; an answer naming both ("לאונר 18, דירה קדמית") skips the
   apartment question; a property or apartment name typed on a later question corrects the one given,

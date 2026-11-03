@@ -12,6 +12,8 @@ export interface Card {
   title: string;
   lines: string[];
   options: CardOption[];
+  /** The option id shown as the expected answer, or null on a card with none. */
+  default: string | null;
 }
 
 /** The card a choice answered: its pending item and the version it showed. */

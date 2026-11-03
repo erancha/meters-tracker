@@ -13,6 +13,7 @@ export const card = (over: Partial<Card> = {}): Card => ({
   title: "קריאה חדשה",
   lines: ["חשמל 123.4"],
   options: [{ id: "confirm", label: "אישור" }, { id: "other", label: "דירה אחרת" }],
+  default: "confirm",
   ...over,
 });
 

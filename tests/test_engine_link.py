@@ -30,7 +30,7 @@ def test_property_answer_naming_the_apartment_skips_the_apartment_question(env, 
     result = kit.say("לאונר 18, דירה קדמית")
     assert result.snapshot.card["kind"] == "period"
     kit.choose("start_today")
-    kit.choose("confirm")
+    kit.choose("top")
     [prop] = kit.store.properties(ACCOUNT)
     [apartment] = kit.store.apartments(ACCOUNT)
     assert (prop["name"], apartment["name"]) == ("לאונר 18", "דירה קדמית")
@@ -61,7 +61,7 @@ def test_a_name_typed_on_the_period_question_corrects_the_apartment(env, ddb):
     assert result.snapshot.card["kind"] == "period"
     assert "קדמית בלאונר 18" in result.snapshot.card["title"]
     kit.choose("start_today")
-    kit.choose("confirm")
+    kit.choose("top")
     [apartment] = kit.store.apartments(ACCOUNT)
     assert apartment["name"] == "קדמית"
 
@@ -82,7 +82,7 @@ def test_a_property_name_typed_on_the_summary_corrects_it_and_keeps_the_apartmen
     assert result.snapshot.card["kind"] == "period"
     assert "קדמית בלאונר 18" in result.snapshot.card["title"]
     kit.choose("start_today")
-    kit.choose("confirm")
+    kit.choose("top")
     [prop] = kit.store.properties(ACCOUNT)
     [apartment] = kit.store.apartments(ACCOUNT)
     assert (prop["name"], apartment["name"]) == ("לאונר 18", "קדמית")
@@ -107,8 +107,8 @@ def test_new_serial_asks_property_then_apartment_then_period(env, ddb):
     ]
     result = kit.choose("start_today")
     assert result.snapshot.card["kind"] == "link"
-    assert options(result.snapshot.card) == ["top", "bottom", "confirm"]
-    kit.choose("confirm")
+    assert options(result.snapshot.card) == ["top", "bottom"]
+    kit.choose("top")
     [prop] = kit.store.properties(ACCOUNT)
     [apartment] = kit.store.apartments(ACCOUNT)
     assert (prop["name"], apartment["name"], apartment["property_id"]) == (
@@ -192,8 +192,7 @@ def test_link_saves_opening_reading_with_opens_period(env, ddb):
     kit.say("עורף")
     result = kit.say("השכירות מתחילה ב-1/11")
     assert result.snapshot.card["kind"] == "link"
-    kit.choose("bottom")
-    result = kit.choose("confirm")
+    result = kit.choose("bottom")
     [saved] = kit.readings("E-392")
     assert (saved["date"], saved["value"], saved["opens_period"]) == (
         "2026-10-29",
@@ -220,7 +219,6 @@ def test_link_after_a_retake_saves_the_chain(env, ddb):
     kit.say("עורף")
     kit.say("השכירות מתחילה ב-1/11")
     kit.choose("bottom")
-    kit.choose("confirm")
     [saved] = kit.readings("E-392")
     assert saved["failed_photos"] == kit.photo_keys()[:1]
 
@@ -295,7 +293,7 @@ def test_a_plain_date_answers_the_period_start(env, ddb):
     kit.say("עורף")
     result = kit.say("1/9/2026")
     assert result.snapshot.card["kind"] == "link"
-    kit.choose("confirm")
+    kit.choose("top")
     [apartment] = kit.store.apartments(ACCOUNT)
     assert [p["start"] for p in kit.periods(apartment)] == ["2026-09-01"]
     assert kit.readings("E-392")[0]["opens_period"] == "2026-09-01"
@@ -315,7 +313,7 @@ def test_period_starting_on_the_first_of_next_month(env, ddb):
     kit.say("הגפן 7")
     kit.say("עורף")
     kit.choose("start_month")
-    kit.choose("confirm")
+    kit.choose("top")
     [apartment] = kit.store.apartments(ACCOUNT)
     assert [p["start"] for p in kit.periods(apartment)] == ["2026-11-01"]
 
@@ -370,8 +368,7 @@ def test_a_typed_button_label_picks_the_display_number_and_saves_the_choice(env,
     assert "עליון: 392,691 (מסומן)" in card_text(result.snapshot.card)
     assert "תחתון: 392,693 (מסומן)" not in card_text(result.snapshot.card)
     kit.say("העליון")
-    assert "\nכפתורים: המספר העליון | המספר התחתון | אישור\n" in kit.model.classified[-1][1]
-    kit.choose("confirm")
+    assert "\nכפתורים: המספר העליון | המספר התחתון\n" in kit.model.classified[-1][1]
     assert kit.store.meter(ACCOUNT, "E-392")["display_choice"] == 0
 
 
@@ -383,7 +380,7 @@ def test_a_start_before_the_photo_dates_the_opening_reading_at_the_start(env, dd
     kit.say("עורף")
     result = kit.say("1/9")
     assert "תאריך: 01/09/2026" in card_text(result.snapshot.card)
-    kit.choose("confirm")
+    kit.choose("top")
     [saved] = kit.readings("E-392")
     assert (saved["date"], saved["opens_period"]) == ("2026-09-01", "2026-09-01")
 

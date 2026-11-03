@@ -157,10 +157,15 @@ def make_card(
     text: tuple[str, list[str]],
     options: list[str],
     labels: dict[str, str] | None = None,
+    default: str | None = None,
 ) -> dict:
     """labels names the options whose label depends on the item (a date); the rest take their
-    fixed label."""
+    fixed label. default is the option the browser highlights as the expected answer, confirm
+    when the card offers it and none is given."""
     title, lines = text
+    if default is None and "confirm" in options:
+        default = "confirm"
+    assert default is None or default in options, (default, options)
     labels = {
         **{o: texts.OPTION_LABELS[o] for o in options if o in texts.OPTION_LABELS},
         **(labels or {}),
@@ -172,6 +177,7 @@ def make_card(
         "title": title,
         "lines": lines,
         "options": [{"id": option, "label": labels[option]} for option in options],
+        "default": default,
     }
 
 
@@ -376,7 +382,9 @@ def readable(candidate) -> bool:
 def propose(data, display_choice) -> bool:
     """Sets data's value, position and alternatives from the photo's candidates: the saved
     display position, else both numbers of a two-number display with the top one preselected,
-    else the single counter. Returns False when a needed number is unreadable."""
+    else the single counter. A two-number display showing one number twice offers no choice, so
+    it reads as a single counter with no position to remember. Returns False when a needed
+    number is unreadable."""
     values = {c["position"]: c["value"] for c in data["candidates"] if readable(c)}
     if display_choice is None:
         wanted = [c["position"] for c in data["candidates"]]
@@ -386,6 +394,8 @@ def propose(data, display_choice) -> bool:
         return False
     if len(wanted) == 1:
         data.update(value=values[wanted[0]], position=wanted[0], alternatives=None)
+    elif len({values[position] for position in wanted}) == 1:
+        data.update(value=values[wanted[0]], position=None, alternatives=None)
     else:
         alternatives = {position: values[position] for position in POSITIONS}
         data.update(value=values["top"], position="top", alternatives=alternatives)
@@ -413,7 +423,8 @@ def edit_read(data, field, value):
 
 
 def choose_position(data, position):
-    """The alternatives stay so the other number can still be pressed; position marks the choice."""
+    """The alternatives stay, so a later step that returns to the reading card shows both
+    numbers again with the chosen one marked."""
     data.update(value=data["alternatives"][position], position=position)
 
 
@@ -431,8 +442,11 @@ def reading_text(data):
 
 
 def reading_options(data) -> list[str]:
-    edits = [] if data["alternatives"] is None else list(POSITIONS)
-    return [*edits, "confirm"]
+    return ["confirm"] if data["alternatives"] is None else list(POSITIONS)
+
+
+def reading_default(data) -> str:
+    return "confirm" if data["alternatives"] is None else data["position"]
 
 
 def by_id(records, record_id) -> dict:

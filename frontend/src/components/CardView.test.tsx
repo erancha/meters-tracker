@@ -43,4 +43,32 @@ describe("CardView", () => {
     expect(chip).toHaveClass("on");
     expect(chip).toBeDisabled();
   });
+
+  it("renders the default option as the primary button and the rest as chips", () => {
+    const twoNumbers = card({
+      options: [{ id: "top", label: "המספר העליון" }, { id: "bottom", label: "המספר התחתון" }],
+      default: "top",
+    });
+    render(<CardView card={twoNumbers} onChoose={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "המספר העליון" })).toHaveClass("primary");
+    expect(screen.getByRole("button", { name: "המספר התחתון" })).toHaveClass("chip");
+    expect(screen.queryByRole("button", { name: "אישור" })).toBeNull();
+  });
+
+  it("shows an answered default as a done mark", () => {
+    const twoNumbers = card({
+      options: [{ id: "top", label: "המספר העליון" }, { id: "bottom", label: "המספר התחתון" }],
+      default: "top",
+    });
+    render(<CardView card={twoNumbers} onChoose={() => {}} answer="המספר העליון" />);
+
+    expect(screen.getByText("✓ המספר העליון")).toHaveClass("done");
+  });
+
+  it("shows every option as a chip on a card without a default", () => {
+    render(<CardView card={card({ default: null })} onChoose={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "אישור" })).toHaveClass("chip");
+  });
 });

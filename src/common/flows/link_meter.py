@@ -6,13 +6,14 @@ next_step derives the step from what is filled, so a typed answer and a correcti
 thing on any step: an edit of a field, then next_step. A property or apartment edit forgets the
 period answered for the earlier name, so a typo is fixed by typing the name again rather than by
 cancelling.
-Nothing is written until the final confirm; then the property, apartment and period are created
-as needed, the meter and its opening reading are saved, and a live meter of the same type in the
-apartment is retired as replaced on the reading's date. A serial that another photo linked or a
-correction made known while this item waited, or that a meter held before a correction renamed it,
-sends the item back to the meter photo flow as an ordinary reading of that meter: at its next
-answer, and for a correction by the same person as soon as it is saved. The names typed for a
-saved property or apartment follow that record when a correction renames it.
+Nothing is written until the final confirm, or a number pressed on a two-number display; then
+the property, apartment and period are created as needed, the meter and its opening reading are
+saved, and a live meter of the same type in the apartment is retired as replaced on the
+reading's date. A serial that another photo linked or a correction made known while this item
+waited, or that a meter held before a correction renamed it, sends the item back to the meter
+photo flow as an ordinary reading of that meter: at its next answer, and for a correction by the
+same person as soon as it is saved. The names typed for a saved property or apartment follow that
+record when a correction renames it.
 """
 
 from common import texts
@@ -33,6 +34,7 @@ from common.flows import (
     meter_photo,
     not_understood,
     put_period,
+    reading_default,
     reading_options,
     save_reading,
     summary,
@@ -92,7 +94,8 @@ def card(item) -> dict:
     kind = "replaced" if step == "link" and data["replaced_serial"] is not None else step
     text, options = STEPS[step]
     labels = texts.start_labels(data["starts"]) if step == "period" else None
-    return make_card(item, kind, text(data), options(data), labels)
+    default = reading_default(data) if step == "link" else None
+    return make_card(item, kind, text(data), options(data), labels, default)
 
 
 def form(item) -> dict:
@@ -225,7 +228,7 @@ def answer(engine, user, item, action) -> list[Reply]:
         return next_step(engine, user, item)
     if step == "link" and key in POSITIONS:
         choose_position(data, key)
-        return next_step(engine, user, item)
+        return _link(engine, user, item)
     if step == "link" and key == "confirm":
         return _link(engine, user, item)
     return not_understood(card(item), key)

@@ -263,20 +263,36 @@ def test_a_close_card_edit_to_a_closing_value_is_left_unapplied_and_the_card_rep
     assert kit.readings(SERIAL)[-1]["value"] == 1100
 
 
-def test_two_number_choice_can_be_undone_by_pressing_the_other(env, ddb):
+def test_two_number_card_offers_the_numbers_with_the_upper_as_default(env, ddb):
+    kit = Kit()
+    apartment = kit.apartment(start=OPENED)
+    kit.meter(apartment, "E-392", "electricity", [reading(OPENED, 392000, opens=OPENED)])
+    card = kit.send_photo(electricity(top=392691, bottom=392693)).snapshot.card
+    assert options(card) == ["top", "bottom"]
+    assert card["default"] == "top"
+
+
+def test_pressing_a_display_number_saves_it(env, ddb):
     kit = Kit()
     apartment = kit.apartment(start=OPENED)
     kit.meter(apartment, "E-392", "electricity", [reading(OPENED, 392000, opens=OPENED)])
     kit.send_photo(electricity(top=392691, bottom=392693))
-    card = kit.choose("bottom").snapshot.card
-    assert options(card) == ["top", "bottom", "confirm"]
-    assert "תחתון: 392,693 (מסומן)" in card_text(card)
-    card = kit.choose("top").snapshot.card
-    assert "עליון: 392,691 (מסומן)" in card_text(card)
-    assert "תחתון: 392,693 (מסומן)" not in card_text(card)
+    assert kit.choose("bottom").snapshot.card is None
+    assert kit.readings("E-392")[-1]["value"] == 392693
+    assert kit.store.meter(ACCOUNT, "E-392")["display_choice"] == 1
+
+
+def test_equal_display_numbers_get_a_one_number_card(env, ddb):
+    kit = Kit()
+    apartment = kit.apartment(start=OPENED)
+    kit.meter(apartment, "E-392", "electricity", [reading(OPENED, 392000, opens=OPENED)])
+    card = kit.send_photo(electricity(top=392691, bottom=392691)).snapshot.card
+    assert options(card) == ["confirm"]
+    assert card["default"] == "confirm"
+    assert "בצג שני מספרים" not in card_text(card)
     kit.choose("confirm")
     assert kit.readings("E-392")[-1]["value"] == 392691
-    assert kit.store.meter(ACCOUNT, "E-392")["display_choice"] == 0
+    assert kit.store.meter(ACCOUNT, "E-392")["display_choice"] is None
 
 
 def test_meter_type_edit_changes_the_card(env, ddb):
