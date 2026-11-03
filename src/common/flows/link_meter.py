@@ -5,8 +5,10 @@ Steps: property -> apartment -> period (only when the apartment has no open peri
 next_step derives the step from what is filled, so a typed answer and a correction are the same
 thing on any step: an edit of a field, then next_step. A property or apartment edit forgets the
 period answered for the earlier name, so a typo is fixed by typing the name again rather than by
-cancelling. The property and apartment questions offer the existing names as buttons, and a new
-typed name close to an existing one first asks which was meant (property_near, apartment_near).
+cancelling. The property and apartment questions offer the existing names as buttons; the
+apartment question also offers the label handwritten beside the meter as a new apartment's name.
+A new typed name close to an existing one first asks which was meant (property_near,
+apartment_near).
 A summary whose reading is dated after the period it would open ends offers no confirm and asks
 for the reading's date.
 Nothing is written until the final confirm, or a number pressed on a two-number display; then
@@ -107,6 +109,26 @@ def _name_options(d) -> dict[str, str]:
     return {f"name_{i}": name for i, name in enumerate(d["choices"])}
 
 
+# The apartment question's button for the handwritten label, which the owner usually writes
+# beside the meter to name the apartment.
+LABEL_OPTION = "name_label"
+
+
+def _label_name(d) -> str | None:
+    """The handwritten label as a new apartment's name; None when the photo has no label or it
+    already names an apartment of the property, whose own button offers it."""
+    label = d["handwritten_label"]
+    return None if label is None or label in d["choices"] else label
+
+
+def _apartment_options(d) -> dict[str, str]:
+    """Option id -> the name its button answers the apartment question with."""
+    options = _name_options(d)
+    if _label_name(d) is not None:
+        options[LABEL_OPTION] = _label_name(d)
+    return options
+
+
 def _near_text(d):
     field, typed, match = d["near"]
     return texts.near_name(field, typed, match)
@@ -120,7 +142,7 @@ STEPS = {
     "property_near": (_near_text, lambda d: NEAR_OPTIONS),
     "apartment": (
         lambda d: texts.link_apartment(d["property"], d["choices"]),
-        lambda d: list(_name_options(d)),
+        lambda d: list(_apartment_options(d)),
     ),
     "apartment_near": (_near_text, lambda d: NEAR_OPTIONS),
     "period": (
@@ -138,8 +160,13 @@ def card(item) -> dict:
     default = reading_default(data) if step == "link" and not _after_period(data) else None
     if step == "period":
         labels = texts.start_labels(data["starts"])
-    elif step in ("property", "apartment"):
+    elif step == "property":
         labels = _name_options(data)
+    elif step == "apartment":
+        labels = _name_options(data)
+        if _label_name(data) is not None:
+            labels[LABEL_OPTION] = texts.new_name("apartment", _label_name(data))
+            default = LABEL_OPTION
     elif step in ("property_near", "apartment_near"):
         field, typed, match = data["near"]
         labels = {"near_match": match, "near_new": texts.new_name(field, typed)}
@@ -317,8 +344,11 @@ def answer(engine, user, item, action) -> list[Reply]:
         return drop(engine, user, item, [Reply(texts.discarded())])
     if key == "edit":
         return apply_edits(engine, user, item, intent.operations)
-    if step in ("property", "apartment") and key in _name_options(data):
+    if step == "property" and key in _name_options(data):
         edit(engine, user, item, step, _name_options(data)[key])
+        return next_step(engine, user, item)
+    if step == "apartment" and key in _apartment_options(data):
+        edit(engine, user, item, step, _apartment_options(data)[key])
         return next_step(engine, user, item)
     if step in ("property_near", "apartment_near") and key in NEAR_OPTIONS:
         field, typed, match = data["near"]

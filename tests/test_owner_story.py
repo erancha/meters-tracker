@@ -357,7 +357,7 @@ def test_asking_about_the_apartment_question_explains_it(env, ddb):
     assert card["kind"] == "apartment"
     assert card["title"] == f"לאיזו דירה ב{PROPERTY}?"
     assert card["lines"] == ["אין עדיין דירות בנכס. מהו מזהה הדירה?"]
-    assert card["options"] == []
+    assert _labelled(card) == [("name_label", f"דירה חדשה: {LABEL}")]
     result = owner.say("מה זה?", IntentResult(intent="explain"))
     assert _texts(result) == [texts.EXPLANATIONS["apartment"], card_text(card)]
     assert result.snapshot.card == card

@@ -19,8 +19,13 @@ lower one, since the drum has not finished its step; when it is caught between 9
 digit to its left does not settle it, set unreadable_digits.
 
 Return the serial number printed on the meter, and set serial_unreadable when it cannot be read.
-Return every candidate counter value with its position, and a note for anything doubtful. Return
-any handwritten label near the meter. Use meter_type "unknown" when the family is not clear."""
+Return every candidate counter value with its position, and a note for anything doubtful. Use
+meter_type "unknown" when the family is not clear.
+
+Text handwritten on or beside the meter, in Hebrew or English, usually names the apartment the
+meter serves ("כניסה מזרח", "unit1"). Return it as handwritten_label exactly as written, never a
+description of it. Leave handwritten_label null when there is no such text or it cannot be read
+with certainty."""
 
 READ_STATEMENT = """You read a photo that may be a previous utility statement for an apartment, in
 Hebrew. Report only what is written; never guess a number.

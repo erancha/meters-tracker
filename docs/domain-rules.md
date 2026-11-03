@@ -41,8 +41,9 @@ charge, with the exact values the code uses. The arithmetic lives in
 
 Each photo is its own turn. The model returns the meter type, the serial, every counter value it
 sees with its position on the display (`top` and `bottom` on a two-number electricity display,
-`single` on a water counter), whether any digit is unreadable, and any handwritten label. A note
-sent with the photo that names a date sets the reading date; otherwise the reading is dated
+`single` on a water counter), whether any digit is unreadable, and the text handwritten beside
+the meter as written, or none when it cannot be read; owners write the apartment's name there. A
+note sent with the photo that names a date sets the reading date; otherwise the reading is dated
 the day the photo was sent, which a retry on a later day keeps.
 
 - **Statement.** A photo with no known meter type and no serial is read again as a previous
@@ -69,10 +70,12 @@ the day the photo was sent, which a retry on a later day keeps.
   `default_period_months`, or the apartment's own length when it exists). A new period that starts
   before the photo's date dates the opening reading at the start, since the photo then stands for
   the meter on that day; a later start keeps the photo's date, and a date equal to the start shows
-  once, on the opening line. The questions offer the existing names as buttons. A typed name that
-  is not an existing one but is a prefix of one, or within two single-letter edits of one, asks
-  whether that name was meant; a name chosen as new is not asked about again. A reading dated after
-  the last day of the period it would open is refused on the summary, which asks for its date. A
+  once, on the opening line. The questions offer the existing names as buttons; the apartment
+  question also offers the handwritten label as a new apartment's name, highlighted, unless it
+  already names one of the property's apartments. A typed name that is not an existing one but is
+  a prefix of one, or within two single-letter edits of one, asks whether that name was meant; a
+  name chosen as new is not asked about again. A reading dated after the last day of the period
+  it would open is refused on the summary, which asks for its date. A
   reading dated inside a closed period, before its close, stands for the meter on the next period
   until a later reading of the meter inside the closed period arrives; that reading's save flags
   the meter's readings from the period dates as the close would have, so the closed period gets the

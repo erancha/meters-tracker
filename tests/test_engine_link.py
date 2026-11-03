@@ -468,6 +468,28 @@ def test_the_place_questions_offer_existing_names_as_buttons(env, ddb):
     assert kit.choose("name_0").snapshot.card["kind"] == "link"
 
 
+def test_the_apartment_question_offers_the_label_written_beside_the_meter(env, ddb):
+    kit = Kit([edit("property", "לאונר 18")])
+    kit.apartment(name="קדמית", property_name="לאונר 18")
+    kit.send_photo(water(serial="W-9", label="כניסה מזרח"))
+    card = kit.say("לאונר 18").snapshot.card
+    assert [o["label"] for o in card["options"]] == ["קדמית", "דירה חדשה: כניסה מזרח"]
+    assert card["default"] == "name_label"
+    assert kit.choose("name_label").snapshot.card["kind"] == "period"
+    kit.choose("start_today")
+    kit.choose("confirm")
+    names = {a["name"] for a in kit.store.apartments(ACCOUNT)}
+    assert names == {"קדמית", "כניסה מזרח"}
+
+
+def test_a_label_naming_an_existing_apartment_adds_no_button(env, ddb):
+    kit = Kit([edit("property", "לאונר 18")])
+    kit.apartment(name="קדמית", property_name="לאונר 18")
+    kit.send_photo(water(serial="W-9", label="קדמית"))
+    card = kit.say("לאונר 18").snapshot.card
+    assert options(card) == ["name_0"]
+
+
 def test_a_typed_name_close_to_an_existing_one_asks_which_was_meant(env, ddb):
     kit = Kit([edit("property", "לאונר"), edit("apartment", "קדמת")])
     kit.apartment(name="קדמית", property_name="לאונר 18")
