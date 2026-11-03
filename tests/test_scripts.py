@@ -4,6 +4,7 @@ results is checked offline. Also runs the scripts that act on a deployed stack o
 with --help and with arguments they refuse, both of which stop before any settings file or AWS
 call."""
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -176,20 +177,24 @@ def helper(tmp_path):
     """Runs a copy of aws-helper.sh under a temporary root, so it finds stub credentials there
     and the fake aws command, which records each call, first on its PATH."""
     (tmp_path / "scripts").mkdir()
-    for name in ("aws-helper.sh", "common.sh"):
+    for name in ("aws-helper.sh", "aws_helper.py", "common.sh"):
         (tmp_path / "scripts" / name).write_text((SCRIPTS / name).read_text())
     (tmp_path / "scripts" / "aws-config.sh").write_text(
         "export AWS_ACCESS_KEY_ID=AKIAEXAMPLE\n"
         "export AWS_SECRET_ACCESS_KEY=s\nexport AWS_DEFAULT_REGION=eu-central-1\n"
     )
     aws = tmp_path / "aws"
-    aws.write_text(FAKE_AWS.replace("printf", 'echo "$*" >> "$AWS_CALLS"\nprintf', 1))
+    # A logs call answers with the log events, every other call with the stack lookup's answer.
+    record = 'echo "$*" >> "$AWS_CALLS"\n'
+    logs = '[ "$1" != logs ] || { printf \'%s\' "$FAKE_LOGS"; exit 0; }\n'
+    aws.write_text(FAKE_AWS.replace("printf", record + logs + "printf", 1))
     aws.chmod(0o755)
     calls = tmp_path / "calls"
 
-    def run(*args, stdout="", stderr="", status=0):
+    def run(*args, stdout="", stderr="", status=0, logs=""):
         env = {
             "HOME": str(tmp_path),
+            "FAKE_LOGS": logs,
             "PATH": f"{tmp_path}:/usr/bin:/bin",
             "AWS_CALLS": str(calls),
             "FAKE_STDOUT": stdout,
@@ -258,3 +263,37 @@ def test_helper_listing_names_the_deploy_for_a_missing_stack(helper):
     )
     assert result.returncode == 1
     assert "meters-tracker-dev" in result.stderr and "./scripts/deploy.sh dev" in result.stderr
+
+
+def _model_call_event(timestamp, kind, cost):
+    line = {
+        "event": "model_call",
+        "kind": kind,
+        "model": "anthropic:claude-opus-5-5",
+        "input_tokens": 1000,
+        "output_tokens": 100,
+        "seconds": 2.5,
+        "cost": cost,
+    }
+    record = {"timestamp": timestamp, "level": "INFO", "message": json.dumps(line)}
+    return f"{timestamp[:19]} {json.dumps(record)}\n"
+
+
+def test_helper_sums_the_model_calls_by_day_and_kind(helper):
+    events = (
+        _model_call_event("2026-11-02T22:00:00Z", "read_meter", 0.01)
+        + _model_call_event("2026-11-03T08:00:00Z", "classify", 0.02)
+        + _model_call_event("2026-11-03T09:00:00Z", "classify", 0.03)
+    )
+    result = helper("--costs", "--since", "2d", stdout="fn-1", logs=events)
+    assert result.returncode == 0, result.stderr
+    tail = helper.calls.read_text().splitlines()[-1]
+    assert tail.startswith("logs tail /aws/lambda/fn-1 ")
+    assert "--since 2d" in tail and "--filter-pattern model_call" in tail
+    rows = [line.split() for line in result.stdout.splitlines()]
+    assert ["2026-11-02", "1", "1000", "100", "0.0100"] in rows
+    assert ["2026-11-03", "2", "2000", "200", "0.0500"] in rows
+    assert ["classify", "2", "2000", "200", "0.0500"] in rows
+    assert ["read_meter", "1", "1000", "100", "0.0100"] in rows
+    assert ["total", "3", "3000", "300", "0.0600"] in rows
+    assert "PRICE_PER_MILLION in src/common/model.py" in result.stderr

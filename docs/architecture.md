@@ -218,9 +218,8 @@ recorded messages in
   the day.
 - **Nothing runs on a clock.** The only time-driven behavior, the daily greeting, is computed
   when the chat loads.
-- **Logging.** The api Lambda logs JSON, and the runtime drops its application lines below
-  WARN, so its INFO request lines stay hidden until [Development](development.md#logs) raises
-  the level.
+- **Logging.** The api Lambda logs JSON at INFO: a line per request and a line per model call
+  with its tokens and cost, which `aws-helper.sh --costs` sums ([Development](development.md#logs)).
 
 ## Storage
 

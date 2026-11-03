@@ -76,7 +76,7 @@ def set_environment(monkeypatch):
     monkeypatch.setenv("AWS_DEFAULT_REGION", REGION)
     monkeypatch.setenv("APP_CONFIG_PATH", "config/app.json")
     monkeypatch.setenv("LAMBDA_TIMEOUT_SECONDS", "60")
-    monkeypatch.setenv("LLM_MODEL", "fake:test-model")
+    monkeypatch.setenv("LLM_MODEL", "anthropic:claude-opus-5-5")
 
 
 @pytest.fixture

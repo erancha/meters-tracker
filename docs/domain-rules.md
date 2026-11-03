@@ -381,3 +381,19 @@ the effective date.
   units and its charge now. The earlier charge is left out: a tariff changes only the charge on
   units the line already names, and a correction's card is where figures stand beside the ones
   they replace.
+
+## Model call cost
+
+Every call to the model, a refused one included since it is billed, costs its input tokens at the
+model's input price plus its output tokens at its output price; reasoning tokens count as output.
+The prices are dollars per million tokens in `PRICE_PER_MILLION` in `src/common/model.py`:
+
+| Model | Input | Output |
+|---|---|---|
+| `claude-opus-5-5` | 4.00 | 20.00 |
+| `gpt-6.1-sol` | 2.00 | 10.00 |
+| `gpt-6-astra` | 10.00 | 50.00 |
+
+A model missing from the table cannot be built: the api Lambda refuses every request on such an
+`LLM_MODEL`, and the error names the table. A call the provider fails outright is not billed and
+is not counted.

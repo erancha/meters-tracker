@@ -336,7 +336,7 @@ def test_retake_after_unreadable_is_recorded_on_the_saved_reading(env, ddb):
     kit.choose("confirm")
     saved = kit.readings("W-1250")[-1]
     assert saved["failed_photos"] == kit.photo_keys()[:1]
-    assert saved["model"] == "fake:test-model"
+    assert saved["model"] == "anthropic:claude-opus-5-5"
 
 
 def test_two_failures_then_success_keep_both_keys_in_order(env, ddb):
@@ -382,7 +382,7 @@ def test_typed_value_marks_the_saved_photo_as_failed(env, ddb):
     kit.choose("confirm")
     saved = kit.readings("W-1250")[-1]
     assert saved["failed_photos"] == [saved["image_key"]]
-    assert saved["model"] == "fake:test-model"
+    assert saved["model"] == "anthropic:claude-opus-5-5"
 
 
 def test_choosing_the_other_display_number_is_not_a_failure(env, ddb):

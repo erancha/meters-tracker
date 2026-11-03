@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Tail or locate the CloudWatch logs of the deployed Lambda functions.
+# Tail or locate the CloudWatch logs of the deployed Lambda functions, or sum the model spend.
 #
 #   ./scripts/aws-helper.sh --logs <target> [env] [--since 1h] [--follow]
 #                           [--errors | --filter <pattern>]
+#   ./scripts/aws-helper.sh --costs [env] [--since 1h]
 #   ./scripts/aws-helper.sh --log-group <target> [env]
 #   ./scripts/aws-helper.sh --functions [env]
 #
@@ -15,6 +16,10 @@
 #   --logs <target>       Tail the function's CloudWatch log group
 #   --log-group <target>  Print the function's log group path
 #   --functions           List the deployed Lambda functions of both stacks
+#   --costs               Sum the api function's model calls by UTC day and by kind of call:
+#                         calls, tokens in and out, dollars at the prices in
+#                         src/common/model.py, which a provider price change does not reach
+#                         until the table is updated and deployed
 #   --since <duration>    How far back to read logs (aws logs tail syntax; default 1h)
 #   --follow              Keep streaming new log events
 #   --errors              Show only warning and error events (a --filter preset)
@@ -25,6 +30,7 @@
 #   ./scripts/aws-helper.sh --logs presignup --errors --since 1d
 #   ./scripts/aws-helper.sh --logs api dev --errors
 #   ./scripts/aws-helper.sh --log-group api
+#   ./scripts/aws-helper.sh --costs --since 1d
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=common.sh
@@ -40,6 +46,7 @@ while [ $# -gt 0 ]; do
     --logs)      ACTION=logs; TARGET="$2"; shift 2 ;;
     --log-group) ACTION=log-group; TARGET="$2"; shift 2 ;;
     --functions) ACTION=functions; shift ;;
+    --costs)     ACTION=costs; TARGET=api; shift ;;
     --since)     SINCE="$2"; shift 2 ;;
     --follow)    FOLLOW=1; shift ;;
     --errors)    FILTER="?ERROR ?WARNING"; shift ;;
@@ -86,6 +93,15 @@ case "$ACTION" in
     [ -z "$FILTER" ] || args+=(--filter-pattern "$FILTER")
     group=$(log_group)
     aws logs tail "$group" "${args[@]}"
+    ;;
+  costs)
+    resolve "$TARGET"
+    group=$(log_group)
+    aws logs tail "$group" --since "$SINCE" --format short --filter-pattern model_call \
+      | python3 "$ROOT/scripts/aws_helper.py"
+    echo "warning: the dollars use the prices in PRICE_PER_MILLION in src/common/model.py, last" \
+         "checked on the date noted there; a provider price change is not seen until that table" \
+         "is updated and deployed" >&2
     ;;
   log-group)
     resolve "$TARGET"

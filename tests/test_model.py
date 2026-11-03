@@ -3,6 +3,8 @@ shape and refusal handling against a stubbed SDK client."""
 
 import base64
 import hashlib
+import json
+import logging
 from datetime import date
 from types import SimpleNamespace
 
@@ -23,11 +25,13 @@ from common.model import (
     StatementResult,
     Usage,
     build_model,
+    call_cost,
     model_from_env,
 )
 
 IMAGE = b"\xff\xd8fake-jpeg"
 USAGE = SimpleNamespace(input_tokens=1500, output_tokens=200)
+MODEL_IDS = {ClaudeModel: "claude-opus-5-5", OpenAIModel: "gpt-6.1-sol"}
 
 
 def _reading():
@@ -99,6 +103,17 @@ def test_build_model_rejects_a_setting_it_cannot_serve(spec):
         build_model(spec, "key")
 
 
+def test_build_model_refuses_a_model_with_no_listed_price():
+    with pytest.raises(
+        ValueError, match="no listed price.*PRICE_PER_MILLION in src/common/model.py"
+    ):
+        build_model("anthropic:claude-unlisted", "key")
+
+
+def test_call_cost_prices_input_and_output_tokens_per_million():
+    assert call_cost("claude-opus-5-5", Usage(1500, 200)) == pytest.approx(0.01)
+
+
 @pytest.mark.parametrize("missing", ["LLM_MODEL", "LLM_API_KEY"])
 def test_model_from_env_names_a_missing_variable(monkeypatch, missing):
     monkeypatch.setenv("LLM_MODEL", "openai:gpt-6.1-sol")
@@ -167,7 +182,7 @@ def test_classify_tells_the_model_today_and_the_pending_card(monkeypatch, cls, s
         usage=USAGE,
     )
     calls = (_stub_anthropic if stub == "anthropic" else _stub_openai)(monkeypatch, response)
-    assert cls("key", "m").classify("כן", "כרטיס", date(2026, 10, 29)) is intent
+    assert cls("key", MODEL_IDS[cls]).classify("כן", "כרטיס", date(2026, 10, 29)) is intent
     _, call = calls
     content = call["messages"][0]["content"] if stub == "anthropic" else call["input"][1]["content"]
     assert content == "Today: 2026-10-29\n\nכן\n\nContext:\nכרטיס"
@@ -220,7 +235,7 @@ def test_model_keeps_the_last_calls_usage(monkeypatch, cls, stub):
         usage=USAGE,
     )
     stub(monkeypatch, response)
-    model = cls("key", "m")
+    model = cls("key", MODEL_IDS[cls])
     assert model.last_usage is None
     model.read_meter(IMAGE, "image/jpeg")
     assert model.last_usage == Usage(1500, 200)
@@ -236,7 +251,7 @@ def test_claude_model_builds_statement_request(monkeypatch):
     statement = _statement()
     response = SimpleNamespace(stop_reason="end_turn", parsed_output=statement, usage=USAGE)
     calls = _stub_anthropic(monkeypatch, response)
-    assert ClaudeModel("key", "m").read_statement(IMAGE, "image/png") is statement
+    assert ClaudeModel("key", "claude-opus-5-5").read_statement(IMAGE, "image/png") is statement
     _, call = calls
     assert call["system"] == prompts.READ_STATEMENT
     assert call["output_format"] is StatementResult
@@ -253,7 +268,7 @@ def test_openai_model_builds_statement_request(monkeypatch):
         usage=USAGE,
     )
     calls = _stub_openai(monkeypatch, response)
-    assert OpenAIModel("key", "m").read_statement(IMAGE, "image/png") is statement
+    assert OpenAIModel("key", "gpt-6.1-sol").read_statement(IMAGE, "image/png") is statement
     _, call = calls
     assert call["text_format"] is StatementResult
     system, user = call["input"]
@@ -305,3 +320,49 @@ def test_strict_schema_carries_no_non_null_default():
         return found
 
     assert non_null_defaults(to_strict_json_schema(IntentResult)) == []
+
+
+def _answered(result):
+    return SimpleNamespace(
+        stop_reason="end_turn",
+        parsed_output=result,
+        output=[_message(SimpleNamespace(type="output_text"))],
+        output_parsed=result,
+        usage=USAGE,
+    )
+
+
+def _call_lines(caplog):
+    return [json.loads(r.getMessage()) for r in caplog.records if r.getMessage().startswith("{")]
+
+
+@pytest.mark.parametrize(
+    "cls, stub, provider",
+    [(ClaudeModel, _stub_anthropic, "anthropic"), (OpenAIModel, _stub_openai, "openai")],
+)
+def test_each_call_logs_its_kind_model_tokens_seconds_and_cost(
+    monkeypatch, caplog, cls, stub, provider
+):
+    stub(monkeypatch, _answered(_reading()))
+    model = cls("key", MODEL_IDS[cls])
+    with caplog.at_level(logging.INFO, logger="common.model"):
+        model.read_meter(IMAGE, "image/jpeg")
+        model.classify("כן", "", date(2026, 10, 29))
+    meter, classify = _call_lines(caplog)
+    assert meter["event"] == "model_call"
+    assert (meter["kind"], classify["kind"]) == ("read_meter", "classify")
+    assert meter["model"] == f"{provider}:{MODEL_IDS[cls]}"
+    assert (meter["input_tokens"], meter["output_tokens"]) == (1500, 200)
+    assert meter["seconds"] >= 0
+    assert meter["cost"] == pytest.approx(call_cost(MODEL_IDS[cls], Usage(1500, 200)))
+
+
+def test_a_refused_call_logs_its_line(monkeypatch, caplog):
+    response = SimpleNamespace(
+        stop_reason="refusal", stop_details="policy", parsed_output=None, usage=USAGE
+    )
+    _stub_anthropic(monkeypatch, response)
+    with caplog.at_level(logging.INFO, logger="common.model"), pytest.raises(ModelRefused):
+        ClaudeModel("key", "claude-opus-5-5").read_statement(IMAGE, "image/png")
+    (line,) = _call_lines(caplog)
+    assert (line["kind"], line["input_tokens"]) == ("read_statement", 1500)

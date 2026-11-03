@@ -4,7 +4,8 @@ account's own photos.
 
 The caller's identity comes exclusively from the JWT claims the API Gateway authorizer verified;
 the request body never names a user, and an address Google has not verified is refused before it
-is resolved to an account. The engine is built per invocation from the environment.
+is resolved to an account. The engine is built per invocation from the environment, and a model
+setting it cannot serve or price fails every request before any work.
 Photos are validated here, before the engine, so a rejected upload writes nothing to S3 or the
 pending table."""
 
@@ -22,7 +23,7 @@ from common import access
 from common.engine import Action, AlreadyHandled, Choice, Engine, MessageFailed
 from common.files import Files
 from common.log import get_logger
-from common.model import api_key_from_ssm, build_model
+from common.model import api_key_from_ssm, build_model, parse_model_spec
 from common.notify import Mailer
 from common.store import Store
 from common.webapi import response
@@ -39,6 +40,7 @@ class _Rejected(Exception):
 
 
 def handler(event, context):
+    parse_model_spec(os.environ["LLM_MODEL"])
     claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
     route = event["routeKey"]
     logger.info("request route=%s sub=%s", route, claims["sub"])

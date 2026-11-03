@@ -37,11 +37,11 @@ Globals:
     Architectures: [arm64]
     MemorySize: 256
     Timeout: 30
-    # ApplicationLogLevel only takes effect with the JSON log format; raise it to INFO to see the
-    # request lines the code emits.
+    # ApplicationLogLevel only takes effect with the JSON log format. INFO keeps the request lines
+    # and the model_call lines that aws-helper.sh --costs sums.
     LoggingConfig:
       LogFormat: JSON
-      ApplicationLogLevel: WARN
+      ApplicationLogLevel: INFO
     Environment:
       Variables:
         ACCESS_TABLE: !Ref AccessTable

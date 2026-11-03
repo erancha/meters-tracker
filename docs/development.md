@@ -97,7 +97,7 @@ after a deploy. Each script's header documents it in full.
   three more with `--statement`. The photos are real meter photos, kept outside the repo.
 
 [`read-meter.sh`](../scripts/read-meter.sh) reads one photo through the model and prints the
-result, its time and its estimated cost; it is the quick check of a single photo.
+result, its time and its cost at the listed prices; it is the quick check of a single photo.
 
 ## Setup for deployment
 
@@ -156,7 +156,8 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
   CloudWatch logs by alias (`api`, `presignup`) or `<stack>:<logical-id>`, in the stack pair a
   bare `env` suffix names, as for `deploy.sh`. A failed lookup stops with one message naming the
   stack and the fix.
-  `./scripts/aws-helper.sh --logs api --errors --since 1d` is the quickest health check.
+  `./scripts/aws-helper.sh --logs api --errors --since 1d` is the quickest health check;
+  `--costs --since 1d` sums the model spend ([Logs](#logs)).
 - [`test.sh`](../scripts/test.sh) — the quality gate, above.
 - [`init-env.sh`](../scripts/init-env.sh) — creates the two settings files, above.
 - [`read-meter.sh <image>`](../scripts/read-meter.sh) — sends one photo through the real model
@@ -186,5 +187,14 @@ through `deploy.sh`. The values and what each controls are listed in
 
 ## Logs
 
-The api Lambda logs JSON, and the runtime keeps only its WARN lines and above. To see its
-per-request lines, raise `ApplicationLogLevel` in `scripts/template.yaml` to `INFO` and deploy.
+The api Lambda logs JSON at INFO and above: one line per request, and one line per model call
+with `"event": "model_call"`, the kind of call (`read_meter`, `read_statement`, `classify`), the
+`provider:model` value, the input and output tokens, the seconds the call took and its cost in
+dollars ([Domain rules](domain-rules.md#model-call-cost)). The spend of a stack over a span:
+
+```bash
+./scripts/aws-helper.sh --costs --since 1d
+```
+
+It prints the calls, tokens and dollars by UTC day, by kind of call, and in total; the summing is
+in `aws_helper.py` beside the script.

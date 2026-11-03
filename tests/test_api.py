@@ -215,6 +215,12 @@ def test_get_chat_does_not_build_the_model(kit, monkeypatch):
     assert api.handler(event("GET /chat"), None)["statusCode"] == 200
 
 
+def test_a_model_with_no_listed_price_stops_every_request(kit, monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "anthropic:claude-unlisted")
+    with pytest.raises(ValueError, match="PRICE_PER_MILLION in src/common/model.py"):
+        api.handler(event("GET /chat"), None)
+
+
 @pytest.mark.parametrize(
     "key",
     ["owner@x.com.evil%2Fimages%2Fa.jpg", "other%40x.com%2F..%2Fa.jpg", "%2Fowner%40x.com%2Fa.jpg"],

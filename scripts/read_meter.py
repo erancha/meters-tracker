@@ -11,23 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from common.files import EXTENSIONS
-from common.model import Usage, model_from_env
-
-# Dollars per million input and output tokens, from the providers' price pages on 2026-10-29;
-# only the models scripts/params.example.sh names. A model missing here gets no estimate.
-PRICE_PER_MILLION = {
-    "claude-opus-5-5": (4.0, 20.0),
-    "gpt-6.1-sol": (2.0, 10.0),
-    "gpt-6-astra": (10.0, 50.0),
-}
-
-
-def estimate_cost(model_id: str, usage: Usage) -> float | None:
-    """Dollars for one call at the listed prices, None for a model with no listed price."""
-    if model_id not in PRICE_PER_MILLION:
-        return None
-    per_input, per_output = PRICE_PER_MILLION[model_id]
-    return (usage.input_tokens * per_input + usage.output_tokens * per_output) / 1_000_000
+from common.model import call_cost, model_from_env
 
 
 def fail(message: str) -> None:
@@ -64,12 +48,9 @@ result = model.read_meter(path.read_bytes(), media_type)
 seconds = time.perf_counter() - started
 print(json.dumps(without_noise(result.model_dump()), indent=2, ensure_ascii=False))
 usage = model.last_usage
-cost = estimate_cost(model.model_id, usage)
-price = (
-    f"estimated cost ${cost:.4f}" if cost is not None else f"no listed price for {model.model_id}"
-)
+cost = call_cost(model.model_id, usage)
 print(
     f"{model.model_id}: {seconds:.1f} s, {usage.input_tokens} tokens in, "
-    f"{usage.output_tokens} out, {price}",
+    f"{usage.output_tokens} out, estimated cost ${cost:.4f}",
     file=sys.stderr,
 )
