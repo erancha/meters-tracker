@@ -332,6 +332,8 @@ CARDS = (
     "reading",
     "unreadable",
     "link",
+    "property_near",
+    "apartment_near",
     "period_change",
     "tariffs",
     "tariffs_ask",
@@ -1445,6 +1447,8 @@ WAITING = {
     "reading": ("meter_photo", "reading"),
     "unreadable": ("meter_photo", "unreadable"),
     "link": ("link_meter", None),
+    "property_near": ("link_meter", "property_near"),
+    "apartment_near": ("link_meter", "apartment_near"),
     "period_change": ("period_change", None),
     "tariffs": ("tariffs", "confirm"),
     "tariffs_ask": ("tariffs", "ask"),
@@ -1478,8 +1482,14 @@ def _set_up_card(run: Run, card: str):
         _photo_turn(run, owner_user, water(value, serial=meter["serial"]))
     if card == "unreadable":
         _photo_turn(run, owner_user, water(value, serial=meter["serial"], unreadable=True))
-    if card in ("link", "behind"):
+    if card in ("link", "behind", "property_near", "apartment_near"):
         _photo_turn(run, owner_user, water(40, serial="X1"))
+    # Prefixes of the seeded "הגפן 7" and "עורף", which every state holds.
+    if card == "property_near":
+        say(_edit(Operation(action="set", target="card", field="property", value="הגפן")))
+    if card == "apartment_near":
+        say(_edit(Operation(action="set", target="card", field="property", value="הגפן 7")))
+        say(_edit(Operation(action="set", target="card", field="apartment", value="עור")))
     if card == "period_change":
         say(IntentResult(intent="change_period", name="עורף", date=run.kit.today.isoformat()))
     if card == "tariffs":
@@ -2032,6 +2042,75 @@ EXPECTED_CARDS: dict[tuple[str, str, str], str] = {
     ("water_price", "unreadable", "invalid"): "unreadable:card_help",
     ("water_price", "unreadable", "missing"): "unreadable:card_help",
     ("water_price", "unreadable", "valid"): "unreadable:card_help",
+    # A near-miss question keeps asking until a name settles it: an exact name moves the link on
+    # and a known serial makes the photo that meter's reading; a value that does not fit is asked
+    # again, a price is not the card's, and any other field is kept with the question shown again.
+    ("apartment", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("apartment", "apartment_near", "missing"): "apartment_near:field_value",
+    ("apartment", "apartment_near", "valid"): "replaced:meter_name+months_phrase+number",
+    ("apartment", "property_near", "invalid"): "property_near:field_value",
+    ("apartment", "property_near", "missing"): "property_near:field_value",
+    ("apartment", "property_near", "valid"): "property_near:none",
+    ("date", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("date", "apartment_near", "missing"): "apartment_near:field_value",
+    ("date", "apartment_near", "valid"): "apartment_near:none",
+    ("date", "property_near", "invalid"): "property_near:field_value",
+    ("date", "property_near", "missing"): "property_near:field_value",
+    ("date", "property_near", "valid"): "property_near:none",
+    ("effective_date", "apartment_near", "invalid"): "apartment_near:card_help",
+    ("effective_date", "apartment_near", "missing"): "apartment_near:card_help",
+    ("effective_date", "apartment_near", "valid"): "apartment_near:card_help",
+    ("effective_date", "property_near", "invalid"): "property_near:card_help",
+    ("effective_date", "property_near", "missing"): "property_near:card_help",
+    ("effective_date", "property_near", "valid"): "property_near:card_help",
+    ("electricity_price", "apartment_near", "invalid"): "apartment_near:card_help",
+    ("electricity_price", "apartment_near", "missing"): "apartment_near:card_help",
+    ("electricity_price", "apartment_near", "valid"): "apartment_near:card_help",
+    ("electricity_price", "property_near", "invalid"): "property_near:card_help",
+    ("electricity_price", "property_near", "missing"): "property_near:card_help",
+    ("electricity_price", "property_near", "valid"): "property_near:card_help",
+    ("meter_type", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("meter_type", "apartment_near", "missing"): "apartment_near:field_value",
+    ("meter_type", "apartment_near", "valid"): "apartment_near:none",
+    ("meter_type", "property_near", "invalid"): "property_near:field_value",
+    ("meter_type", "property_near", "missing"): "property_near:field_value",
+    ("meter_type", "property_near", "valid"): "property_near:none",
+    ("months", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("months", "apartment_near", "missing"): "apartment_near:field_value",
+    ("months", "apartment_near", "valid"): "apartment_near:none",
+    ("months", "property_near", "invalid"): "property_near:field_value",
+    ("months", "property_near", "missing"): "property_near:field_value",
+    ("months", "property_near", "valid"): "property_near:none",
+    ("period_start", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("period_start", "apartment_near", "missing"): "apartment_near:field_value",
+    ("period_start", "apartment_near", "valid"): "apartment_near:none",
+    ("period_start", "property_near", "invalid"): "property_near:field_value",
+    ("period_start", "property_near", "missing"): "property_near:field_value",
+    ("period_start", "property_near", "valid"): "property_near:none",
+    ("property", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("property", "apartment_near", "missing"): "apartment_near:field_value",
+    ("property", "apartment_near", "valid"): "apartment_near:none",
+    ("property", "property_near", "invalid"): "property_near:field_value",
+    ("property", "property_near", "missing"): "property_near:field_value",
+    ("property", "property_near", "valid"): "apartment:none",
+    ("serial", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("serial", "apartment_near", "missing"): "apartment_near:field_value",
+    ("serial", "apartment_near", "valid"): "reading:meter_name+number",
+    ("serial", "property_near", "invalid"): "property_near:field_value",
+    ("serial", "property_near", "missing"): "property_near:field_value",
+    ("serial", "property_near", "valid"): "reading:meter_name+number",
+    ("value", "apartment_near", "invalid"): "apartment_near:field_value",
+    ("value", "apartment_near", "missing"): "apartment_near:field_value",
+    ("value", "apartment_near", "valid"): "apartment_near:none",
+    ("value", "property_near", "invalid"): "property_near:field_value",
+    ("value", "property_near", "missing"): "property_near:field_value",
+    ("value", "property_near", "valid"): "property_near:none",
+    ("water_price", "apartment_near", "invalid"): "apartment_near:card_help",
+    ("water_price", "apartment_near", "missing"): "apartment_near:card_help",
+    ("water_price", "apartment_near", "valid"): "apartment_near:card_help",
+    ("water_price", "property_near", "invalid"): "property_near:card_help",
+    ("water_price", "property_near", "missing"): "property_near:card_help",
+    ("water_price", "property_near", "valid"): "property_near:card_help",
 }
 
 

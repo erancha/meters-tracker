@@ -13,6 +13,8 @@
 # Examples:
 #   ./scripts/test.sh -q tests/test_api.py
 #   ./scripts/test.sh --matrix matrix_cards_open_1 matrix_sequences
+#   ./scripts/test.sh --matrix > /tmp/matrix.log 2>&1 && echo "Correction matrix passed" \
+#     || grep -v '^correction matrix: matrix_' /tmp/matrix.log
 #
 # It never calls the real model. The checks that do are run by hand only: docs/development.md.
 set -euo pipefail
