@@ -59,7 +59,7 @@ def test_a_name_typed_on_the_period_question_corrects_the_apartment(env, ddb):
     kit.say("קדמיץ")
     result = kit.say("קדמית")
     assert result.snapshot.card["kind"] == "period"
-    assert "קדמית בלאונר 18" in result.snapshot.card["title"]
+    assert "לאונר 18 / קדמית" in result.snapshot.card["title"]
     kit.choose("start_today")
     kit.choose("top")
     [apartment] = kit.store.apartments(ACCOUNT)
@@ -80,7 +80,7 @@ def test_a_property_name_typed_on_the_summary_corrects_it_and_keeps_the_apartmen
     kit.choose("start_today")
     result = kit.say("לאונר 18")
     assert result.snapshot.card["kind"] == "period"
-    assert "קדמית בלאונר 18" in result.snapshot.card["title"]
+    assert "לאונר 18 / קדמית" in result.snapshot.card["title"]
     kit.choose("start_today")
     kit.choose("top")
     [prop] = kit.store.properties(ACCOUNT)
@@ -100,7 +100,7 @@ def test_new_serial_asks_property_then_apartment_then_period(env, ddb):
     result = kit.say("עורף")
     card = result.snapshot.card
     assert card["kind"] == "period"
-    assert "עורף בהגפן 7" in card["title"]
+    assert "הגפן 7 / עורף" in card["title"]
     assert [(o["id"], o["label"]) for o in card["options"]] == [
         ("start_today", "29/10 (היום)"),
         ("start_month", "01/11 (תחילת חודש)"),
@@ -505,7 +505,7 @@ def test_a_typed_name_close_to_an_existing_one_asks_which_was_meant(env, ddb):
     assert kit.say("קדמת").snapshot.card["kind"] == "apartment_near"
     card = kit.choose("near_new").snapshot.card
     assert card["kind"] == "period"
-    assert "קדמת בלאונר 18" in card["title"]
+    assert "לאונר 18 / קדמת" in card["title"]
 
 
 def test_a_typed_name_close_to_nothing_is_new_at_once(env, ddb):
