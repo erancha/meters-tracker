@@ -513,3 +513,12 @@ def test_a_typed_name_close_to_nothing_is_new_at_once(env, ddb):
     kit.apartment(name="קדמית", property_name="לאונר 18")
     kit.send_photo(water(serial="W-9"))
     assert kit.say("הגפן 7").snapshot.card["kind"] == "apartment"
+
+
+def test_an_uncertain_value_of_a_new_meter_names_its_doubt_on_the_summary(env, ddb):
+    kit = Kit([edits(("property", "לאונר 18"), ("apartment", "דירה קדמית"))])
+    kit.send_photo(water(843, serial="2721058", uncertain=True))
+    kit.say("לאונר 18, דירה קדמית")
+    card = kit.choose("start_today").snapshot.card
+    assert card["kind"] == "link"
+    assert texts.VALUE_DOUBT in card_text(card)

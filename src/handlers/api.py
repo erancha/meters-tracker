@@ -175,6 +175,7 @@ def _image_action(body):
         raise _Rejected(400, {"error": "image_too_large"})
     if body["media_type"] not in IMAGE_TYPES:
         raise _Rejected(400, {"error": "unsupported_image_type"})
+    logger.info("photo_upload bytes=%d media_type=%s", len(data), body["media_type"])
     return Action(image=data, media_type=body["media_type"], note=note)
 
 

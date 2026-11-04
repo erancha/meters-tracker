@@ -39,6 +39,7 @@ def _reading():
         meter_type="water",
         serial="123",
         serial_unreadable=False,
+        serial_uncertain=False,
         candidates=[],
         handwritten_label=None,
     )

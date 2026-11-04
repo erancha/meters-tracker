@@ -379,15 +379,18 @@ def apply_edits(engine, user, item, operations) -> list[Reply]:
 
 
 def readable(candidate) -> bool:
-    return candidate["value"] is not None and not candidate["unreadable_digits"]
+    """A candidate the model read a value for. A value with a doubtful digit counts: it is
+    proposed with the doubt named, so the owner checks it rather than typing every digit."""
+    return candidate["value"] is not None
 
 
 def propose(data, display_choice) -> bool:
     """Sets data's value, position and alternatives from the photo's candidates: the saved
     display position, else both numbers of a two-number display with the top one preselected,
     else the single counter. A two-number display showing one number twice offers no choice, so
-    it reads as a single counter with no position to remember. Returns False when a needed
-    number is unreadable."""
+    it reads as a single counter with no position to remember. value_uncertain is set when a
+    number offered has a digit the model is not certain of. Returns False when a needed number
+    is unreadable."""
     values = {c["position"]: c["value"] for c in data["candidates"] if readable(c)}
     if display_choice is None:
         wanted = [c["position"] for c in data["candidates"]]
@@ -395,6 +398,9 @@ def propose(data, display_choice) -> bool:
         wanted = [POSITIONS[display_choice]]
     if not wanted or any(position not in values for position in wanted):
         return False
+    data["value_uncertain"] = any(
+        c["unreadable_digits"] for c in data["candidates"] if c["position"] in wanted
+    )
     if len(wanted) == 1:
         data.update(value=values[wanted[0]], position=wanted[0], alternatives=None)
     elif len({values[position] for position in wanted}) == 1:
@@ -410,17 +416,20 @@ def display_choice(data) -> int | None:
 
 
 def edit_read(data, field, value):
-    """Changes a field the photo read. A typed value replaces the numbers the display offered. A
-    typed value, date or serial takes back a reset chosen for the earlier reading, since the
-    lower-reading check runs again on the changed reading. A typed serial settles the serial, and
-    the one the model read is kept as read_serial, so the saved reading records the misread."""
+    """Changes a field the photo read. A typed value replaces the numbers the display offered and
+    settles any doubt about them. A typed value, date or serial takes back a reset chosen for the
+    earlier reading, since the lower-reading check runs again on the changed reading. A typed
+    serial settles the serial and its doubt, and the one the model read is kept as read_serial,
+    so the saved reading records the misread."""
     if field == "value":
-        data.update(value=value, position=None, alternatives=None, resets=False)
+        data.update(
+            value=value, position=None, alternatives=None, value_uncertain=False, resets=False
+        )
     elif field == "date":
         data.update(reading_date=value, resets=False)
     elif field == "serial":
         data.setdefault("read_serial", data["serial"])
-        data.update(serial=value, serial_unreadable=False, resets=False)
+        data.update(serial=value, serial_unreadable=False, serial_uncertain=False, resets=False)
     else:
         data["meter_type"] = value
 
@@ -438,6 +447,7 @@ def reading_text(data):
         data["apartment"],
         data["property"],
         data["value"],
+        data["value_uncertain"],
         parse_iso(data["reading_date"]),
         data["alternatives"],
         data["position"],

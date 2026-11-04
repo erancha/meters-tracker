@@ -2,6 +2,7 @@
 lower readings, unreadable digits, typed corrections, the photo queue, the reading time
 limit, and the photos a saved reading records as failed."""
 
+import json
 from datetime import timedelta
 
 import pytest
@@ -63,6 +64,7 @@ def test_not_a_meter_leaves_no_pending(env, ddb):
         meter_type="unknown",
         serial=None,
         serial_unreadable=False,
+        serial_uncertain=False,
         candidates=[],
         handwritten_label=None,
     )
@@ -452,6 +454,7 @@ def test_typed_serial_on_unreadable_card_moves_the_photo_to_that_serial(env, ddb
         meter_type="electricity",
         serial=None,
         serial_unreadable=True,
+        serial_uncertain=False,
         candidates=[candidate(392691, "top", "kWh")],
         handwritten_label=None,
     )
@@ -471,3 +474,126 @@ def test_a_retired_meter_with_no_live_meter_of_its_type_is_refused_naming_none(e
     assert [r.text for r in result.replies] == [texts.retired_meter_alone("W-1")]
     assert result.snapshot.card is None
     assert len(kit.readings("W-1")) == 1
+
+
+def test_a_serial_one_digit_off_a_live_meter_reads_as_that_meter(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    result = kit.send_photo(water(1250, serial="W-1256"))
+    assert result.replies[0].text == texts.serial_matched("W-1256", "W-1250")
+    assert result.replies[-1].card["kind"] == "reading"
+    kit.choose("confirm")
+    assert [r["value"] for r in kit.readings("W-1250")] == [1000, 1250]
+
+
+@pytest.mark.parametrize("serial", ["W-1266", "W-12560", "W-125"])
+def test_a_serial_further_off_is_a_new_meter(env, ddb, serial):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    result = kit.send_photo(water(1250, serial=serial))
+    assert result.replies[-1].card["kind"] != "reading"
+    [item] = kit.store.pending(USER.email)
+    assert item["data"]["serial"] == serial
+
+
+def test_a_serial_one_digit_off_two_live_meters_is_a_new_meter(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    other = kit.apartment(name="אחורית", start="2026-10-01")
+    kit.meter(other, "W-1251", "water", [reading("2026-10-01", 500, opens="2026-10-01")])
+    kit.send_photo(water(1250, serial="W-1259"))
+    [item] = kit.store.pending(USER.email)
+    assert item["data"]["serial"] == "W-1259"
+
+
+def test_a_serial_one_digit_off_a_retired_meter_is_not_matched(env, ddb):
+    kit = Kit()
+    apartment = kit.apartment()
+    kit.meter(apartment, "W-0999", "water", [reading("2026-09-01", 900)], retired_at="2026-10-01")
+    kit.meter(apartment, "W-1250", "water", [reading("2026-10-01", 1000, opens="2026-09-01")])
+    kit.send_photo(water(1250, serial="W-0998"))
+    [item] = kit.store.pending(USER.email)
+    assert item["data"]["serial"] == "W-0998"
+
+
+def test_a_serial_one_digit_off_a_meter_of_another_type_is_not_matched(env, ddb):
+    kit = Kit()
+    _electric_apartment(kit, display_choice=0)
+    kit.send_photo(water(1250, serial="E-393"))
+    [item] = kit.store.pending(USER.email)
+    assert item["data"]["serial"] == "E-393"
+
+
+def test_a_serial_matched_one_digit_off_is_saved_as_a_misread(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1250, serial="W-1256"))
+    kit.choose("confirm")
+    saved = kit.readings("W-1250")[-1]
+    assert saved["failed_photos"] == [saved["image_key"]]
+
+
+@pytest.mark.parametrize("uncertain", [True, False])
+def test_an_uncertain_serial_of_a_new_meter_says_so_on_the_first_question(env, ddb, uncertain):
+    kit = Kit()
+    card = kit.send_photo(water(1250, serial="2721056", serial_uncertain=uncertain)).snapshot.card
+    assert card["kind"] == "property"
+    assert (texts.serial_doubt("2721056") in card_text(card)) is uncertain
+
+
+def test_a_serial_matched_one_digit_off_drops_the_doubt(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1250, serial="W-1256", serial_uncertain=True))
+    [item] = kit.store.pending(USER.email)
+    assert (item["data"]["serial"], item["data"]["serial_uncertain"]) == ("W-1250", False)
+
+
+def test_an_uncertain_value_is_proposed_with_its_doubt(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    card = kit.send_photo(water(1250, uncertain=True)).snapshot.card
+    assert card["kind"] == "reading"
+    assert "1,250" in card_text(card) and texts.VALUE_DOUBT in card_text(card)
+    kit.choose("confirm")
+    assert [r["value"] for r in kit.readings("W-1250")] == [1000, 1250]
+
+
+def test_a_certain_value_names_no_doubt(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    card = kit.send_photo(water(1250)).snapshot.card
+    assert texts.VALUE_DOUBT not in card_text(card)
+
+
+def _meter_read_lines(caplog):
+    return [json.loads(r.getMessage()) for r in caplog.records if '"meter_read"' in r.getMessage()]
+
+
+def test_a_read_logs_what_the_model_read_and_the_serial_it_matched(env, ddb, caplog):
+    caplog.set_level("INFO")
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1250, serial="W-1256", serial_uncertain=True, uncertain=True))
+    assert _meter_read_lines(caplog) == [
+        {
+            "event": "meter_read",
+            "meter_type": "water",
+            "serial": "W-1256",
+            "serial_unreadable": False,
+            "serial_uncertain": True,
+            "candidates": [
+                {"value": 1250, "position": "single", "unit": "m3", "unreadable_digits": True}
+            ],
+            "matched_serial": "W-1250",
+        }
+    ]
+
+
+def test_a_read_of_a_known_serial_logs_no_match(env, ddb, caplog):
+    caplog.set_level("INFO")
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(water(1250))
+    [line] = _meter_read_lines(caplog)
+    assert line["matched_serial"] is None

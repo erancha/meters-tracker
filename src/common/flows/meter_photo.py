@@ -1,7 +1,8 @@
 """Meter photo flow: a photo becomes a proposed reading, and a confirmed one becomes a saved
 reading of a known meter. A photo of no known meter family and no serial is read again as a
 previous statement, and one that is a statement is handed to the tariffs flow, dated like a
-reading. An unknown serial is handed to the link flow. On a reading near the period's end, the
+reading. A serial one character off exactly one live meter of its type is taken as that meter's,
+and any other unknown serial is handed to the link flow. On a reading near the period's end, the
 close option or a typed vacate hands the apartment to the close flow after the reading is
 saved, and the reading's reply is built after the close, so it reports the closed period. The
 value, date and serial take a typed edit on every step.
@@ -20,6 +21,7 @@ applied, then routed as a new photo is. A photo the owner reopens as a meter's i
 a statement or dropped as no meter, so a type the model cannot tell is asked for instead.
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -62,6 +64,7 @@ from common.flows import (
     summary,
     tariffs,
 )
+from common.log import get_logger
 from common.model import MeterReadingResult, Operation, StatementResult
 from common.periods import (
     apartment_meters,
@@ -70,6 +73,8 @@ from common.periods import (
     period_end,
     within_reclose_window,
 )
+
+logger = get_logger(__name__)
 
 KIND = "meter_photo"
 SWAP_OPTIONS = ["reclose", "keep_open"]
@@ -253,10 +258,29 @@ def start(
     if statement is not None:
         return tariffs.from_statement(engine, user, item, statement, reading_date)
     _set_read(item, result, reading_date)
-    if reopen is None:
-        _absorb_superseded(engine, user, item)
-        return route(engine, user, item)
-    return _reopened(engine, user, item, reopen)
+    if reopen is not None:
+        _log_read(result, item["data"])
+        return _reopened(engine, user, item, reopen)
+    _absorb_superseded(engine, user, item)
+    matched = _match_near_serial(engine, user, item["data"])
+    _log_read(result, item["data"])
+    return [*matched, *route(engine, user, item)]
+
+
+def _log_read(result: MeterReadingResult, data):
+    """One JSON line with "event": "meter_read" per photo read as a meter: what the model read,
+    with its doubt flags, and the known serial a near-miss match took instead, else null."""
+    matched = data["serial"] if data["serial"] != result.serial else None
+    line = {
+        "event": "meter_read",
+        "meter_type": result.meter_type,
+        "serial": result.serial,
+        "serial_unreadable": result.serial_unreadable,
+        "serial_uncertain": result.serial_uncertain,
+        "candidates": [c.model_dump(exclude={"note"}) for c in result.candidates],
+        "matched_serial": matched,
+    }
+    logger.info(json.dumps(line))
 
 
 def _read(
@@ -287,8 +311,39 @@ def _reopened(engine, user, item, reopen: Reopen) -> list[Reply]:
     return route(engine, user, item)
 
 
+def _match_near_serial(engine, user, data) -> list[Reply]:
+    """Takes a read serial that names no meter as the one live meter of its type whose serial
+    differs from it in a single character, since a misread digit is the model's usual serial
+    error. The read serial is kept as read_serial, as a typed correction keeps it, so the saved
+    reading records the misread. Only the model's read is matched: a typed serial stands."""
+    read = data["serial"]
+    if _no_serial(data) or engine.store.meter(user.account, read) is not None:
+        return []
+    near = [
+        m["serial"]
+        for m in engine.store.meters(user.account)
+        if m["retired_at"] is None
+        and m["type"] == data["meter_type"]
+        and _one_character_apart(m["serial"], read)
+    ]
+    if len(near) != 1:
+        return []
+    data.update(read_serial=read, serial=near[0], serial_uncertain=False)
+    return [Reply(texts.serial_matched(read, data["serial"]))]
+
+
+def _one_character_apart(a: str, b: str) -> bool:
+    return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1
+
+
 def _set_read(item, result: MeterReadingResult, reading_date):
-    item["data"].update(result.model_dump(), reading_date=reading_date, value=None, resets=False)
+    item["data"].update(
+        result.model_dump(),
+        reading_date=reading_date,
+        value=None,
+        value_uncertain=False,
+        resets=False,
+    )
 
 
 def stalled(engine, item) -> bool:
@@ -305,6 +360,7 @@ def ask_retake(engine, user, item) -> list[Reply]:
         meter_type="unknown",
         serial=None,
         serial_unreadable=True,
+        serial_uncertain=False,
         candidates=[],
         handwritten_label=None,
     )

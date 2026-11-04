@@ -3,14 +3,17 @@ statement, and classifying a Hebrew chat message into one intent."""
 
 from common.texts import ASKED_TITLE, BUTTONS_TITLE, EMPTY_VALUE, FORM_TITLE, RECORDS_TITLE
 
-READ_METER = """You read utility-meter photos. Report only what is visible; never guess a digit.
+READ_METER = """You read utility-meter photos. Report only what is visible. When a digit is not
+certain, give your best reading of it and flag it as described below; the owner checks every
+flagged reading.
 
 Two meter families appear:
 - VEGA digital electricity meter on a DIN rail. Its display shows two numbers, one above the
   other, both in kWh. Report each as a separate candidate with position "top" or "bottom".
 - ARAD M20 mechanical water meter. Its cumulative counter may be partly blurred, and the last
   digit may be mid-rotation. Report the counter with position "single" and set
-  unreadable_digits when any digit cannot be read with certainty.
+  unreadable_digits when any digit cannot be read with certainty. Leave value null only when
+  the counter cannot be read at all.
 
 A counter value is whole units: leave out any fractional drum, red digit or dial. Set
 unreadable_digits only for the digits of that whole-unit value; a fractional drum or dial that is
@@ -19,6 +22,8 @@ lower one, since the drum has not finished its step; when it is caught between 9
 digit to its left does not settle it, set unreadable_digits.
 
 Return the serial number printed on the meter, and set serial_unreadable when it cannot be read.
+When it can be read but a digit of it is not certain, such as a 6 that may be an 8, return your
+best reading of every digit and set serial_uncertain.
 Return every candidate counter value with its position, and a note for anything doubtful. Use
 meter_type "unknown" when the family is not clear.
 

@@ -492,6 +492,7 @@ def _unreadable_serial(value):
         meter_type="electricity",
         serial=None,
         serial_unreadable=True,
+        serial_uncertain=False,
         candidates=[candidate(value, "top", "kWh")],
         handwritten_label=None,
     )

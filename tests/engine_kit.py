@@ -21,9 +21,14 @@ ACCOUNT = "owner@x.com"
 USER = User(email=ACCOUNT, account=ACCOUNT, role="owner")
 
 
-def candidate(value, position, unit, unreadable=False):
+def candidate(value, position, unit, unreadable=False, uncertain=False):
+    """unreadable reads no value at all; uncertain reads the value with a doubtful digit."""
     return Candidate(
-        value=value, position=position, unit=unit, unreadable_digits=unreadable, note=""
+        value=None if unreadable else value,
+        position=position,
+        unit=unit,
+        unreadable_digits=unreadable or uncertain,
+        note="",
     )
 
 
@@ -33,17 +38,26 @@ def electricity(top=392691, bottom=392693, serial="E-392", label=None):
         meter_type="electricity",
         serial=serial,
         serial_unreadable=False,
+        serial_uncertain=False,
         candidates=[candidate(top, "top", "kWh"), candidate(bottom, "bottom", "kWh")],
         handwritten_label=label,
     )
 
 
-def water(value=1250, serial="W-1250", unreadable=False, label=None):
+def water(
+    value=1250,
+    serial="W-1250",
+    unreadable=False,
+    label=None,
+    serial_uncertain=False,
+    uncertain=False,
+):
     return MeterReadingResult(
         meter_type="water",
         serial=serial,
         serial_unreadable=False,
-        candidates=[candidate(value, "single", "m3", unreadable)],
+        serial_uncertain=serial_uncertain,
+        candidates=[candidate(value, "single", "m3", unreadable, uncertain)],
         handwritten_label=label,
     )
 
@@ -52,6 +66,7 @@ UNKNOWN = MeterReadingResult(
     meter_type="unknown",
     serial=None,
     serial_unreadable=False,
+    serial_uncertain=False,
     candidates=[],
     handwritten_label=None,
 )

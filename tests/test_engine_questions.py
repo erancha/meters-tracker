@@ -242,6 +242,7 @@ _NOT_A_METER = MeterReadingResult(
     meter_type="unknown",
     serial=None,
     serial_unreadable=False,
+    serial_uncertain=False,
     candidates=[candidate(960, "single", "m3")],
     handwritten_label=None,
 )

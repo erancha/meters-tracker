@@ -62,6 +62,7 @@ class MeterReadingResult(BaseModel):
     meter_type: Literal["water", "electricity", "unknown"]
     serial: str | None
     serial_unreadable: bool
+    serial_uncertain: bool
     candidates: list[Candidate]
     handwritten_label: str | None
 

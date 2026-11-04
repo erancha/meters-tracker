@@ -39,20 +39,23 @@ charge, with the exact values the code uses. The arithmetic lives in
 
 ## A meter photo
 
-Each photo is its own turn. The model returns the meter type, the serial, every counter value it
-sees with its position on the display (`top` and `bottom` on a two-number electricity display,
-`single` on a water counter), whether any digit is unreadable, and the text handwritten beside
-the meter as written, or none when it cannot be read; owners write the apartment's name there. A
-note sent with the photo that names a date sets the reading date; otherwise the reading is dated
-the day the photo was sent, which a retry on a later day keeps.
+Each photo is its own turn. The model returns the meter type, the serial with whether any of
+its digits is uncertain, every counter value it sees with its position on the display (`top` and
+`bottom` on a two-number electricity display, `single` on a water counter), whether any digit is
+unreadable, and the text handwritten beside the meter as written, or none when it cannot be
+read; owners write the apartment's name there. A note sent with the photo that names a date sets
+the reading date; otherwise the reading is dated the day the photo was sent, which a retry on a
+later day keeps.
 
 - **Statement.** A photo with no known meter type and no serial is read again as a previous
   statement; a statement becomes a tariffs card (see [Tariffs](#tariffs)), dated like a reading.
 - **Not a meter.** Any other photo of an unknown type and an unknown serial is answered as
   "no meter found" and nothing is kept.
-- **Unreadable.** A missing or unreadable serial asks for a retake. An unreadable value asks for
-  a retake or a typed value. A new photo replaces an earlier unreadable card that had no serial
-  or had the same serial.
+- **Unreadable.** A missing or unreadable serial asks for a retake. A value the model could not
+  read at all asks for a retake or a typed value. A value read with an uncertain digit is
+  proposed on the reading card, and on a new meter's summary, with a line naming the doubt; a
+  typed value settles it. A new photo replaces an earlier unreadable card that had no serial or
+  had the same serial.
 - **Retired meter.** A photo of a retired meter is refused, naming the live meter that replaced
   it, when its apartment has one of its type.
 - **Two-number display.** With no saved choice, the card offers both numbers as its only
@@ -61,30 +64,37 @@ the day the photo was sent, which a retry on a later day keeps.
   reading leaves the choice unsaved. The position of the first saved reading chosen from two
   numbers becomes the meter's display choice, and later photos propose that position's number
   directly.
+- **Near-miss serial.** A read serial that names no meter but differs in one character from the
+  serial of exactly one live meter of its type is taken as that meter's, with a reply naming both
+  serials; a misread digit is the model's usual serial error. The saved reading counts the photo
+  as misread, as a typed serial correction does. Only the model's read is matched, never a typed
+  serial.
 - **Unknown serial.** A link flow (`src/common/flows/link_meter.py`) asks for the property and then
-  the apartment, existing or new by name; an answer naming both ("לאונר 18, דירה קדמית") skips the
-  apartment question; a property or apartment name typed on a later question corrects the one given,
-  forgets the period answered for it, and the flow resumes from the corrected name. An apartment
-  with no open period also asks for the period's start (buttons for today and for the first of next
-  month, which is left out on the first of a month; a typed date also answers) and length (default
-  `default_period_months`, or the apartment's own length when it exists). A new period that starts
-  before the photo's date dates the opening reading at the start, since the photo then stands for
-  the meter on that day; a later start keeps the photo's date, and a date equal to the start shows
-  once, on the opening line. The questions offer the existing names as buttons; the apartment
-  question also offers the handwritten label as a new apartment's name, highlighted, unless it
-  already names one of the property's apartments. A typed name that is not an existing one but is
-  a prefix of one, or within two single-letter edits of one, asks whether that name was meant; a
-  name chosen as new is not asked about again. A reading dated after the last day of the period
-  it would open is refused on the summary, which asks for its date. A
-  reading dated inside a closed period, before its close, stands for the meter on the next period
-  until a later reading of the meter inside the closed period arrives; that reading's save flags
-  the meter's readings from the period dates as the close would have, so the closed period gets the
-  meter's opening and closing readings and is marked for its report. The final card shows
-  everything that will be created; on confirmation the property, apartment and period are created
-  as needed, the meter is saved, and its reading becomes the period's opening reading. A live
-  meter of the same type in that apartment is retired, dated the new reading's date; each keeps
-  its own consumption. When another photo of the same serial was linked while this one waited, it
-  shows next as an ordinary reading card for that meter.
+  the apartment, existing or new by name. A serial read with an uncertain digit is named as
+  uncertain on the property question, and a typed serial settles the doubt. An answer naming
+  both ("לאונר 18, דירה קדמית") skips the apartment question; a property or apartment name typed
+  on a later question corrects the one given, forgets the period answered for it, and the flow
+  resumes from the corrected name. An apartment with no open period also asks for the period's
+  start (buttons for today and for the first of next month, which is left out on the first of a
+  month; a typed date also answers) and length (default `default_period_months`, or the
+  apartment's own length when it exists). A new period that starts before the photo's date dates
+  the opening reading at the start, since the photo then stands for the meter on that day; a
+  later start keeps the photo's date, and a date equal to the start shows once, on the opening
+  line. The questions offer the existing names as buttons; the apartment question also offers
+  the handwritten label as a new apartment's name, highlighted, unless it already names one of
+  the property's apartments. A typed name that is not an existing one but is a prefix of one, or
+  within two single-letter edits of one, asks whether that name was meant; a name chosen as new
+  is not asked about again. A reading dated after the last day of the period it would open is
+  refused on the summary, which asks for its date. A reading dated inside a closed period,
+  before its close, stands for the meter on the next period until a later reading of the meter
+  inside the closed period arrives; that reading's save flags the meter's readings from the
+  period dates as the close would have, so the closed period gets the meter's opening and
+  closing readings and is marked for its report. The final card shows everything that will be
+  created; on confirmation the property, apartment and period are created as needed, the meter
+  is saved, and its reading becomes the period's opening reading. A live meter of the same type
+  in that apartment is retired, dated the new reading's date; each keeps its own consumption.
+  When another photo of the same serial was linked while this one waited, it shows next as an
+  ordinary reading card for that meter.
 - **Known serial.** The card proposes the reading; the user confirms, picks the other number,
   or types a corrected value, a date, or a cancel. Cards carry no reject button: corrections and
   cancels are typed.

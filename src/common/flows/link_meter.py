@@ -67,6 +67,7 @@ def _link_text(d):
         d["apartment"],
         d["apartment_new"],
         d["value"],
+        d["value_uncertain"],
         parse_iso(d["reading_date"]),
         d["alternatives"],
         d["position"],
@@ -136,7 +137,9 @@ def _near_text(d):
 
 STEPS = {
     "property": (
-        lambda d: texts.link_property(d["meter_type"], d["serial"], d["choices"]),
+        lambda d: texts.link_property(
+            d["meter_type"], d["serial"], d["serial_uncertain"], d["choices"]
+        ),
         lambda d: list(_name_options(d)),
     ),
     "property_near": (_near_text, lambda d: NEAR_OPTIONS),

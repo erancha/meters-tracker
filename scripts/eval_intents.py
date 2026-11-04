@@ -69,8 +69,8 @@ def _card(text, options=(), labels=None) -> dict:
 
 CARDS = {
     "unreadable_serial": _card(texts.unreadable([texts.UNREADABLE_SERIAL])),
-    "property": _card(texts.link_property("electricity", SERIAL_READ, [])),
-    "property_existing": _card(texts.link_property("water", WATER_SERIAL, [PROPERTY])),
+    "property": _card(texts.link_property("electricity", SERIAL_READ, False, [])),
+    "property_existing": _card(texts.link_property("water", WATER_SERIAL, False, [PROPERTY])),
     "apartment": _card(texts.link_apartment(PROPERTY, [])),
     "period": _card(
         texts.link_period(APARTMENT, PROPERTY, 2),
@@ -92,6 +92,7 @@ CARDS = {
             APARTMENT,
             True,
             TWO_NUMBERS["top"],
+            False,
             PERIOD_START,
             TWO_NUMBERS,
             "top",
@@ -102,7 +103,9 @@ CARDS = {
         ["top", "bottom", "confirm"],
     ),
     "reading": _card(
-        texts.reading_card("electricity", SERIAL, APARTMENT, PROPERTY, CLOSING, TODAY, None, "top"),
+        texts.reading_card(
+            "electricity", SERIAL, APARTMENT, PROPERTY, CLOSING, False, TODAY, None, "top"
+        ),
         ["confirm"],
     ),
     "propose_close": _card(texts.propose_close(date(2026, 10, 31), TODAY), ["close", "keep_open"]),
@@ -127,7 +130,9 @@ CARDS = {
     "open_period": _card(texts.propose_open(LATER), ["confirm"]),
     # The reading card after it asked again for the serial.
     "reading_asked_serial": _card(
-        texts.reading_card("electricity", SERIAL, APARTMENT, PROPERTY, CLOSING, TODAY, None, "top"),
+        texts.reading_card(
+            "electricity", SERIAL, APARTMENT, PROPERTY, CLOSING, False, TODAY, None, "top"
+        ),
         ["confirm"],
     ),
     "correction": _card(

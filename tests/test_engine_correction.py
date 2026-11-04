@@ -668,16 +668,16 @@ def test_waiting_card_on_the_corrected_serial_becomes_a_reading_card(env, ddb):
     apartment = kit.apartment(start=SECOND)
     kit.tariff("2026-01-01", 0.5, 10)
     kit.meter(apartment, SERIAL, "water", [reading(SECOND, 843, opens=SECOND)])
-    assert kit.send_photo(water(866, serial="2721058")).snapshot.card["kind"] == "property"
-    _say(kit, edit("serial", "2721058", f"meter|{SERIAL}"))
+    assert kit.send_photo(water(866, serial="2721088")).snapshot.card["kind"] == "property"
+    _say(kit, edit("serial", "2721088", f"meter|{SERIAL}"))
     result = kit.choose("confirm")
     card = result.snapshot.card
     assert card["kind"] == "reading"
-    assert "2721058" in _text(card) and "866" in _text(card)
+    assert "2721088" in _text(card) and "866" in _text(card)
     assert result.replies[-1].card == card
     saved = kit.choose("confirm")
     assert "23 קוב" in saved.replies[0].text
-    assert [r["value"] for r in kit.readings("2721058")] == [843, 866]
+    assert [r["value"] for r in kit.readings("2721088")] == [843, 866]
     assert kit.store.pending(USER.email) == []
 
 
@@ -1797,6 +1797,7 @@ NOT_A_METER = MeterReadingResult(
     meter_type="unknown",
     serial=None,
     serial_unreadable=False,
+    serial_uncertain=False,
     candidates=[candidate(960, "single", "m3")],
     handwritten_label=None,
 )

@@ -56,17 +56,30 @@ DATE_LINE = "תאריך: {}"
 
 
 def reading_card(
-    meter_type, serial, apartment, property_name, value, d: date, alternatives, position
+    meter_type,
+    serial,
+    apartment,
+    property_name,
+    value,
+    value_uncertain,
+    d: date,
+    alternatives,
+    position,
 ):
     title = f"{meter_name(meter_type, serial)} · {property_name} / {apartment}"
+    doubt = [VALUE_DOUBT] if value_uncertain else []
     if alternatives is None:
-        return title, [f"קריאה: {number(value)} {UNITS[meter_type]}", DATE_LINE.format(fmt(d))]
+        value_line = f"קריאה: {number(value)} {UNITS[meter_type]}"
+        return title, [value_line, *doubt, DATE_LINE.format(fmt(d))]
     choices = [
         f"{POSITION_NAMES[p]}: {number(alternatives[p])}" + (" (מסומן)" if p == position else "")
         for p in POSITION_NAMES
         if p in alternatives
     ]
-    return title, ["בצג שני מספרים. איזה מהם הקריאה?", *choices, DATE_LINE.format(fmt(d))]
+    return title, ["בצג שני מספרים. איזה מהם הקריאה?", *choices, *doubt, DATE_LINE.format(fmt(d))]
+
+
+VALUE_DOUBT = "ספרה בקריאה לא נקראה בוודאות. אם הקריאה שגויה, אפשר לכתוב את הקריאה הנכונה."
 
 
 def not_a_meter() -> str:
@@ -113,6 +126,13 @@ def lower_reading(prev: dict, value):
             f"{fmt(parse_iso(prev['date']))})"
         ),
         ["טעות בקריאה, או שהמונה הוחלף או התאפס?"],
+    )
+
+
+def serial_matched(read, known) -> str:
+    return (
+        f"המספר הסידורי נקרא כ-{read}, ספרה אחת שונה מהמונה {known}, ולכן הקריאה שויכה אליו. "
+        "אם זה מונה אחר, אפשר לכתוב את המספר הסידורי הנכון."
     )
 
 
@@ -288,11 +308,18 @@ def report_table(meters: list[tuple[str, str, object]]) -> list[list[str]]:
     return [header, *[list(row) for row in zip(labels, *columns)]]
 
 
-def link_property(meter_type, serial, property_names):
+def link_property(meter_type, serial, serial_uncertain, property_names):
     title = f"{meter_name(meter_type, serial)} עדיין לא מקושר לדירה. לאיזה נכס הוא שייך?"
+    doubt = [serial_doubt(serial)] if serial_uncertain else []
     if property_names:
-        return title, ["אפשר לבחור נכס קיים, או לכתוב כתובת של נכס חדש."]
-    return title, ["אין עדיין נכסים. מהי כתובת הנכס?"]
+        return title, [*doubt, "אפשר לבחור נכס קיים, או לכתוב כתובת של נכס חדש."]
+    return title, [*doubt, "אין עדיין נכסים. מהי כתובת הנכס?"]
+
+
+def serial_doubt(serial) -> str:
+    return (
+        f"ספרה במספר הסידורי {serial} לא נקראה בוודאות. אם המספר שגוי, אפשר לכתוב את המספר הנכון."
+    )
 
 
 def link_apartment(property_name, apartment_names):
@@ -421,6 +448,7 @@ def link_confirm(
     apartment,
     apartment_new,
     value,
+    value_uncertain,
     d: date,
     alternatives,
     position,
@@ -429,7 +457,15 @@ def link_confirm(
     replaced_serial,
 ):
     title, reading_lines = reading_card(
-        meter_type, serial, apartment, property_name, value, d, alternatives, position
+        meter_type,
+        serial,
+        apartment,
+        property_name,
+        value,
+        value_uncertain,
+        d,
+        alternatives,
+        position,
     )
     lines = []
     if property_new:
