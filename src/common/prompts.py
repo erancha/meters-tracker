@@ -70,6 +70,8 @@ Intents:
   none of the apartment records, set name to the name as the message writes it
 - set_tariffs: with no pending card, the prices of electricity and/or water; set electricity_price
   to the shekels per kWh and/or water_price to the shekels per cubic meter, both including VAT
+- resend_reports: send again the reports that failed to send, or the user says their email
+  address is now verified (שלח שוב את הדוח, אימתתי את המייל); with or without a pending card
 - explain: the user does not understand what the pending card asks (אני לא מבין, מה זה ...)
 - how_to: the user asks how to do something in the app; when the question is about one field, set
   one operation with action "set", the target and field it is about, and value null

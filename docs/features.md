@@ -144,7 +144,9 @@ no lines and no missing tariffs shows no strip.
   `<property> / <apartment>` and its start date: that it was emailed and to which address, what
   the bill still lacks (a meter, a closing reading, a price), or that sending failed. A failure
   shows in the owner's chat too when a delegate's answer caused it, and the report goes out on
-  the first chat load of a later day.
+  the first chat load of a later day. Writing that the address is now verified, or asking for the
+  report again, sends every failed report in that turn; the chat names the address instead when
+  it is still unverified, and says so when no report is waiting.
 - Every report of one apartment has the subject `[<property> / <apartment>] קריאות מונים`, so
   Gmail groups them into one conversation; the date and the total are in the body.
 - The PDF shows the property, the apartment, the period and its closing date, then a table

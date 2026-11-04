@@ -284,3 +284,59 @@ def test_a_failed_report_reaches_both_chats_and_goes_out_on_the_next_days_load(e
     assert "report_failed" not in kit.periods(kit.store.apartments(ACCOUNT)[0])[0]
     kit.engine.load(helper, "2026-10-30")
     assert len(_sent()) == 1
+
+
+RESEND = IntentResult(intent="resend_reports")
+VERIFIED_NOW = "אימתתי את כתובת המייל שלי."
+
+
+def _failed_report(kit):
+    """Closes a period while SES refuses the send, then lets SES accept it again; the owner's
+    address is verified only when the test says so."""
+    _closable(kit)
+    ses = boto3.client("ses", region_name=REGION)
+    ses.delete_identity(Identity=SES_SENDER)
+    _close(kit)
+    ses.verify_email_identity(EmailAddress=SES_SENDER)
+    return ses
+
+
+def test_a_message_that_the_address_is_verified_sends_the_failed_report_at_once(env, ddb):
+    kit = Kit()
+    ses = _failed_report(kit)
+    ses.verify_email_identity(EmailAddress=ACCOUNT)
+    kit.model.queue(RESEND)
+    result = kit.say(VERIFIED_NOW)
+    sent = texts.report_sent("הגפן 7", "עורף", date(2026, 9, 1), ACCOUNT)
+    assert [r.text for r in result.replies] == [sent]
+    assert len(_sent()) == 1
+    assert "report_failed" not in kit.periods(kit.store.apartments(ACCOUNT)[0])[0]
+
+
+def test_asking_to_resend_with_the_address_still_unverified_names_it_and_sends_nothing(env, ddb):
+    kit = Kit()
+    _failed_report(kit)
+    kit.model.queue(RESEND)
+    result = kit.say(VERIFIED_NOW)
+    assert [r.text for r in result.replies] == [texts.address_unverified(ACCOUNT)]
+    assert _sent() == []
+    assert "report_failed" in kit.periods(kit.store.apartments(ACCOUNT)[0])[0]
+
+
+def test_asking_to_resend_with_no_failed_report_says_there_is_nothing_to_send(env, ddb):
+    kit = Kit([RESEND])
+    result = kit.say(VERIFIED_NOW)
+    assert [r.text for r in result.replies] == [texts.no_failed_reports()]
+
+
+def test_asking_to_resend_while_a_card_is_shown_answers_and_shows_the_card_again(env, ddb):
+    kit = Kit()
+    ses = _failed_report(kit)
+    ses.verify_email_identity(EmailAddress=ACCOUNT)
+    kit.send_photo(electricity())
+    card = kit.card()
+    kit.model.queue(RESEND)
+    result = kit.say(VERIFIED_NOW)
+    assert result.replies[0].text == texts.report_sent("הגפן 7", "עורף", date(2026, 9, 1), ACCOUNT)
+    assert result.replies[-1].card == card
+    assert len(_sent()) == 1

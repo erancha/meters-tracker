@@ -8,6 +8,7 @@ import html
 from email import policy
 from email.message import EmailMessage
 
+from common import ses_identity
 from common.log import get_logger
 
 logger = get_logger(__name__)
@@ -20,11 +21,17 @@ def rtl_html(body: str) -> str:
 
 
 class Mailer:
-    """Sends one Hebrew message with a PDF attached from the deployment's verified sender."""
+    """Sends one Hebrew message with a PDF attached from the deployment's verified sender, and
+    answers whether a recipient is a verified identity."""
 
     def __init__(self, ses, sender: str):
         self._ses = ses
         self._sender = sender
+
+    def verified(self, address) -> bool:
+        """Whether the address is a verified SES identity, which the SES sandbox requires of
+        every recipient."""
+        return ses_identity.verification_status(self._ses, address) == ses_identity.VERIFIED
 
     def send(self, recipient, subject, body, pdf: bytes, filename):
         message = EmailMessage()

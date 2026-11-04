@@ -41,7 +41,8 @@ turn's replies the engine sends each marked report that report.missing finds due
 to the turn per report: sent, held with what the bill lacks, or failed. A report that fails is
 logged and never fails the turn, since the reading is already saved; it is marked on its period,
 shown in the owner's chat too when a delegate triggered it, and sent again on the first chat load
-of a later day.
+of a later day, or at once when a message asks for it, after a check that the owner's address is
+a verified SES identity.
 """
 
 import secrets
@@ -311,14 +312,31 @@ class Engine:
             )
         return Reply(texts.report_sent(*names, start, user.account))
 
-    def _resend_failed_reports(self, user) -> list[Reply]:
-        """Sends again every report a failure marked on its period."""
+    def _failed_reports(self, user) -> list[tuple[str, dict]]:
+        """Every (apartment id, period) a failed send marked."""
         return [
-            self._send_report(user, apartment["id"], p["start"], p["report_ignored"])
+            (apartment["id"], p)
             for apartment in self.store.apartments(user.account)
             for p in self.store.periods(user.account, apartment["id"])
             if "report_failed" in p
         ]
+
+    def _resend_failed_reports(self, user) -> list[Reply]:
+        """Sends again every report a failure marked on its period."""
+        return [
+            self._send_report(user, apartment_id, p["start"], p["report_ignored"])
+            for apartment_id, p in self._failed_reports(user)
+        ]
+
+    def _resend_on_request(self, user) -> list[Reply]:
+        """Answers a message asking to send the failed reports now. An owner's address that is
+        not a verified SES identity yet is named and nothing is sent, since the SES sandbox
+        would refuse every send again."""
+        if not self._failed_reports(user):
+            return [Reply(texts.no_failed_reports())]
+        if not self.mailer.verified(user.account):
+            return [Reply(texts.address_unverified(user.account))]
+        return self._resend_failed_reports(user)
 
     def _handle(self, user, message, handler) -> list[Reply]:
         """Runs a stored message's handler; any failure marks the message and raises
@@ -517,11 +535,16 @@ class Engine:
         listed lacks is left to the correction, which answers it as any unknown id, and a photo
         id to the reopen, which refuses one it may not read again. When only the correction
         answers and shows no card of its own, item's card shows again, as a card edit that
-        changes nothing does. The intents ask_back answers alike everywhere skip answer, and
-        item's card shows again after the reply."""
-        if intent.intent in ASK_BACK_INTENTS:
+        changes nothing does. The intents answered alike everywhere, those of ask_back and a
+        request to send the failed reports again, skip answer; item's card shows again after
+        their reply."""
+        if intent.intent in (*ASK_BACK_INTENTS, "resend_reports"):
+            if intent.intent == "resend_reports":
+                replies = self._resend_on_request(user)
+            else:
+                replies = ask_back(self, user, intent)
             shown = [] if item is None else [card_reply(self.flow(item).card(item))]
-            return [*ask_back(self, user, intent), *shown]
+            return [*replies, *shown]
         if intent.intent != "edit":
             return answer(intent)
         on_item, on_records = [], []

@@ -355,7 +355,11 @@ reports the closed period.
   meter's reading that closes a closed period for it marks the period too.
 - **Outcome.** The turn that sends a report adds a line naming the address it went to. A failed
   send adds a line saying so, in the owner's chat as well when a delegate caused it, marks the
-  period, and the first chat load of a later day sends the report again until it goes out.
+  period, and the first chat load of a later day sends the report again until it goes out. A
+  message asking to resend, or saying the address is verified, sends every failed report of the
+  account in that turn, whatever card is shown, which shows again after the lines. It first asks
+  SES whether the owner's address is a verified identity: when it is not, the reply names the
+  address and nothing is sent. With no failed report waiting, the reply says so.
 - **Figures.** Each live meter shows its opening reading, its closing reading, its units, its
   price and its cost, all as in the section above.
 - **Total.** The sum of the costs.

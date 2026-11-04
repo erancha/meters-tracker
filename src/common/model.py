@@ -98,6 +98,7 @@ class IntentResult(BaseModel):
         "vacate",
         "change_period",
         "set_tariffs",
+        "resend_reports",
         "explain",
         "edit",
         "how_to",

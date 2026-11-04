@@ -264,7 +264,18 @@ def report_failed(property_name, apartment, start: date, address) -> str:
     return (
         f"שליחת {_report_period(property_name, apartment, start)} נכשלה. "
         "אנסה לשלוח אותו שוב בפתיחה הראשונה של הצ׳אט מחר; אם זה חוזר, כדאי לבדוק "
-        f"שהכתובת {address} אומתה."
+        f"שהכתובת {address} אומתה. אחרי האימות אפשר לכתוב כאן שהכתובת אומתה, והדוח יישלח מיד."
+    )
+
+
+def no_failed_reports() -> str:
+    return "אין דוח שנכשל וממתין לשליחה, ולכן לא נשלח דבר."
+
+
+def address_unverified(address) -> str:
+    return (
+        f"הכתובת {address} עדיין לא אומתה, ולכן הדוח לא נשלח. אפשר לאשר את הקישור במייל "
+        "האימות שנשלח אליה, ואז לכתוב כאן שוב."
     )
 
 

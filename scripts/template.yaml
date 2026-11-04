@@ -350,6 +350,11 @@ Resources:
             - Effect: Allow
               Action: ses:SendRawEmail
               Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/*'
+            # A request to resend failed reports first asks whether the owner's address is a
+            # verified identity; the action takes no resource-level grant.
+            - Effect: Allow
+              Action: ses:GetIdentityVerificationAttributes
+              Resource: '*'
 
   FrontendBucket:
     Type: AWS::S3::Bucket

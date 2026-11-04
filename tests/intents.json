@@ -1557,5 +1557,35 @@
     "today": "2026-10-29",
     "intent": "unknown",
     "records": "story"
+  },
+  {
+    "message": "אימתתי את כתובת המייל שלי.",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "resend_reports"
+  },
+  {
+    "message": "אישרתי את המייל, אפשר לשלוח שוב",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "resend_reports"
+  },
+  {
+    "message": "תשלח שוב את הדוח",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "resend_reports"
+  },
+  {
+    "message": "הדוח לא הגיע, אפשר לשלוח אותו שוב?",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "resend_reports"
+  },
+  {
+    "message": "אימתתי את כתובת המייל שלי.",
+    "card": "reading",
+    "today": "2026-10-29",
+    "intent": "resend_reports"
   }
 ]
