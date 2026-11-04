@@ -58,4 +58,13 @@ describe("Header", () => {
     expect(texts.appTitle).toBe("מונים AI");
     expect(readFileSync("index.html", "utf8")).toContain(`<title>${texts.appTitle}</title>`);
   });
+
+  // The day strip and the sidebar stick at --head-height, so the header must be exactly that tall
+  // or the page scrolls visibly through the gap between them.
+  it("takes its height from the offset the bars below it stick at", () => {
+    const rule = readFileSync("src/style.css", "utf8").match(/#root \.app-head \{([^}]*)\}/)?.[1];
+
+    expect(rule).toMatch(/height: var\(--head-height\)/);
+    expect(rule).toMatch(/box-sizing: border-box/);
+  });
 });

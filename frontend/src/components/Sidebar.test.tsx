@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -126,5 +127,15 @@ describe("Sidebar", () => {
     setup([message("assistant", "שלום")]);
 
     expect(screen.getByText(texts.noReadingsToday)).toBeInTheDocument();
+  });
+
+  // The day's title reads as the panel's header in the band the narrow day strip shows it in, so
+  // it stands apart from the collapsible sections under it.
+  it("shows the day's title in the day strip's band", () => {
+    const rule = readFileSync("src/style.css", "utf8")
+      .match(/#root \.day-strip-row, #root \.sidebar h2 \{([^}]*)\}/)?.[1];
+
+    expect(rule).toMatch(/background: var\(--accent-soft\)/);
+    expect(rule).toMatch(/border-bottom: 1px solid var\(--accent-border\)/);
   });
 });

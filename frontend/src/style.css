@@ -79,7 +79,8 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 #root .chat { flex: 1; display: flex; flex-direction: column; }
 #root .app-head {
   position: sticky; top: 0; z-index: 5; background: #eef3f6; border-bottom: 1px solid var(--hair);
-  display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem;
+  box-sizing: border-box; height: var(--head-height);
+  display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0 0.9rem;
 }
 #root .msgs { list-style: none; margin: 0; padding: 0.8rem 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; flex: 1; }
 #root .msg { max-width: 88%; border-radius: 12px; padding: 0.55rem 0.75rem; }
@@ -176,7 +177,8 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
   background: var(--card);
   padding: 0.8rem; box-sizing: border-box; overflow-y: auto; max-height: calc(100dvh - var(--head-height)); position: sticky; top: var(--head-height);
 }
-#root .sidebar h2 { margin: 0 0 0.6rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+/* The band bleeds over the panel's padding to span its full width, as the day strip spans the chat. */
+#root .sidebar h2 { margin: -0.8rem -0.8rem 0.8rem; padding: 0.5rem 0.8rem; font-size: 1rem; font-weight: 700; }
 #root .sidebar details + details { margin-top: 0.6rem; }
 #root .sidebar summary { font-size: 0.95rem; font-weight: 600; cursor: pointer; }
 #root .sidebar details.held, #root .sidebar details.held .day-lines button { color: var(--red); }
@@ -192,8 +194,10 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
    is open, so its shade covers them too and the account menu stays above it otherwise. */
 #root .day-strip { position: sticky; top: var(--head-height); z-index: 4; }
 #root .day-strip.open { z-index: 6; }
-#root .day-strip-row {
+#root .day-strip-row, #root .sidebar h2 {
   background: var(--accent-soft); border-bottom: 1px solid var(--accent-border);
+}
+#root .day-strip-row {
   display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.35rem 0.9rem;
 }
 #root .day-strip .chips { flex-wrap: nowrap; }
