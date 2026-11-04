@@ -28,6 +28,7 @@ from engine_kit import (
 )
 
 from common import texts
+from common.access import OWNER
 from common.flows import card_text, classify_context, message_context
 from common.model import IntentResult
 
@@ -129,7 +130,7 @@ def _periods(owner):
 
 def _welcome(owner):
     messages, snapshot = owner.load()
-    assert [m["text"] for m in messages] == [texts.welcome()]
+    assert [m["text"] for m in messages] == [texts.welcome(OWNER, ACCOUNT)]
     assert (snapshot.card, snapshot.waiting) == (None, 0)
 
 

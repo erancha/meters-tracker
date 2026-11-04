@@ -103,6 +103,7 @@ _SPEC = {
     ("card", "electricity_price"): ("price", False, "electricity_price"),
     ("card", "water_price"): ("price", False, "water_price"),
     ("card", "effective_date"): ("future_date", False, "effective_date"),
+    ("card", "delegate_address"): ("email", False, "delegate_address"),
     ("reading", "value"): ("whole", False, "value"),
     ("reading", "date"): ("date", True, "date"),
     ("reading", "serial"): ("serial", True, "serial"),

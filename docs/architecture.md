@@ -139,7 +139,8 @@ correction card (`src/common/flows/correction.py`), planned without I/O by
 also gets every waiting card and the latest dropped photos, so an edit can reach a card behind the
 first or read a dropped photo again. A change missing its value, or with one that does not fit,
 becomes a question card (`src/common/flows/question.py`) that keeps the change until the answer.
-Text with nothing awaiting is classified into a close, vacate, period-change or tariffs request.
+Text with nothing awaiting is classified into a close, vacate, period-change or tariffs request,
+or into adding, listing or removing a delegate (`src/common/flows/delegates.py`).
 Any message that is not a change the app can make (a how-to question, an ambiguous message, a
 request the app lacks, a bare value with no card) is answered by `ask_back` in `src/common/flows/`
 from a fixed template, never with a bare "not understood". Every user action and every reply is
@@ -270,8 +271,8 @@ expires after 30 days. `deploy.sh` refuses to create the app stack while such le
 - `src/handlers/` — the Lambda entry points, `api.py` and `presignup.py`.
 - `src/common/` — the shared core: `engine.py` and `flows/` (the conversation, one module per
   card kind: `meter_photo`, `link_meter`, `close_period`, `period_change`, `tariffs`, `correction`,
-  `question`), `fields.py` (the table of editable fields), `corrections.py` and `account.py` (a
-  correction planned on a copy of the account, and the rows it writes), `periods.py`
+  `question`, `delegates`), `fields.py` (the table of editable fields), `corrections.py` and
+  `account.py` (a correction planned on a copy of the account, and the rows it writes), `periods.py`
   (pure period arithmetic), `store.py` and `paging.py` (DynamoDB), `files.py` (S3), `model.py`
   and `prompts.py` (the model), `report.py` and `notify.py` (the period report and its email),
   `fonts/` (the font the PDF ships with), `access.py`, `texts.py` (every Hebrew string),

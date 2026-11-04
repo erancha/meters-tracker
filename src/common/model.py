@@ -99,6 +99,9 @@ class IntentResult(BaseModel):
         "change_period",
         "set_tariffs",
         "resend_reports",
+        "add_delegate",
+        "list_delegates",
+        "remove_delegate",
         "explain",
         "edit",
         "how_to",
@@ -111,6 +114,8 @@ class IntentResult(BaseModel):
     months: int | None = None
     electricity_price: float | None = None
     water_price: float | None = None
+    # The e-mail address an add_delegate or remove_delegate request names
+    address: str | None = None
     operations: list[Operation] = Field(default_factory=list)
 
 

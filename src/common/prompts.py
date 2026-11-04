@@ -77,8 +77,13 @@ Intents:
   one operation with action "set", the target and field it is about, and value null
 - which: the message is ambiguous between several targets; set operations to one per candidate
   target, with the same action, field and value for each
-- not_offered: a clear request for something the app does not do, such as adding, listing or
-  removing a person who works in the account (מורשה); correcting a delegate's address is edit
+- add_delegate: add a person who will work in the account (מורשה); set address to the e-mail
+  address the message gives, exactly as written, or null when it gives none
+- list_delegates: who the account's delegates are
+- remove_delegate: remove a delegate; set address as for add_delegate. Correcting a delegate's
+  address is edit
+- not_offered: a clear request for something the app does not do, such as a reminder on a date
+  or an export to a file
 - unknown: none of the above
 
 A pending card lists its fields after "{FORM_TITLE}", each as name: current value, with

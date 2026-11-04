@@ -21,7 +21,9 @@ final step fails shows a banner asking to reload and sign in again.
   app's replies on the other. Each of the user's texts and photos shows its date and time to the
   minute, in Israel time. The thread opens at its bottom and keeps its bottom in view as it
   grows, so the latest reply and the thinking line sit just above the composer.
-- A new account's thread opens with a welcome that says to start with a meter photo.
+- A new account's thread opens with a welcome that says to start with a meter photo. A
+  delegate's first visit names the owner's address, says the delegate works in that account,
+  and that period reports go to that address.
 - At the bottom, the composer holds the camera button, the draft and the send button. Send is
   disabled only while the draft is empty. A typed reply is sent even while the card awaiting
   an answer offers a confirm button; the server reads it with that card as context.
@@ -81,7 +83,7 @@ final step fails shows a banner asking to reload and sign in again.
   question there, and the next typed value fills that field.
 - A question about how to do something gets one sentence on how, with an offer to do it here. A
   message that fits several records lists them. A number typed with no card waiting is asked
-  about, and nothing is saved. A request the app does not offer yet, such as adding a delegate,
+  about, and nothing is saved. A request the app does not offer, such as a reminder on a date,
   says so. Any other message gets what the assistant can do, naming the account's apartments; the
   reply is never "לא הבנתי".
 
@@ -103,6 +105,21 @@ final step fails shows a banner asking to reload and sign in again.
 - A statement whose prices exclude VAT asks for the prices typed.
 - Closing a period with no prices on record asks for them; once saved, the reply shows what each
   such period costs.
+
+## Delegates
+
+- The owner adds a delegate in a typed sentence ("הוסף את dana@example.com כמורשה"). A card
+  titled `הוספת מורשה` names the address and what it will be able to do; "אישור" writes it, and
+  the reply says that the address's next Google sign-in lands in this account. An address typed
+  on the card replaces the one shown. A request with no address ("הוסף מורשה") shows a card
+  asking for it, and the address typed next fills it.
+- An address the account cannot take is refused in the reply, with no card: the owner's own
+  address, an address already a delegate here, or one that holds data or delegates for another
+  owner. The refusal does not say what the other account holds.
+- "מי המורשים?" lists the delegates' addresses, or says there are none.
+- Removing a delegate shows a card titled `הסרת מורשה` saying the address loses access; "אישור"
+  deletes its row, and the reply says its next sign-in opens an empty account of its own.
+- A delegate who asks to add, list or remove a delegate is told that only the owner can.
 
 ## Day panel
 

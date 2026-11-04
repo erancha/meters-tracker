@@ -1548,6 +1548,33 @@
     "message": "תוסיף את dana@gmail.com כמורשה",
     "card": null,
     "today": "2026-10-29",
+    "intent": "add_delegate",
+    "fields": {
+      "address": "dana@gmail.com"
+    },
+    "records": "story"
+  },
+  {
+    "message": "מי המורשים בחשבון?",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "list_delegates",
+    "records": "story"
+  },
+  {
+    "message": "תסיר את dana@gmail.com מהמורשים",
+    "card": null,
+    "today": "2026-10-29",
+    "intent": "remove_delegate",
+    "fields": {
+      "address": "dana@gmail.com"
+    },
+    "records": "story"
+  },
+  {
+    "message": "תזכיר לי בעוד חודש לצלם",
+    "card": null,
+    "today": "2026-10-29",
     "intent": "not_offered",
     "records": "story"
   },

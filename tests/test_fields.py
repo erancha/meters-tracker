@@ -196,6 +196,7 @@ EXPECTED_KINDS = {
     ("card", "electricity_price"): ("price", False),
     ("card", "water_price"): ("price", False),
     ("card", "effective_date"): ("future_date", False),
+    ("card", "delegate_address"): ("email", False),
     ("reading", "value"): ("whole", False),
     ("reading", "date"): ("date", True),
     ("reading", "serial"): ("serial", True),

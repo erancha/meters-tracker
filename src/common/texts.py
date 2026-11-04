@@ -4,6 +4,7 @@ Hebrew themselves, so the owner's wording corrections touch this file only."""
 
 from datetime import date
 
+from common.access import OWNER
 from common.dates import fmt, fmt_day_month, parse_iso
 
 OPTION_LABELS = {
@@ -859,7 +860,57 @@ def address_taken() -> str:
 
 
 def delegate_not_removable(address) -> str:
-    return f"עוד אי אפשר להסיר מורשה, ולכן {address} נשאר. אפשר לתקן את הכתובת שלו."
+    return (
+        f"מורשה לא נמחק כתיקון, ולכן {address} נשאר. "
+        f'אפשר לבקש להסיר אותו, למשל "הסר את המורשה {address}".'
+    )
+
+
+def delegate_add_card(address) -> tuple[str, list[str]]:
+    return (
+        "הוספת מורשה",
+        [f"הכתובת {address} תוכל לצלם מונים, לשאול ולתקן נתונים בחשבון הזה."],
+    )
+
+
+def delegate_remove_card(address) -> tuple[str, list[str]]:
+    return ("הסרת מורשה", [access_lost(address)])
+
+
+def delegate_added(address) -> str:
+    return f"הכתובת {address} נוספה. בכניסה עם Google היא תגיע ישר לחשבון הזה."
+
+
+def delegate_removed(address) -> str:
+    return f"הכתובת {address} הוסרה. בכניסה הבאה שלה ייפתח לה חשבון ריק משלה."
+
+
+def delegates_list(addresses: list[str]) -> str:
+    return f"המורשים בחשבון: {', '.join(addresses)}."
+
+
+def no_delegates() -> str:
+    return f"אין מורשים בחשבון. {DELEGATE_HINT}"
+
+
+def delegates_unchanged() -> str:
+    return "המורשים לא השתנו."
+
+
+def own_address() -> str:
+    return "זו הכתובת שלך, בעלת החשבון. אפשר לכתוב כתובת אחרת."
+
+
+def delegate_gone(address) -> str:
+    return f"{address} כבר לא מורשה בחשבון, ולכן אין מה להסיר. אפשר לבקש את רשימת המורשים."
+
+
+def delegate_ask_card() -> tuple[str, list[str]]:
+    return ("איזו כתובת להוסיף כמורשה?", [FIELD_HOW_TO["delegate_address"]])
+
+
+def ask_delegate_address() -> str:
+    return f"איזו כתובת? {FIELD_HOW_TO['delegate_address']}"
 
 
 def delegate_address_changed() -> str:
@@ -959,8 +1010,19 @@ def display_past_readings(meter_type, serial, readings: list[dict]) -> list[str]
 START_HINT = "אפשר להתחיל בצילום של מונה מים או חשמל: אזהה אותו ואציע לאיזו דירה לשייך."
 
 
-def welcome() -> str:
-    return f"שלום. החשבון חדש ועדיין ריק.\n{START_HINT}"
+# How an owner adds a delegate, for an owner told there are none.
+DELEGATE_HINT = 'אפשר גם להוסיף מורשה שיצלם במקומך: כותבים "הוסף מורשה name@example.com".'
+
+
+def welcome(role, account) -> str:
+    """A new address's first message: an owner's account is its own, new and empty; a delegate
+    is told whose account it works in, and that reports go to that owner."""
+    if role == OWNER:
+        return f"שלום. החשבון חדש ועדיין ריק.\n{START_HINT}"
+    return (
+        f"שלום. נוספת כמורשה בחשבון של {account}: אפשר לצלם מונים, לשאול ולתקן נתונים. "
+        f"דוחות התקופה נשלחים במייל ל־{account}."
+    )
 
 
 def greeting(apartments_past_end: list[tuple[str, date]]) -> str:

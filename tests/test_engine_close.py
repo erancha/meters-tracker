@@ -7,6 +7,7 @@ import pytest
 from engine_kit import ACCOUNT, USER, Kit, electricity, options, reading, water
 
 from common import texts
+from common.access import OWNER
 from common.engine import AlreadyHandled
 from common.flows import card_text
 from common.model import IntentResult
@@ -290,7 +291,7 @@ def test_change_period_intent_moves_open_period_start(env, ddb):
 def test_load_greets_once_a_day_for_apartments_past_end(env, ddb):
     kit = Kit(today=date(2026, 10, 20))
     _apartment(kit)
-    assert [m["text"] for m in kit.engine.load(USER)[0]] == [texts.welcome()]
+    assert [m["text"] for m in kit.engine.load(USER)[0]] == [texts.welcome(OWNER, ACCOUNT)]
     kit.today = date(2026, 11, 2)
     messages, snapshot = kit.engine.load(USER)
     greeting = texts.greeting([("עורף", date(2026, 10, 31))])
@@ -305,7 +306,9 @@ def test_load_greets_once_a_day_for_apartments_past_end(env, ddb):
 def test_load_welcomes_a_new_account_once(env, ddb):
     kit = Kit(today=date(2026, 10, 20))
     messages, _ = kit.engine.load(USER)
-    assert [(m["role"], m["text"]) for m in messages] == [("assistant", texts.welcome())]
+    assert [(m["role"], m["text"]) for m in messages] == [
+        ("assistant", texts.welcome(OWNER, ACCOUNT))
+    ]
     assert len(kit.engine.load(USER)[0]) == 1
 
 

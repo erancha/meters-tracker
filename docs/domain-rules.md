@@ -20,6 +20,8 @@ charge, with the exact values the code uses. The arithmetic lives in
   At most one period of an apartment is open at a time.
 - A **tariff** is a pair of VAT-inclusive prices, per kWh and per cubic meter, in force from its
   effective date.
+- A **delegate** is a Google address the owner lets work in the account: everything an owner
+  does except managing delegates ([ADR 0002](adr/0002-google-sign-in-and-delegation.md)).
 
 ## Values
 
@@ -256,7 +258,7 @@ No reply only says it did not understand. Each comes from a fixed template in
   here; one about no field gets what the assistant can do.
 - **A message fitting several records** lists them, so the next message can name one.
 - **A bare value with no card waiting** asks what it is, and nothing is written.
-- **A request the app does not offer**, such as adding a delegate, says so, then what it can do.
+- **A request the app does not offer**, such as a reminder on a date, says so, then what it can do.
 - **Anything else** gets what the assistant can do, with an example naming one of the account's own
   apartments; an account with no apartment is told to start with a photo. On a card, it gets what
   that card takes, and the card again. A record the account lacks, an unknown field on a record,
@@ -395,6 +397,30 @@ the effective date.
   units and its charge now. The earlier charge is left out: a tariff changes only the charge on
   units the line already names, and a correction's card is where figures stand beside the ones
   they replace.
+
+## Delegates
+
+The delegates flow (`src/common/flows/delegates.py`) writes or deletes a delegate's access row
+only from its confirmed card. Only the owner may ask; a delegate's request gets the owner-only
+reply and writes nothing.
+
+- **Adding.** The request names an address, lowercased as sign-in looks it up; a request with no
+  usable address shows a card with no buttons asking for one, and a bare typed answer fills it.
+  The card shows the address and takes a typed address in its place. The address is refused, on
+  the request, on an edit of the card and again on confirmation, when it is the owner's own,
+  already a delegate here, or holds data or a delegate row elsewhere, in one neutral text that
+  says nothing of what the other account holds. An address that has only signed in, with an
+  owner row over an empty account, is accepted: its owner row becomes the delegate row.
+- **Listing** names the delegates' addresses in alphabetical order and writes nothing.
+- **Removing.** The request must name a current delegate. The card says the address loses
+  access; confirming deletes the row, so the address's next sign-in opens an empty account of
+  its own. A row that stopped naming the account while the card waited drops the card.
+- **One transaction.** The row and the waiting cards of the address that joins or leaves are
+  written together, under the same conditions as a corrected delegate address; a row that
+  changed since the card was shown refuses the write and drops the card.
+- **Greeting.** After the write, an address that joins is greeted in its own chat with the
+  delegate welcome, and one that leaves with the welcome of its own empty account, so an address
+  that had signed in before learns where it now works. A corrected delegate address greets both.
 
 ## Model call cost
 

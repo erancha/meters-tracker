@@ -261,10 +261,10 @@ def test_an_invalid_value_on_a_dropped_photo_is_asked_and_the_answer_reads_it(en
     assert card["kind"] == "reading" and "960" in card_text(card)
 
 
-def test_delegate_request_says_it_is_not_offered_yet(env, ddb):
+def test_a_request_the_app_lacks_says_it_is_not_offered(env, ddb):
     kit = Kit()
     _seeded(kit)
-    result = _say(kit, IntentResult(intent="not_offered"), "תוסיף את דנה כמורשה")
+    result = _say(kit, IntentResult(intent="not_offered"), "תזכיר לי בעוד חודש")
     assert _texts(result) == [texts.not_offered(NAMES)]
     assert kit.store.pending(USER.email) == []
 
@@ -298,6 +298,8 @@ def test_every_refusal_and_dropped_card_says_what_to_do_next():
         texts.no_open_period("עורף"),
         texts.tariffs_not_missing(),
         texts.delegate_address_changed(),
+        texts.own_address(),
+        texts.delegate_gone("dana@x.com"),
     ]
     for reply in replies:
         assert "אפשר" in reply.replace("אי אפשר", ""), reply

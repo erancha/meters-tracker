@@ -77,6 +77,7 @@ from common.flows import (
     classify_context,
     close_period,
     correction,
+    delegates,
     drop,
     link_meter,
     message_context,
@@ -112,6 +113,7 @@ FLOWS = {
     tariffs.KIND: tariffs,
     correction.KIND: correction,
     question.KIND: question,
+    delegates.KIND: delegates,
 }
 
 # The kinds that come first in the queue, in this order, whatever their seq.
@@ -612,6 +614,8 @@ class Engine:
             return period_change.change(self, user, intent)
         if intent.intent == "set_tariffs":
             return tariffs.request(self, user, intent)
+        if intent.intent in ("add_delegate", "list_delegates", "remove_delegate"):
+            return delegates.request(self, user, intent)
         return ask_back(self, user, intent)
 
     def route(self, user, operations) -> list[Reply]:
@@ -652,7 +656,7 @@ class Engine:
         self._renew_shown(user)
         messages = self.store.messages(user.email, day)
         if not self.store.has_messages(user.email):
-            messages.append(self._append(user, "assistant", texts.welcome()))
+            messages.append(self.greet(user))
         elif day == today and not messages:
             due = close_period.due_for_close(self, user)
             if due:
@@ -660,6 +664,10 @@ class Engine:
             for reply in self._resend_failed_reports(user):
                 messages.append(self._append(user, "assistant", reply.text))
         return messages, self.snapshot(user)
+
+    def greet(self, user) -> dict:
+        """Writes the welcome for the account user works in, as that user's role there."""
+        return self._append(user, "assistant", texts.welcome(user.role, user.account))
 
     def _append(self, user, role, text, card=None, image_key=None, choice=None) -> dict:
         """Records one message. A user's choice is recorded as the chosen option's label, with

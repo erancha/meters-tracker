@@ -21,10 +21,11 @@ same transaction deletes the waiting items of the addresses that leave or join t
 item carries no account, so it would run in whichever account its address works in by then, and
 its ids would mean nothing there. The card says when the new address loses one. A turn racing the
 confirmation itself gets past this, which needs the other person to act within that one request.
+After the write, each of those addresses is greeted in its own chat with its new place.
 """
 
 from common import account, corrections, texts
-from common.access import DELEGATE, User
+from common.access import DELEGATE, OWNER, User
 from common.corrections import Plan
 from common.fields import InvalidValue, UnknownField, UnknownTarget
 from common.flows import (
@@ -163,13 +164,24 @@ def _refresh_tags(engine, user, after):
             engine.store.set_message_reading(user.email, message["at"], tag)
 
 
-def _waiting_items(engine, before, after) -> list[tuple[str, dict]]:
+def waiting_items(engine, before, after) -> list[tuple[str, dict]]:
     """(address, item) of each item waiting on an address that leaves or joins the account."""
     lost, gained = corrections.lost_and_gained(before, after)
     return [(a, item) for a in [*lost, *gained] for item in engine.store.pending(a)]
 
 
-def _drop_tags(engine, user, cleared: list[tuple[str, dict]]):
+def greet_moved(engine, user, before, after):
+    """Greets each address that joins the account as its delegate, and each that leaves as the
+    owner of its own account, which its next sign-in opens, since its chat shows no other sign of
+    the move."""
+    lost, gained = corrections.lost_and_gained(before, after)
+    for address in gained:
+        engine.greet(User(address, user.account, DELEGATE))
+    for address in lost:
+        engine.greet(User(address, address, OWNER))
+
+
+def drop_tags(engine, user, cleared: list[tuple[str, dict]]):
     for address, item in cleared:
         tag_photo(engine, User(address, user.account, DELEGATE), item, "dropped")
 
@@ -193,7 +205,7 @@ def _confirm(engine, user, item) -> list[Reply]:
         return [Reply(texts.correction_changed()), *ask(engine, user, item, CONFIRM, card)]
     _record_failed_photos(engine, before, planned.after)
     writes = account.diff(before, planned.after)
-    cleared = _waiting_items(engine, before, planned.after)
+    cleared = waiting_items(engine, before, planned.after)
     if cleared:
         writes.deletes["pending"] = cleared
     try:
@@ -202,7 +214,8 @@ def _confirm(engine, user, item) -> list[Reply]:
         return drop(engine, user, item, [Reply(texts.delegate_address_changed())])
     except TooLarge:
         return drop(engine, user, item, [Reply(texts.correction_too_large(writes.size()))])
-    _drop_tags(engine, user, cleared)
+    drop_tags(engine, user, cleared)
+    greet_moved(engine, user, before, planned.after)
     _refresh_tags(engine, user, planned.after)
     saved = drop(engine, user, item, [Reply("\n".join([texts.correction_saved(), *lines]))])
     return [*saved, *link_meter.hand_over_known(engine, user)]

@@ -33,7 +33,8 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
 - A new account's chat opens with a welcome that says to start with a meter photo. On the first
   visit of a day, the chat names every apartment whose period has ended without closing readings.
 - Sign-in is with a Google account. Each address has an account of its own, and an address the
-  owner delegates works in that owner's account.
+  owner delegates works in that owner's account. The owner adds, lists and removes delegates in
+  the chat.
 - The chat runs in the browser: sign in with Google, photograph a meter or pick photos, answer a
   card with a button or type a turn. On wide windows a panel shows the day's saved and waiting
   readings.
