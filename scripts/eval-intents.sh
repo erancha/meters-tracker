@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 # Classify the recorded chat messages with a real model and check each intent it returns.
 #
-#   ./scripts/eval-intents.sh
+#   ./scripts/eval-intents.sh [--intent <intent,...>]
+#
+# --intent <intent,...>  Run only the cases that expect one of these intents, comma-separated.
+#                        A prompt change can move any case, so this is a cheap check while a
+#                        change is in progress, never a substitute for the full run before
+#                        production. Name the intents the change adds or rewords, and the
+#                        fallbacks a message lands in when nothing else matches (unknown,
+#                        not_offered, how_to, explain), since a new intent takes messages from
+#                        them or loses its own to them.
 #
 # The cases are tests/intents.json: each is a message, the card it answers (named from the
 # cards eval_intents.py renders with texts.py, or null), the day it is typed on, the expected
@@ -18,16 +26,20 @@
 #
 #   export LLM_MODEL=anthropic:claude-opus-5-5 LLM_API_KEY=<key>
 #   ./scripts/eval-intents.sh
+#   ./scripts/eval-intents.sh --intent resend_reports,unknown,not_offered,how_to,explain
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=common.sh
 source "$ROOT/scripts/common.sh"
 
+INTENTS=()
 case "${1:-}" in
   -h|--help) print_help; exit 0 ;;
+  --intent) [ $# -eq 2 ] || { print_help >&2; exit 2; }; INTENTS=("$2") ;;
   "") ;;
   *) print_help >&2; exit 2 ;;
 esac
 
 require_venv
-exec "$ROOT/.venv/bin/python" "$ROOT/scripts/eval_intents.py" "$ROOT/tests/intents.json"
+exec "$ROOT/.venv/bin/python" "$ROOT/scripts/eval_intents.py" "$ROOT/tests/intents.json" \
+  "${INTENTS[@]}"

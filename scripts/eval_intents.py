@@ -17,11 +17,13 @@ account holding only the apartments the case lists, which go only with a request
 - load_cases: reads and validates the case file, naming the case that is wrong; an expected
   operation must target the card or an id the case's records block lists, and a set must name a
   field that target has, with a value that fits the field
+- selected: the cases expecting the intents a comma-separated list names, for a cheap run while
+  a change is in progress
 - context / mismatches / evaluate: one case's classifier context, its differences from the
   expectation (operations in any order), and the run over all cases, yielding each as soon as the
   model answers
 - main: prints one PASS or FAIL line per case and the total; exits 1 when any case fails, 2
-  with one line naming the cause when a model call fails
+  with one line naming the cause when the intent list is wrong or a model call fails
 """
 
 import json
@@ -446,6 +448,19 @@ def load_cases(path: Path) -> list[Case]:
     return cases
 
 
+def selected(cases: list[Case], intents: str) -> list[Case]:
+    """The cases expecting one of the comma-separated intents. Raises ValueError for a name the
+    classifier has no intent for, or a list no case expects."""
+    names = intents.split(",")
+    unknown = [n for n in names if n not in INTENTS]
+    if unknown:
+        raise ValueError(f"no intent {', '.join(unknown)}; the intents are {', '.join(INTENTS)}")
+    kept = [c for c in cases if c.intent in names]
+    if not kept:
+        raise ValueError(f"no case expects {intents}")
+    return kept
+
+
 def _apartments_only(apartments: list[str]) -> Records:
     """An account whose one property holds these apartments, and no more."""
     rows = [
@@ -519,10 +534,16 @@ def report(all_problems: list[list[str]]) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("usage: eval_intents.py <cases.json>", file=sys.stderr)
+    if len(sys.argv) not in (2, 3):
+        print("usage: eval_intents.py <cases.json> [intent,...]", file=sys.stderr)
         sys.exit(2)
     cases = load_cases(Path(sys.argv[1]))
+    if len(sys.argv) == 3:
+        try:
+            cases = selected(cases, sys.argv[2])
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            sys.exit(2)
     try:
         model = model_from_env()
     except ValueError as error:

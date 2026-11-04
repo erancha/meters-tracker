@@ -29,6 +29,7 @@ from eval_intents import (
     load_cases,
     mismatches,
     report,
+    selected,
 )
 
 CASES = Path(__file__).resolve().parent / "intents.json"
@@ -359,3 +360,21 @@ def test_an_expected_bare_value_or_left_out_value_is_not_checked(tmp_path):
     )
     reading = "reading|4410290|2026-09-01#2026-09-01T09:00:00"
     _story_edit(tmp_path, {"action": "set", "target": reading, "field": "value", "value": None})
+
+
+def test_selected_keeps_only_the_cases_expecting_the_named_intents():
+    cases = [_case(intent="edit"), _case(intent="unknown"), _case(intent="resend_reports")]
+    assert [c.intent for c in selected(cases, "resend_reports,unknown")] == [
+        "unknown",
+        "resend_reports",
+    ]
+
+
+def test_selected_refuses_an_intent_the_classifier_has_not():
+    with pytest.raises(ValueError, match="resend"):
+        selected([_case()], "resend")
+
+
+def test_selected_refuses_a_list_matching_no_case():
+    with pytest.raises(ValueError, match="no case expects"):
+        selected([_case(intent="edit")], "unknown")
