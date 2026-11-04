@@ -177,3 +177,12 @@ def test_cognito_admits_only_google_verified_addresses(cognito):
     assert client["ExplicitAuthFlows"] == ["ALLOW_REFRESH_TOKEN_AUTH"]
     mapping = resources["GoogleProvider"]["Properties"]["AttributeMapping"]
     assert mapping["email_verified"] == "email_verified"
+
+
+def test_deploy_requires_the_admin_and_passes_it_to_the_api(app):
+    variables = app["Resources"]["ApiFunction"]["Properties"]["Environment"]["Variables"]
+    assert variables["ADMIN_EMAIL"] == "AdminEmail"
+    assert "Default" not in app["Parameters"]["AdminEmail"]
+    assert 'AdminEmail="$ADMIN_EMAIL"' in (SCRIPTS / "deploy.sh").read_text()
+    assert "ADMIN_EMAIL" in (SCRIPTS / "common.sh").read_text()
+    assert 'export ADMIN_EMAIL="' in (SCRIPTS / "params.example.sh").read_text()

@@ -1,6 +1,7 @@
 /**
  * Chat state over the `["chat"]` query: the history and the snapshot from the backend, and the
- * turns that extend them.
+ * turns that extend them. The backend flags the admin's chat; here that becomes locked, and the
+ * composer takes no input.
  *
  * Every turn writes its outcome into the query cache: the user's own message (the typed text,
  * or the chosen option's label and its card, as the backend records it) is appended before the
@@ -40,6 +41,7 @@ const KEY = ["chat"];
 interface Chat {
   messages: LocalMessage[];
   snapshot: Snapshot;
+  admin: boolean;
 }
 
 const userMessage = (text: string | null, choice: CardRef | null = null): LocalMessage => ({
@@ -146,6 +148,7 @@ export function useChat(api: Api) {
       }
       await client.cancelQueries({ queryKey: KEY });
       client.setQueryData<Chat>(KEY, (old) => ({
+        ...old!,
         messages: [...old!.messages, ...replyMessages(result)],
         snapshot: result.snapshot,
       }));
@@ -213,6 +216,7 @@ export function useChat(api: Api) {
     loadFailed: chat.isError,
     messages,
     snapshot: chat.data?.snapshot,
+    locked: chat.data?.admin,
     sendText: (text: string) =>
       turn.mutate({ body: async () => ({ text }), local: userMessage(text) }),
     sendPhotos: (files: File[]) => files.forEach(sendPhoto),

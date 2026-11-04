@@ -91,7 +91,7 @@ deploy_main() {  # frontend-url
     --no-fail-on-empty-changeset \
     --parameter-overrides AllowedOrigins="$origins" UserPoolId="$user_pool_id" \
       UserPoolClientId="$user_pool_client_id" LlmModel="$LLM_MODEL" LlmKeyParam="$KEY_PARAM" \
-      SesSender="$SES_SENDER"
+      SesSender="$SES_SENDER" AdminEmail="$ADMIN_EMAIL"
 }
 
 FRONTEND_URL=$(stack_output "$APP" FrontendUrl)

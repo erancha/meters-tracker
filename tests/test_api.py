@@ -1,5 +1,6 @@
 """The HTTP handler's contract: routes, status codes and error bodies, the photo size and type
-limits, file URL authorization, and the verified-email requirement."""
+limits, file URL authorization, the verified-email requirement, and the admin flag on the
+chat."""
 
 import base64
 import json
@@ -8,6 +9,7 @@ from urllib.parse import unquote
 import anthropic
 import boto3
 import pytest
+from conftest import ADMIN_EMAIL
 from engine_kit import ACCOUNT, Kit, electricity, options, reading
 
 from common import dates
@@ -75,6 +77,7 @@ def test_get_chat_returns_history_and_snapshot(kit):
     assert body["messages"][0]["role"] == "user"
     assert body["snapshot"]["card"]["kind"] == "reading"
     assert body["snapshot"]["waiting"] == 0
+    assert body["admin"] is False
 
 
 def test_get_chat_takes_a_day(kit):
@@ -337,3 +340,9 @@ def test_retry_naming_no_message_is_invalid(kit):
 
     assert result["statusCode"] == 400
     assert _body(result) == {"error": "invalid_request"}
+
+
+def test_admin_chat_is_flagged_in_any_letter_case(kit):
+    body = _body(api.handler(event("GET /chat", email=ADMIN_EMAIL.upper()), None))
+    assert body["admin"] is True
+    assert [m["role"] for m in body["messages"]] == ["assistant"]

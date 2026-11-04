@@ -15,7 +15,7 @@ export function Chat({ api, onOpen, focus = null }: {
 }) {
   const {
     messages, snapshot, sendText, sendPhotos, choose, choosing, pending, failed, rejected,
-    retry, loadFailed,
+    retry, loadFailed, locked,
   } = useChat(api);
   if (loadFailed) return <div className="alert" role="alert">{texts.loadFailed}</div>;
   if (snapshot === undefined) return null;
@@ -26,7 +26,7 @@ export function Chat({ api, onOpen, focus = null }: {
                    focus={focus} />
       {failed && <div className="alert" role="alert">{texts.turnFailed}</div>}
       {rejected && <div className="alert" role="alert">{texts.imageRejected}</div>}
-      <Composer onSend={sendText} onPhotos={sendPhotos} />
+      <Composer onSend={sendText} onPhotos={sendPhotos} locked={locked} />
     </div>
   );
 }

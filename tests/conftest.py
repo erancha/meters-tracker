@@ -13,6 +13,7 @@ from common.store import Store
 REGION = "eu-central-1"
 FILES_BUCKET = "files"
 SES_SENDER = "reports@meters.test"
+ADMIN_EMAIL = "admin@meters.test"
 KEYED_BY_PK_ONLY = ["access"]
 KEYED_BY_PK_AND_SK = [
     "properties",
@@ -73,6 +74,7 @@ def set_environment(monkeypatch):
         monkeypatch.setenv(f"{name.upper()}_TABLE", name)
     monkeypatch.setenv("FILES_BUCKET", FILES_BUCKET)
     monkeypatch.setenv("SES_SENDER", SES_SENDER)
+    monkeypatch.setenv("ADMIN_EMAIL", ADMIN_EMAIL)
     monkeypatch.setenv("AWS_DEFAULT_REGION", REGION)
     monkeypatch.setenv("APP_CONFIG_PATH", "config/app.json")
     monkeypatch.setenv("LAMBDA_TIMEOUT_SECONDS", "60")

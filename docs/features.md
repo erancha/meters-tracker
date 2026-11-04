@@ -121,6 +121,11 @@ final step fails shows a banner asking to reload and sign in again.
   deletes its row, and the reply says its next sign-in opens an empty account of its own.
 - A delegate who asks to add, list or remove a delegate is told that only the owner can.
 
+## Admin
+
+- The deployment's admin address signs in to its own chat, but manages no meters: the message
+  box, the camera button and the send button are disabled.
+
 ## Day panel
 
 The chat shows one day, today. On a window at least `sidebar_min_width_px` wide (900 px in

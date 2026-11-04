@@ -1,7 +1,8 @@
 """Maps a signed-in Google address to the account it works in.
 
 An address with no access row becomes an owner of its own account, keyed by its lowercase
-address. A delegate row names the owner account the address works in.
+address. A delegate row names the owner account the address works in. The deployment's admin
+address is named by the stack, not by an access row, and keeps its ordinary account.
 """
 
 from dataclasses import dataclass
@@ -19,6 +20,10 @@ class User:
 
 def _user(row) -> User:
     return User(email=row["email"], account=row["account"], role=row["role"])
+
+
+def is_admin(email: str, admin_email: str) -> bool:
+    return email.lower() == admin_email.lower()
 
 
 def resolve(store, email: str) -> User:

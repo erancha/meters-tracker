@@ -47,6 +47,12 @@ describe("Chat", () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
+  it("locks the composer when the backend serves the chat read-only", async () => {
+    setup({ messages: history, snapshot: snapshot(null), admin: true });
+
+    expect(await screen.findByRole("textbox")).toBeDisabled();
+  });
+
   it("shows a card message once, not as text and as card", async () => {
     setup({ messages: [...history, cardMessage()], snapshot: snapshot(card()) });
 

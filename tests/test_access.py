@@ -1,7 +1,7 @@
 """Resolving a signed-in address to its account and role, including a first sign-in that races
-another request for the same address."""
+another request for the same address, and telling the deployment's admin address apart."""
 
-from common.access import User, resolve
+from common.access import User, is_admin, resolve
 
 
 class LostFirstRead:
@@ -56,3 +56,12 @@ def test_lost_put_rereads_the_row_written_concurrently(store):
     store.access_put_if_absent("delegate@x.com", "owner@x.com", "delegate")
     user = resolve(LostFirstRead(store), "delegate@x.com")
     assert user == User(email="delegate@x.com", account="owner@x.com", role="delegate")
+
+
+def test_admin_address_matches_in_any_letter_case():
+    assert is_admin("Admin@X.com", "admin@x.com")
+
+
+def test_admin_delegate_is_not_admin(store):
+    store.access_put_if_absent("delegate@x.com", "admin@x.com", "delegate")
+    assert not is_admin("delegate@x.com", "admin@x.com")

@@ -47,7 +47,8 @@ require_params() {
               "values" >&2; exit 1; }
   # shellcheck source=/dev/null
   source "$ROOT/scripts/params.sh"
-  require_values params.sh GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET LLM_MODEL SES_SENDER
+  require_values params.sh GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET LLM_MODEL SES_SENDER \
+    ADMIN_EMAIL
 }
 
 # The SSM parameter of a model provider's API key. Each provider has its own, so changing LLM_MODEL

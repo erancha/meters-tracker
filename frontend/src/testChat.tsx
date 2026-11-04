@@ -32,9 +32,9 @@ export const snapshot = (c: Card | null, waiting = 0, tariffsMissing = false): S
 });
 
 /** The server's chat; a test that expects the post-turn refetch to differ sets getChat itself. */
-export function fakeApi(chat: { messages: Message[]; snapshot: Snapshot }): Api {
+export function fakeApi(chat: { messages: Message[]; snapshot: Snapshot; admin?: boolean }): Api {
   return {
-    getChat: vi.fn().mockResolvedValue(chat),
+    getChat: vi.fn().mockResolvedValue({ admin: false, ...chat }),
     postTurn: vi.fn(),
     fileUrl: vi.fn(),
   };

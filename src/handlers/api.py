@@ -4,8 +4,10 @@ account's own photos.
 
 The caller's identity comes exclusively from the JWT claims the API Gateway authorizer verified;
 the request body never names a user, and an address Google has not verified is refused before it
-is resolved to an account. The engine is built per invocation from the environment, and a model
-setting it cannot serve or price fails every request before any work.
+is resolved to an account. The deployment's admin address takes the same path as any other, and
+the chat response flags it so the browser can lock the composer. The engine is built per
+invocation from the environment, and a model setting it cannot serve or price fails every request
+before any work.
 Photos are validated here, before the engine, so a rejected upload writes nothing to S3 or the
 pending table."""
 
@@ -48,9 +50,10 @@ def handler(event, context):
         return response(403, {"error": "email_unverified"})
     store = Store.from_env()
     user = access.resolve(store, claims["email"])
+    admin = access.is_admin(claims["email"], os.environ["ADMIN_EMAIL"])
     if route == "GET /chat":
         try:
-            return _chat(_engine(store), user, event.get("queryStringParameters"))
+            return _chat(_engine(store), user, admin, event.get("queryStringParameters"))
         except _Rejected as rejected:
             return rejected.response
     if route == "POST /turn":
@@ -103,7 +106,7 @@ def _engine(store):
     )
 
 
-def _chat(engine, user, query):
+def _chat(engine, user, admin, query):
     # The HTTP API leaves queryStringParameters out of a request with no query string.
     day = None if query is None else query["day"]
     if day is not None:
@@ -112,7 +115,7 @@ def _chat(engine, user, query):
         except ValueError:
             raise _invalid()
     messages, snapshot = engine.load(user, day)
-    return response(200, {"messages": messages, "snapshot": asdict(snapshot)})
+    return response(200, {"messages": messages, "snapshot": asdict(snapshot), "admin": admin})
 
 
 def _invalid():

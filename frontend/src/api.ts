@@ -33,7 +33,7 @@ function errorBody(body: string): { error?: unknown; snapshot?: Snapshot } {
 }
 
 export interface Api {
-  getChat(): Promise<{ messages: Message[]; snapshot: Snapshot }>;
+  getChat(): Promise<{ messages: Message[]; snapshot: Snapshot; admin: boolean }>;
   postTurn(body: TurnBody): Promise<TurnResult>;
   fileUrl(key: string): Promise<string>;
 }

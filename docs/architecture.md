@@ -195,12 +195,18 @@ recorded messages in
   `APP_CONFIG_PATH` environment variable, so an edit needs `deploy.sh`. Each table's name
   reaches the code as `<NAME>_TABLE` (`READINGS_TABLE` and so on), the bucket as
   `FILES_BUCKET`, the model as `LLM_MODEL`, the key parameter as `LLM_KEY_PARAM`, the api
-  time limit as `LAMBDA_TIMEOUT_SECONDS`, the mail sender as `SES_SENDER`.
+  time limit as `LAMBDA_TIMEOUT_SECONDS`, the mail sender as `SES_SENDER`, the admin address as
+  `ADMIN_EMAIL`.
 - **Sign-in and accounts.** `src/common/access.py` maps the JWT's email, lowercased, through
   the `access` table: a row names its account; an address with no row becomes the owner of its
   own account, keyed by that address, with a conditional write so two first requests agree.
   Data belongs to the account; the message history and the pending queue belong to the
   signed-in address ([ADR 0002](adr/0002-google-sign-in-and-delegation.md)).
+- **Admin.** Beside the owner and delegate roles, the deployment names one admin address in the
+  `AdminEmail` stack parameter. `access.is_admin` compares the signed-in address with it, ignoring
+  case, independently of the `access` table, so the admin keeps its ordinary account. The chat
+  response carries the flag, and the frontend locks the composer on it; the backend refuses
+  nothing ([ADR 0009](adr/0009-admin-is-a-stack-parameter.md)).
 - **Period report.** A close, a re-close, a tariff that first prices a closed period, or a late
   meter's reading that closes a closed period for it marks the period for a report during a turn.
   After the turn's replies the engine sends each marked report that `report.missing` finds due: a

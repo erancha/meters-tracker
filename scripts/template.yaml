@@ -31,6 +31,11 @@ Parameters:
     Description: Verified SES identity used as the From address of the emailed reports; passed
       from scripts/params.sh by scripts/deploy.sh
 
+  AdminEmail:
+    Type: String
+    Description: The deployment's admin address, flagged on its chat so the browser locks its
+      composer; passed from scripts/params.sh by scripts/deploy.sh
+
 Globals:
   Function:
     Runtime: python3.13
@@ -290,6 +295,7 @@ Resources:
           LLM_MODEL: !Ref LlmModel
           LLM_KEY_PARAM: !Ref LlmKeyParam
           SES_SENDER: !Ref SesSender
+          ADMIN_EMAIL: !Ref AdminEmail
       Events:
         Chat:
           Type: HttpApi

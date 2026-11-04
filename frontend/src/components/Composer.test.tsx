@@ -8,6 +8,14 @@ const send = () => screen.getByRole("button", { name: texts.send });
 const box = () => screen.getByPlaceholderText(texts.composerPlaceholder);
 
 describe("Composer", () => {
+  it("offers no way to send when locked", () => {
+    render(<Composer onSend={() => {}} onPhotos={() => {}} locked />);
+
+    expect(box()).toBeDisabled();
+    expect(screen.getByRole("button", { name: texts.attach })).toBeDisabled();
+    expect(send()).toBeDisabled();
+  });
+
   it("disables send for an empty draft", () => {
     render(<Composer onSend={() => {}} onPhotos={() => {}} />);
 
