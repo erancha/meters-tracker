@@ -9,7 +9,7 @@ from pathlib import Path
 import boto3
 import pytest
 from conftest import FILES_BUCKET, REGION
-from engine_kit import water
+from engine_kit import MODEL_NUMBER, electricity, water
 from fake_model import FakeModel
 
 from common.files import Files
@@ -44,6 +44,13 @@ def test_score_marks_serial_value_and_unreadable():
     assert score("W-1250", 1260, result)["value_ok"] is False
     assert score("W-9", 1250, result)["serial_ok"] is False
     assert score("W-1250", 1250, water(None, unreadable=True))["unreadable"] is True
+
+
+def test_score_identifies_an_electricity_meter_by_its_label():
+    result = electricity(label="כניסה מזרח")
+    assert score("כניסה_מזרח", 392691, result)["serial_ok"] is True
+    assert score(MODEL_NUMBER, 392691, result)["serial_ok"] is False
+    assert score("כניסה_מזרח", 392691, electricity(label=None))["serial_ok"] is False
 
 
 def test_evaluate_runs_every_failed_photo_through_the_model(env, ddb):

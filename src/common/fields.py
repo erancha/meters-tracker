@@ -167,6 +167,12 @@ def _non_blank(raw: str) -> str:
     return text
 
 
+def normalize_serial(raw: str) -> str:
+    """A serial as stored: trimmed, each run of whitespace as one underscore, so a label typed
+    with spaces and the same label read from a photo name one meter."""
+    return "_".join(_non_blank(raw).split())
+
+
 def _iso_date(raw: str) -> date:
     text = raw.strip()
     if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text):
@@ -224,7 +230,7 @@ def _member(raw: str, options) -> str:
 
 _PARSERS = {
     "whole": lambda raw, today: _whole(raw),
-    "serial": lambda raw, today: _non_blank(raw),
+    "serial": lambda raw, today: normalize_serial(raw),
     "date": _date,
     "future_date": lambda raw, today: _future_date(raw),
     "months": lambda raw, today: _months(raw),

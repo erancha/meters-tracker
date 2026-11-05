@@ -25,14 +25,16 @@ import app_stack
 
 from common.files import Files
 from common.flows import readable
+from common.flows.meter_photo import meter_identity
 from common.model import MeterReadingResult, ModelRefused, model_from_env
 from common.store import Store
 
 
 def score(expected_serial: str, expected_value: int, result: MeterReadingResult) -> dict:
     values = [c.value for c in result.candidates if readable(c.model_dump())]
+    read = meter_identity(result)
     return {
-        "serial_ok": not result.serial_unreadable and result.serial == expected_serial,
+        "serial_ok": not read["serial_unreadable"] and read["serial"] == expected_serial,
         "value_ok": expected_value in values,
         "unreadable": not values,
     }

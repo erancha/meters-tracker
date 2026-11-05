@@ -39,7 +39,7 @@ def _seed():
     kit.meter(apartment, "E-1", "electricity", [])
     kit.store.put_reading(ACCOUNT, "E-1", {"date": "2026-09-01", "seq": "s", "value": 1})
     kit.send_photo(electricity())
-    kit.send_photo(electricity(serial="E-77"))
+    kit.send_photo(electricity(label="E-77"))
     return kit
 
 

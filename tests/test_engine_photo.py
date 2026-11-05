@@ -3,10 +3,22 @@ lower readings, unreadable digits, typed corrections, the photo queue, the readi
 limit, and the photos a saved reading records as failed."""
 
 import json
+import logging
 from datetime import timedelta
 
 import pytest
-from engine_kit import ACCOUNT, USER, Kit, candidate, edit, electricity, options, reading, water
+from engine_kit import (
+    ACCOUNT,
+    MODEL_NUMBER,
+    USER,
+    Kit,
+    candidate,
+    edit,
+    electricity,
+    options,
+    reading,
+    water,
+)
 
 from common import dates, texts
 from common.engine import AlreadyHandled, MessageFailed
@@ -476,6 +488,59 @@ def test_a_retired_meter_with_no_live_meter_of_its_type_is_refused_naming_none(e
     assert len(kit.readings("W-1")) == 1
 
 
+def _labelled_apartment(kit, label):
+    apartment = kit.apartment(start="2026-10-01")
+    kit.meter(
+        apartment,
+        label,
+        "electricity",
+        [reading("2026-10-01", 392000, opens="2026-10-01")],
+        display_choice=0,
+    )
+
+
+def test_an_electricity_photo_is_identified_by_its_handwritten_label(env, ddb):
+    kit = Kit()
+    _labelled_apartment(kit, "כניסה_מזרח")
+    result = kit.send_photo(electricity(label="כניסה מזרח"))
+    assert result.snapshot.card["kind"] == "reading"
+    [item] = kit.store.pending(USER.email)
+    assert (item["data"]["serial"], item["data"]["handwritten_label"]) == (
+        "כניסה_מזרח",
+        "כניסה מזרח",
+    )
+    kit.choose("confirm")
+    assert [r["value"] for r in kit.readings("כניסה_מזרח")] == [392000, 392691]
+
+
+def test_an_electricity_photo_with_no_label_asks_for_the_serial(env, ddb):
+    kit = Kit()
+    result = kit.send_photo(electricity(label=None))
+    assert result.snapshot.card["kind"] == "unreadable"
+    [item] = kit.store.pending(USER.email)
+    assert (item["data"]["serial"], item["data"]["unreadable"]) == (
+        None,
+        [texts.UNREADABLE_SERIAL],
+    )
+
+
+def test_an_electricity_label_one_character_off_a_live_meter_is_a_new_meter(env, ddb):
+    kit = Kit()
+    _labelled_apartment(kit, "דירה_2")
+    result = kit.send_photo(electricity(label="דירה 3"))
+    assert result.snapshot.card["kind"] == "property"
+    [item] = kit.store.pending(USER.email)
+    assert item["data"]["serial"] == "דירה_3"
+
+
+def test_the_read_log_line_carries_the_handwritten_label(env, ddb, caplog):
+    kit = Kit()
+    with caplog.at_level(logging.INFO, logger="common.flows.meter_photo"):
+        kit.send_photo(electricity(label="כניסה מזרח"))
+    [line] = [json.loads(r.message) for r in caplog.records if '"meter_read"' in r.message]
+    assert (line["serial"], line["handwritten_label"]) == (MODEL_NUMBER, "כניסה מזרח")
+
+
 def test_a_serial_one_digit_off_a_live_meter_reads_as_that_meter(env, ddb):
     kit = Kit()
     _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
@@ -585,6 +650,7 @@ def test_a_read_logs_what_the_model_read_and_the_serial_it_matched(env, ddb, cap
             "candidates": [
                 {"value": 1250, "position": "single", "unit": "m3", "unreadable_digits": True}
             ],
+            "handwritten_label": None,
             "matched_serial": "W-1250",
         }
     ]

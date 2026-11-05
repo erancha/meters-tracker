@@ -12,8 +12,12 @@ charge, with the exact values the code uses. The arithmetic lives in
   periods and tariffs. Its id is the owner's lowercase Google address.
 - A **property** is a building or address; an **apartment** belongs to one property and is the
   unit that is billed. Both have free-text names, matched exactly.
-- A **meter** is a water or electricity meter, identified by the serial printed on it, and
-  belongs to one apartment. A meter is **live** until a replacement retires it.
+- A **meter** is a water or electricity meter and belongs to one apartment. A water meter is
+  identified by the serial printed on it. An electricity meter is identified by the label the
+  owner writes beside it, stored as its serial with each run of spaces as one underscore
+  (`מרתף_מערב`), since the number printed on an electricity meter is often the model number
+  rather than a unique serial number; a typed serial is stored the same way, so a label typed
+  with spaces names the same meter. A meter is **live** until a replacement retires it.
 - A **reading** is a meter's value on a date, saved only after the user confirms it.
 - A **period** is an apartment's billing window: a start date and a length in whole months,
   shared by all of the apartment's meters ([ADR 0003](adr/0003-period-belongs-to-apartment.md)).
@@ -45,9 +49,10 @@ Each photo is its own turn. The model returns the meter type, the serial with wh
 its digits is uncertain, every counter value it sees with its position on the display (`top` and
 `bottom` on a two-number electricity display, `single` on a water counter), whether any digit is
 unreadable, and the text handwritten beside the meter as written, or none when it cannot be
-read; owners write the apartment's name there. A note sent with the photo that names a date sets
-the reading date; otherwise the reading is dated the day the photo was sent, which a retry on a
-later day keeps.
+read; owners write the apartment's name there, and on an electricity meter that label is the
+serial the photo goes by, so a photo of one with no label is an unreadable serial. A note sent
+with the photo that names a date sets the reading date; otherwise the reading is dated the day
+the photo was sent, which a retry on a later day keeps.
 
 - **Statement.** A photo with no known meter type and no serial is read again as a previous
   statement; a statement becomes a tariffs card (see [Tariffs](#tariffs)), dated like a reading.
@@ -66,11 +71,12 @@ later day keeps.
   reading leaves the choice unsaved. The position of the first saved reading chosen from two
   numbers becomes the meter's display choice, and later photos propose that position's number
   directly.
-- **Near-miss serial.** A read serial that names no meter but differs in one character from the
-  serial of exactly one live meter of its type is taken as that meter's, with a reply naming both
-  serials; a misread digit is the model's usual serial error. The saved reading counts the photo
-  as misread, as a typed serial correction does. Only the model's read is matched, never a typed
-  serial.
+- **Near-miss serial.** A read water serial that names no meter but differs in one character
+  from the serial of exactly one live water meter is taken as that meter's, with a reply naming
+  both serials; a misread digit is the model's usual serial error. The saved reading counts the
+  photo as misread, as a typed serial correction does. Only the model's read is matched, never a
+  typed serial, and never an electricity label: labels a character apart name different
+  apartments.
 - **Unknown serial.** A link flow (`src/common/flows/link_meter.py`) asks for the property and then
   the apartment, existing or new by name. A serial read with an uncertain digit is named as
   uncertain on the property question, and a typed serial settles the doubt. An answer naming

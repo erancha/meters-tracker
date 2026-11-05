@@ -32,11 +32,17 @@ def candidate(value, position, unit, unreadable=False, uncertain=False):
     )
 
 
-def electricity(top=392691, bottom=392693, serial="E-392", label=None):
-    """label is the handwritten label the model reads beside the meter."""
+# The number printed on an electricity meter where a serial would be, often its model number;
+# it plays no part in which meter a photo is of.
+MODEL_NUMBER = "99840522"
+
+
+def electricity(top=392691, bottom=392693, label="E-392"):
+    """label is the text handwritten beside the meter, which identifies an electricity meter;
+    None is a photo on which the model found none."""
     return MeterReadingResult(
         meter_type="electricity",
-        serial=serial,
+        serial=MODEL_NUMBER,
         serial_unreadable=False,
         serial_uncertain=False,
         candidates=[candidate(top, "top", "kWh"), candidate(bottom, "bottom", "kWh")],

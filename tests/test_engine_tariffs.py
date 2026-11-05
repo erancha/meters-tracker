@@ -351,7 +351,7 @@ def test_only_one_tariffs_request_waits_at_a_time(env, ddb):
     _close(kit)
     other = kit.apartment(name="חזית", property_name="הגפן 9", start=START)
     kit.meter(other, "E-500", "electricity", [reading(START, 1, opens=START)], display_choice=0)
-    kit.send_photo(electricity(top=9, bottom=9, serial="E-500"))
+    kit.send_photo(electricity(top=9, bottom=9, label="E-500"))
     assert kit.card()["kind"] == "reading"
     assert kit.choose("confirm").snapshot.card["kind"] == "propose_close"
     result = kit.choose("close")

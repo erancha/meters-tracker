@@ -96,7 +96,8 @@ def test_new_serial_asks_property_then_apartment_then_period(env, ddb):
     assert options(result.snapshot.card) == []
     result = kit.say("הגפן 7")
     assert result.snapshot.card["kind"] == "apartment"
-    assert options(result.snapshot.card) == []
+    # The apartment question offers only the label written beside the meter as a new name.
+    assert options(result.snapshot.card) == ["name_label"]
     result = kit.say("עורף")
     card = result.snapshot.card
     assert card["kind"] == "period"

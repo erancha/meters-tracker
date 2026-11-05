@@ -57,7 +57,8 @@ full matrix on demand, all 60 slices, in about 33 minutes, and
 `./scripts/test.sh --matrix matrix_cards_open_1` runs one slice.
 
 `tests/test_owner_story.py` is the expectation for the owner's whole story, as verified in the
-browser: linking a meter, closing its period from the next reading, pricing the close, a
+browser on 29/10/2026, with its electricity meter identified by its handwritten label: linking a
+meter, closing its period from the next reading, pricing the close, a
 statement's tariffs, a water meter after a blurry photo, and a typed close or vacate. It drives
 the engine as the browser does, choosing only on the card the snapshot shows and checking that
 typed text is classified against that card, and asserts every card and reply on the way. The

@@ -983,7 +983,7 @@ def _figures_faults(planned, stored: Account, today) -> list[str]:
 def _photo(meter, value):
     if meter["type"] == "water":
         return water(value, serial=meter["serial"])
-    return electricity(value, value, serial=meter["serial"])
+    return electricity(value, value, label=meter["serial"])
 
 
 def _answer_photo(run: Run, card, last: bool) -> str:

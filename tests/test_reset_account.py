@@ -42,7 +42,7 @@ def _seed():
     kit.store.access_put_if_absent(OWNER, OWNER, "owner")
     kit.engine.load(USER)
     kit.send_photo(electricity())
-    kit.send_photo(electricity(serial="E-77"))
+    kit.send_photo(electricity(label="E-77"))
     _neighbour(kit.store, _s3())
     return kit
 

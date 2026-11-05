@@ -39,14 +39,13 @@ from owner_story import (
     CANCEL,
     CLOSING,
     LABEL,
+    LABEL_READ,
     LATER,
     NEXT_START,
     OPENING,
     PLACE,
     PRICES,
     PROPERTY,
-    SERIAL,
-    SERIAL_READ,
     TODAY,
     TYPED_PRICES,
     WATER_OPENING,
@@ -54,9 +53,9 @@ from owner_story import (
 )
 
 
-def _electricity(top, serial):
-    """The story's two-number electricity meter, labelled by hand."""
-    return electricity(top, top + BOTTOM_OFFSET, serial, label=LABEL)
+def _electricity(top, label):
+    """The story's two-number electricity meter, identified by the label written beside it."""
+    return electricity(top, top + BOTTOM_OFFSET, label)
 
 
 def _water(value, unreadable=False):
@@ -154,16 +153,16 @@ def _ask_period(result):
 
 
 def _link_electricity(owner):
-    """A new two-number meter linked to a new apartment from 1/9, its serial corrected."""
-    first = owner.photo(_electricity(OPENING, SERIAL_READ))
-    _ask_property(owner, first, SERIAL_READ)
+    """A new two-number meter linked to a new apartment from 1/9, its misread label corrected."""
+    first = owner.photo(_electricity(OPENING, LABEL_READ))
+    _ask_property(owner, first, LABEL_READ)
     both = edits(("property", PROPERTY), ("apartment", APARTMENT))
     _ask_period(owner.say(PLACE, both))
 
     result = owner.say("1/9", edit("period_start", "2026-09-01"))
     card = result.snapshot.card
     assert card["kind"] == "link"
-    assert card["title"] == f"סיכום לפני שמירה: מונה חשמל {SERIAL_READ} · {PROPERTY} / {APARTMENT}"
+    assert card["title"] == f"סיכום לפני שמירה: מונה חשמל {LABEL_READ} · {PROPERTY} / {APARTMENT}"
     # A start before the photo dates the opening reading at the start.
     assert card["lines"] == [
         f"נכס חדש: {PROPERTY}",
@@ -176,9 +175,9 @@ def _link_electricity(owner):
     assert _labelled(card) == [("top", "המספר העליון"), ("bottom", "המספר התחתון")]
     assert card["default"] == "top"
 
-    corrected = owner.say("הספרה האחרונה היא 8", edit("serial", SERIAL)).snapshot.card
+    corrected = owner.say(f"המונה הוא {LABEL}", edit("serial", LABEL)).snapshot.card
     assert corrected["kind"] == "link"
-    assert SERIAL in corrected["title"] and SERIAL_READ not in corrected["title"]
+    assert LABEL in corrected["title"] and LABEL_READ not in corrected["title"]
     assert corrected["lines"] == card["lines"]
 
     top = IntentResult(intent="choose_option", name="המספר העליון")
@@ -188,7 +187,7 @@ def _link_electricity(owner):
         f"{PROPERTY} / {APARTMENT} · חשמל\nקריאה נוכחית: 37,937 (01/09/2026)\n"
         + texts.no_previous_reading()
     ]
-    [saved] = owner.kit.readings(SERIAL)
+    [saved] = owner.kit.readings(LABEL)
     assert (saved["date"], saved["value"], saved["opens_period"]) == (
         "2026-09-01",
         OPENING,
@@ -196,18 +195,18 @@ def _link_electricity(owner):
     )
     assert saved["failed_photos"] == [first.image_key]
     assert _periods(owner) == [("2026-09-01", 2, None)]
-    meter = owner.kit.store.meter(ACCOUNT, SERIAL)
-    assert (meter["display_choice"], meter["label_hint"]) == (0, LABEL)
-    assert owner.kit.store.meter(ACCOUNT, SERIAL_READ) is None
+    meter = owner.kit.store.meter(ACCOUNT, LABEL)
+    assert (meter["display_choice"], meter["label_hint"]) == (0, LABEL_READ)
+    assert owner.kit.store.meter(ACCOUNT, LABEL_READ) is None
 
 
 def _close_by_reading(owner):
     """The next reading, in the period's last week, closes it at once and asks for tariffs."""
-    result = owner.photo(_electricity(CLOSING, SERIAL))
+    result = owner.photo(_electricity(CLOSING, LABEL))
     card = result.snapshot.card
     # The display choice is the meter's now, so the photo asks no which-number question.
     assert card["kind"] == "reading"
-    assert card["title"] == f"מונה חשמל {SERIAL} · {PROPERTY} / {APARTMENT}"
+    assert card["title"] == f"מונה חשמל {LABEL} · {PROPERTY} / {APARTMENT}"
     assert card["lines"] == ["קריאה: 39,269 קוט״ש", "תאריך: 29/10/2026"]
     assert options(card) == ["confirm"]
 
@@ -221,7 +220,7 @@ def _close_by_reading(owner):
     assert "קריאה נוכחית: 39,269 (29/10/2026)" in summary.text
     assert closed.card is None
     assert closed.text == texts.closed(
-        APARTMENT, TODAY, NEXT_START, [("electricity", SERIAL, CLOSING, TODAY)]
+        APARTMENT, TODAY, NEXT_START, [("electricity", LABEL, CLOSING, TODAY)]
     )
     assert ask.card["kind"] == "tariffs_ask"
     lacks = [texts.report_gap("no_meter", "water"), texts.report_gap("no_price", "electricity")]
@@ -229,7 +228,7 @@ def _close_by_reading(owner):
     assert (result.snapshot.card, result.snapshot.waiting) == (ask.card, 0)
     assert result.snapshot.card["options"] == []
     assert _periods(owner) == [("2026-09-01", 2, "2026-10-29"), ("2026-10-30", 2, None)]
-    closing = owner.kit.readings(SERIAL)[-1]
+    closing = owner.kit.readings(LABEL)[-1]
     assert (closing["closes_period"], closing["opens_period"]) == ("2026-09-01", "2026-10-30")
 
 
@@ -258,7 +257,7 @@ def _price_by_typing(owner):
     result = owner.choose("confirm")
     assert result.snapshot.card is None
     charge = (
-        f"{PROPERTY} / {APARTMENT} · מונה חשמל 2721058, התקופה מ־01/09/2026: "
+        f"{PROPERTY} / {APARTMENT} · מונה חשמל {LABEL}, התקופה מ־01/09/2026: "
         "1,332 קוט״ש, חיוב 856.74 ₪"
     )
     held = texts.report_held(
@@ -306,7 +305,7 @@ def _link_water(owner):
 def _read_both_later(owner):
     """A reading of each meter well inside the second period, saved without a close."""
     owner.kit.today = LATER
-    for result, value in ((_electricity(39500, SERIAL), 39500), (_water(1262), 1262)):
+    for result, value in ((_electricity(39500, LABEL), 39500), (_water(1262), 1262)):
         card = owner.photo(result).snapshot.card
         assert card["kind"] == "reading"
         assert f"קריאה: {value:,}" in card["lines"][0]
@@ -321,17 +320,18 @@ def _ask_close(owner):
     assert f"name={APARTMENT}; " in owner.kit.model.classified[-1][1]
     assert card["kind"] == "close"
     assert card["title"] == f"סגירת התקופה של {APARTMENT} (מ־30/10/2026)"
+    # Meters list in serial order, and a digit serial sorts before a Hebrew label.
     assert card["lines"] == [
-        f"מונה חשמל {SERIAL} · קריאת סגירה 39,500 (15/11/2026)",
         f"מונה מים {WATER_SERIAL} · קריאת סגירה 1,262 (15/11/2026)",
+        f"מונה חשמל {LABEL} · קריאת סגירה 39,500 (15/11/2026)",
     ]
     assert _labelled(card) == [("confirm", "אישור")]
 
 
 def _closing_rows():
     return [
-        ("electricity", SERIAL, 39500, LATER),
         ("water", WATER_SERIAL, 1262, LATER),
+        ("electricity", LABEL, 39500, LATER),
     ]
 
 
@@ -354,7 +354,7 @@ def test_a_new_meter_is_linked_from_typed_answers(env, ddb):
 
 def test_asking_about_the_apartment_question_explains_it(env, ddb):
     owner = Owner()
-    _ask_property(owner, owner.photo(_electricity(OPENING, SERIAL)), SERIAL)
+    _ask_property(owner, owner.photo(_electricity(OPENING, LABEL)), LABEL)
     result = owner.say(PROPERTY, edit("property", PROPERTY))
     card = result.snapshot.card
     assert card["kind"] == "apartment"

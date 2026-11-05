@@ -1,11 +1,13 @@
 """Meter photo flow: a photo becomes a proposed reading, and a confirmed one becomes a saved
-reading of a known meter. A photo of no known meter family and no serial is read again as a
-previous statement, and one that is a statement is handed to the tariffs flow, dated like a
-reading. A serial one character off exactly one live meter of its type is taken as that meter's,
-and any other unknown serial is handed to the link flow. On a reading near the period's end, the
-close option or a typed vacate hands the apartment to the close flow after the reading is
-saved, and the reading's reply is built after the close, so it reports the closed period. The
-value, date and serial take a typed edit on every step.
+reading of a known meter. An electricity meter's serial is the label handwritten beside it, since
+the number printed on one is often the model number rather than a unique serial number; a water
+meter's is the serial printed on it. A photo of no known meter family and no serial is read
+again as a previous statement, and one that is a statement is handed to the tariffs flow, dated
+like a reading. A water serial one character off exactly one live meter is taken as that
+meter's, and any other unknown serial is handed to the link flow. On a reading near the
+period's end, the close option or a typed vacate hands the apartment to the close flow after the
+reading is saved, and the reading's reply is built after the close, so it reports the closed
+period. The value, date and serial take a typed edit on every step.
 
 Steps: unreadable -> reading -> one of duplicate, lower_reading, swap, propose_reclose,
 open_period, propose_close -> saved. A reading is never saved twice for one meter and date. A
@@ -27,7 +29,14 @@ from datetime import datetime
 
 from common import dates, texts
 from common.dates import parse_iso
-from common.fields import PHOTO_KINDS, InvalidValue, UnknownField, field_for, parse
+from common.fields import (
+    PHOTO_KINDS,
+    InvalidValue,
+    UnknownField,
+    field_for,
+    normalize_serial,
+    parse,
+)
 from common.flows import (
     CARD_TARGET,
     FAILURE_FIELDS,
@@ -270,7 +279,7 @@ def start(
 def _log_read(result: MeterReadingResult, data):
     """One JSON line with "event": "meter_read" per photo read as a meter: what the model read,
     with its doubt flags, and the known serial a near-miss match took instead, else null."""
-    matched = data["serial"] if data["serial"] != result.serial else None
+    matched = data["serial"] if data["serial"] != meter_identity(result)["serial"] else None
     line = {
         "event": "meter_read",
         "meter_type": result.meter_type,
@@ -278,6 +287,7 @@ def _log_read(result: MeterReadingResult, data):
         "serial_unreadable": result.serial_unreadable,
         "serial_uncertain": result.serial_uncertain,
         "candidates": [c.model_dump(exclude={"note"}) for c in result.candidates],
+        "handwritten_label": result.handwritten_label,
         "matched_serial": matched,
     }
     logger.info(json.dumps(line))
@@ -315,8 +325,11 @@ def _match_near_serial(engine, user, data) -> list[Reply]:
     """Takes a read serial that names no meter as the one live meter of its type whose serial
     differs from it in a single character, since a misread digit is the model's usual serial
     error. The read serial is kept as read_serial, as a typed correction keeps it, so the saved
-    reading records the misread. Only the model's read is matched: a typed serial stands."""
+    reading records the misread. Only the model's read of a printed serial is matched: a typed
+    serial stands, and labels a character apart name different apartments."""
     read = data["serial"]
+    if data["meter_type"] == "electricity":
+        return []
     if _no_serial(data) or engine.store.meter(user.account, read) is not None:
         return []
     near = [
@@ -336,9 +349,25 @@ def _one_character_apart(a: str, b: str) -> bool:
     return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1
 
 
+def meter_identity(result: MeterReadingResult) -> dict:
+    """The serial fields a photo identifies its meter by. An electricity photo goes by its
+    handwritten label, stored as a typed serial is, and is unreadable when it has none; the
+    printed number plays no part. Any other photo goes by the serial the model read, with its
+    doubt flags."""
+    if result.meter_type != "electricity":
+        return result.model_dump(include={"serial", "serial_unreadable", "serial_uncertain"})
+    label = result.handwritten_label
+    return {
+        "serial": None if label is None else normalize_serial(label),
+        "serial_unreadable": label is None,
+        "serial_uncertain": False,
+    }
+
+
 def _set_read(item, result: MeterReadingResult, reading_date):
     item["data"].update(
         result.model_dump(),
+        **meter_identity(result),
         reading_date=reading_date,
         value=None,
         value_uncertain=False,
