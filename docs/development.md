@@ -107,8 +107,11 @@ result, its time and its cost at the listed prices; it is the quick check of a s
    `params.example.sh` to their gitignored siblings, readable only by their owner, and refuses
    to overwrite either without `--force`. Fill in the AWS access key pair and region in
    `scripts/aws-config.sh`, and the Google OAuth client id and secret, the model
-   (`LLM_MODEL`, as `provider:model`) and the verified SES sender (`SES_SENDER`) in
-   `scripts/params.sh`.
+   (`LLM_MODEL`, as `provider:model`), the verified SES sender (`SES_SENDER`), the admin
+   (`ADMIN_EMAIL`) and the allowed list (`ALLOWED_EMAILS`) in `scripts/params.sh`. The allowed
+   list is a regex every new address must fully match to sign up; add an address to it, the
+   admin and each delegate included, and deploy before that address signs in for the first
+   time.
 3. Run [`scripts/set-model-key.sh <provider>`](../scripts/set-model-key.sh) once to store the
    key of the provider `LLM_MODEL` names, then [`scripts/deploy.sh`](../scripts/deploy.sh), which
    stops with that command when the key is missing.

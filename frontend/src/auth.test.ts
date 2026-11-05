@@ -39,6 +39,22 @@ describe("ensureSignedIn", () => {
     expect(err.message).toBe("Something went wrong");
   });
 
+  it("shows a refusal from the sign-up Lambda as its own message, without Cognito's wrapper", async () => {
+    const reason = "הכתובת a@x.com אינה ברשימת הכתובות המורשות להירשם. לקבלת גישה פנו למנהל האתר.";
+    const description = encodeURIComponent(`PreSignUp failed with error ${reason}.`);
+    const err = await rejectionFor(`/?error=invalid_request&error_description=${description}`);
+
+    expect(err.message).toBe(reason);
+  });
+
+  it("unwraps the refusal when Cognito ends it with a trailing space", async () => {
+    const reason = "הכתובת a@x.com אינה ברשימת הכתובות המורשות להירשם.";
+    const description = encodeURIComponent(`PreSignUp failed with error ${reason}. `);
+    const err = await rejectionFor(`/?error=invalid_request&error_description=${description}`);
+
+    expect(err.message).toBe(reason);
+  });
+
   it("resolves to null when there is no session, no auth code, and no error redirect", async () => {
     sessionStorage.removeItem("tokens");
     history.replaceState(null, "", "/");

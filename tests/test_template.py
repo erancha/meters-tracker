@@ -155,11 +155,14 @@ def test_outputs_feed_the_deploy_scripts(app):
     assert {"ApiUrl", "FrontendUrl", "DistributionId", "FrontendBucket"} <= set(app["Outputs"])
 
 
-def test_cognito_admits_everyone_and_runs_the_presignup_handler(cognito):
-    assert "AllowedEmails" not in cognito["Parameters"]
+def test_cognito_runs_the_presignup_handler_with_the_allowed_list(cognito):
+    assert "AllowedEmails" in cognito["Parameters"]
     function = cognito["Resources"]["PreSignupFunction"]["Properties"]
     assert function["Handler"] == "handlers/presignup.handler"
-    assert "Environment" not in function
+    assert function["Environment"]["Variables"] == {
+        "ALLOWED_EMAILS": "AllowedEmails",
+        "ADMIN_EMAIL": "AdminEmail",
+    }
     actions = {
         a
         for s in function["Policies"][0]["Statement"]

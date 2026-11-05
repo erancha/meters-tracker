@@ -76,7 +76,8 @@ deploy_cognito() {  # frontend-url
     --no-fail-on-empty-changeset \
     --parameter-overrides GoogleClientId="$GOOGLE_CLIENT_ID" \
       GoogleClientSecret="$GOOGLE_CLIENT_SECRET" CallbackUrls="$callbacks" \
-      DomainPrefix="meters-trk${ENV_SUFFIX}"
+      DomainPrefix="meters-trk${ENV_SUFFIX}" AllowedEmails="$ALLOWED_EMAILS" \
+      AdminEmail="$ADMIN_EMAIL"
 }
 
 deploy_main() {  # frontend-url

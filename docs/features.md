@@ -13,7 +13,9 @@ it, a three-paragraph pitch, a "more" toggle and the "sign in with Google" butto
 the pitch for seven bullets condensing the README's overview, and back. Below the card, one link
 opens the animated demo in a new tab, a second opens WhatsApp with an invite to the app prefilled
 as a received recommendation, and a third opens the source repository on GitHub. A sign-in whose
-final step fails shows a banner asking to reload and sign in again.
+final step fails shows a banner asking to reload and sign in again. A first sign-in by an address
+not on the deployment's allowed list is refused: in place of the chat, the page shows the Hebrew
+reason, which names the deployment's admin address to ask for access.
 
 ## Chat
 
@@ -110,7 +112,8 @@ final step fails shows a banner asking to reload and sign in again.
 
 - The owner adds a delegate in a typed sentence ("הוסף את dana@example.com כמורשה"). A card
   titled `הוספת מורשה` names the address and what it will be able to do; "אישור" writes it, and
-  the reply says that the address's next Google sign-in lands in this account. An address typed
+  the reply says that the address's next Google sign-in lands in this account. An address
+  signing in for the first time must also be on the allowed list. An address typed
   on the card replaces the one shown. A request with no address ("הוסף מורשה") shows a card
   asking for it, and the address typed next fills it.
 - An address the account cannot take is refused in the reply, with no card: the owner's own

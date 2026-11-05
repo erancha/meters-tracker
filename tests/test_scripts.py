@@ -337,6 +337,7 @@ def _params(tmp_path, sender):
     (tmp_path / "scripts" / "params.sh").write_text(
         "export GOOGLE_CLIENT_ID=id\nexport GOOGLE_CLIENT_SECRET=secret\n"
         f"export LLM_MODEL=anthropic:claude-opus-5-5\nexport SES_SENDER={sender}\n"
+        "export ADMIN_EMAIL=admin@x.com\nexport ALLOWED_EMAILS=.*\n"
     )
 
 

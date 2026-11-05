@@ -45,11 +45,20 @@ export async function ensureSignedIn(cfg: AppConfig): Promise<Tokens | null> {
   const params = new URLSearchParams(location.search);
   const code = params.get("code");
   if (code) return exchangeCode(cfg, code);
-  // A rejected sign-in comes back as an OAuth error redirect; surface it verbatim for diagnosis
-  // instead of treating it as signed-out, which would silently offer another doomed sign-in.
+  // A rejected sign-in comes back as an OAuth error redirect; surface it instead of treating it
+  // as signed-out, which would silently offer another doomed sign-in.
   const error = params.get("error");
-  if (error) throw new AuthError(params.get("error_description") ?? error);
+  if (error) throw new AuthError(triggerReason(params.get("error_description") ?? error));
   return null;
+}
+
+// Cognito reports a refusal by one of the pool's Lambda triggers as "<Trigger> failed with error
+// <message>. ", with a period and often a trailing space of its own, naming an internal step the
+// person cannot act on. The message alone is what the trigger meant them to read; any other
+// description is shown as it came.
+function triggerReason(description: string): string {
+  const wrapped = /^\w+ failed with error (.*?)\.\s*$/s.exec(description);
+  return wrapped ? wrapped[1] : description;
 }
 
 export function logoutUrl(cfg: AppConfig): string {

@@ -32,7 +32,8 @@ browser; a deployment also publishes it at `/demo.html` beside the app.
   the last one (misread, or a reset meter), or a late photo near a period's closing reading.
 - A new account's chat opens with a welcome that says to start with a meter photo. On the first
   visit of a day, the chat names every apartment whose period has ended without closing readings.
-- Sign-in is with a Google account. Each address has an account of its own, and an address the
+- Sign-in is with a Google account on the deployment's allowed list, which the operator edits
+  before a deploy. Each address has an account of its own, and an address the
   owner delegates works in that owner's account. The owner adds, lists and removes delegates in
   the chat.
 - The chat runs in the browser: sign in with Google, photograph a meter or pick photos, answer a

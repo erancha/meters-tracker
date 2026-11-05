@@ -843,6 +843,13 @@ def access_gained(address) -> str:
     return f"הגישה לחשבון תינתן ל־{address}."
 
 
+def signup_not_allowed(address, admin) -> str:
+    return (
+        f"הכתובת {address} אינה ברשימת הכתובות המורשות להירשם."
+        f" לקבלת גישה פנו למנהל המערכת: {admin}."
+    )
+
+
 def waiting_card_lost(address) -> str:
     return f"כרטיס שממתין אצל {address} יימחק."
 

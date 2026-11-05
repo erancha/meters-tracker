@@ -33,10 +33,12 @@ graph LR
   mapped into the token, and the api Lambda answers 403 `email_unverified` unless it is
   `"true"`.
 - **presignup Lambda** (`src/handlers/presignup.py`) — runs while Cognito creates an account and
-  lets every address in. It asks SES to mail the address its verification request unless SES
-  already reports it verified or pending, so mail can reach it while the SES account is
-  sandboxed. A failure is logged and never refuses the sign-up; an account the operator creates
-  directly in the pool passes untouched.
+  refuses an address that does not fully match `ALLOWED_EMAILS`, the regex the operator keeps in
+  `scripts/params.sh` and each deploy passes through the `AllowedEmails` stack parameter
+  ([ADR 0010](adr/0010-sign-up-by-allowed-list.md)). For an address it admits, it asks SES to
+  mail the address its verification request unless SES already reports it verified or pending,
+  so mail can reach it while the SES account is sandboxed. A failure there is logged and never
+  refuses the sign-up; an account the operator creates directly in the pool passes untouched.
 - **HTTP API** — checks the Cognito JWT on every route, with CORS for `http://localhost:8000`
   and the CloudFront URL.
 - **api Lambda** (`src/handlers/api.py`) — the three routes, each resolving the JWT's email to
