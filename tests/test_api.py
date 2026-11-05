@@ -78,6 +78,7 @@ def test_get_chat_returns_history_and_snapshot(kit):
     assert body["snapshot"]["card"]["kind"] == "reading"
     assert body["snapshot"]["waiting"] == 0
     assert body["admin"] is False
+    assert body["earlier_failed"] == []
 
 
 def test_get_chat_takes_a_day(kit):

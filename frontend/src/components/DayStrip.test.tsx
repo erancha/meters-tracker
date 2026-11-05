@@ -26,7 +26,7 @@ const ask: Message = {
 function strip(messages: Message[], onFocus: (at: string) => void, tariffsMissing: boolean) {
   return (
     <DayStrip messages={messages} tariffsMissing={tariffsMissing} onFocus={onFocus}
-              day="2026-11-01" />
+              day="2026-11-01" today="2026-11-01" earlierFailed={[]} onDay={vi.fn()} />
   );
 }
 
@@ -110,34 +110,35 @@ describe("DayStrip", () => {
     expect(screen.queryByRole("button", { name: texts.closeList })).toBeNull();
   });
 
-  it("puts missing tariffs in the day's place, focusing the card asking for them", async () => {
+  it("shows missing tariffs beside the day, focusing the card asking for them", async () => {
     const { onFocus } = setup([ask], true);
 
     await tap(texts.tariffsMissing);
 
     expect(onFocus).toHaveBeenCalledWith(AT);
-    expect(screen.queryByText(`${texts.dayTitle} 01/11`)).toBeNull();
+    expect(screen.getByText(`${texts.dayTitle} 01/11`)).toBeInTheDocument();
   });
 
   it("names missing tariffs as plain text when the card asking for them is on an earlier day", () => {
     setup([], true);
 
     expect(screen.getByText(texts.tariffsMissing)).toBeInTheDocument();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("button", { name: texts.tariffsMissing })).toBeNull();
   });
 
-  it("shows nothing when both lists are empty and no tariffs are missing", () => {
+  it("keeps the day's controls when both lists are empty and no tariffs are missing", () => {
     setup([message("assistant", "שלום")]);
 
-    expect(screen.queryByRole("region")).toBeNull();
+    expect(screen.getByRole("region", { name: texts.dayTitle })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: texts.previousDay })).toBeInTheDocument();
   });
 
-  it("appears once the first line of the day arrives", () => {
-    const { update } = setup([]);
+  // The narrowest phones hide the word through CSS; the count and the full name stay.
+  it("sets a list button's word apart from its count", () => {
+    setup([saved]);
 
-    update([saved]);
-
-    expect(screen.getByRole("region", { name: texts.dayTitle })).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: texts.savedShort(1) });
+    expect(button.querySelector(".chip-word")).toHaveTextContent(texts.savedWord);
   });
 
   it("names only missing tariffs when both lists are empty", () => {

@@ -1,16 +1,17 @@
 /**
  * The bottom bar of the chat: the attach button (opens the camera or photo picker), the text
- * draft, and the send button. Send is enabled for any non-empty draft; a locked composer
- * disables all three.
+ * draft, and the send button, under a notice line when one is given. Send is enabled for any
+ * non-empty draft; a locked composer disables all three.
  */
 import { useRef, useState } from "react";
 import { texts } from "../texts";
 import { Icon } from "./Icon";
 
-export function Composer({ onSend, onPhotos, locked = false }: {
+export function Composer({ onSend, onPhotos, locked = false, notice = null }: {
   onSend: (text: string) => void;
   onPhotos: (files: File[]) => void;
   locked?: boolean;
+  notice?: string | null;
 }) {
   const [draft, setDraft] = useState("");
   const picker = useRef<HTMLInputElement>(null);
@@ -24,6 +25,7 @@ export function Composer({ onSend, onPhotos, locked = false }: {
 
   return (
     <form className="composer" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      {notice !== null && <p className="composer-notice" role="status">{notice}</p>}
       <button type="button" className="glyph" aria-label={texts.attach} disabled={locked}
               onClick={() => picker.current!.click()}>
         <Icon name="camera" />

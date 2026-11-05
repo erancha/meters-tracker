@@ -665,6 +665,19 @@ class Engine:
                 messages.append(self._append(user, "assistant", reply.text))
         return messages, self.snapshot(user)
 
+    def earlier_failed(self, user, day=None) -> list[dict]:
+        """The user's photos from days before today still marked failed, oldest first, when day
+        is today or None; empty for an earlier day. Today's view lists them, so a photo that
+        failed on an earlier day stays reachable after its day has passed."""
+        today = self.clock().isoformat()
+        if day not in (None, today):
+            return []
+        return [
+            m
+            for m in self.store.failed_messages(user.email)
+            if m["image_key"] is not None and m["at"] < today
+        ]
+
     def greet(self, user) -> dict:
         """Writes the welcome for the account user works in, as that user's role there."""
         return self._append(user, "assistant", texts.welcome(user.role, user.account))

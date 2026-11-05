@@ -45,7 +45,9 @@ graph LR
   an account first (see Sign-in under [Cross-cutting mechanisms](#cross-cutting-mechanisms)):
   - `GET /chat` — the signed-in address's messages of one day, at most the latest 200, oldest
     first, and the snapshot (below). The optional `day` query (`YYYY-MM-DD`) names the day, today
-    by default; a malformed one is a 400 `invalid_request`. A first load with no message at all
+    by default; a malformed one is a 400 `invalid_request`. Today's response also carries
+    `earlier_failed`, the photos of earlier days still marked failed, read by a filtered query of
+    the address's messages; it is empty for an earlier day. A first load with no message at all
     adds a welcome; the first load of today adds a greeting when an apartment's period is past
     its end.
   - `POST /turn` — one user action, exactly one of `{"text"}`, `{"image", "media_type", "note"?}`
@@ -97,8 +99,10 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
   Google as the only provider. No secret exists in the browser; the redirect address is the
   site's own origin, and local development runs on port 8000, the callback the Cognito stack
   allows. The ID token authorizes each API call.
-- **Chat state** (`useChat.ts`, over TanStack Query) — loads `GET /chat` and keeps the latest
-  snapshot it received. A typed turn, a card choice or a photo is a `POST /turn`: the user's message
+- **Chat state** (`useChat.ts`, over TanStack Query) — loads `GET /chat` for the shown day, one
+  query per day, and keeps the latest snapshot it received. Today's history stays loaded while an
+  earlier day is shown: the server records every turn under today, so from the first turn sent on
+  an earlier day the thread appends today's messages that came after it. A typed turn, a card choice or a photo is a `POST /turn`: the user's message
   is shown at once, the server's replies are appended and its snapshot replaces the shown one, then
   a refetch of `GET /chat` replaces the local entries with the server's history. A sent photo's
   stored key, from the reply, takes the page's own copy as its link, so it shows with no download. A

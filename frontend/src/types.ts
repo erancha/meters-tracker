@@ -76,6 +76,15 @@ export type TurnBody =
   | { choice: { pending: string; version: number; option: string } }
   | { retry: string };
 
+/** GET /chat: one day's history, the snapshot, the admin flag, and on today's history the photos
+ *  still failed from earlier days, oldest first. */
+export interface ChatData {
+  messages: Message[];
+  snapshot: Snapshot;
+  admin: boolean;
+  earlier_failed: Message[];
+}
+
 /** A request to show a message in the thread; n grows so a repeated tap scrolls again. */
 export interface Focus {
   at: string;

@@ -2,9 +2,10 @@
  * The day's activity, derived from the messages the chat holds: the photos whose reading was saved,
  * and the photos that still need something. Failed outranks anything the photo read; a stored
  * photo with neither mark nor reading is one the model has not answered yet. dayLines turns each
- * list into text lines, and tariffsAsk finds the card asking for missing tariffs.
+ * list into text lines, the held list followed by the photos still failed from earlier days, each
+ * naming its date; tariffsAsk finds the card asking for missing tariffs.
  */
-import { shownClock } from "./messageTime";
+import { shownClock, shownDayMonth } from "./messageTime";
 import { texts } from "./texts";
 import type { Message } from "./types";
 
@@ -48,13 +49,24 @@ const savedLine = (m: Message): Line => {
   };
 };
 
-export function dayLines(messages: Message[]): { saved: Line[]; held: Line[] } {
+const earlierLine = (m: Message): Line => ({
+  at: m.at,
+  text: `${shownDayMonth(m.at.slice(0, 10))} ${shownClock(m.at)} · ${texts.held.failed}`,
+});
+
+/** The day's lines; earlierFailed, oldest first, is empty on any day but today. */
+export function dayLines(
+  messages: Message[], earlierFailed: Message[],
+): { saved: Line[]; held: Line[] } {
   const { saved, held } = dayActivity(messages);
   return {
     saved: saved.map(savedLine),
-    held: held.map(({ message, state }) => ({
-      at: message.at, text: `${shownClock(message.at)} · ${texts.held[state]}`,
-    })),
+    held: [
+      ...held.map(({ message, state }) => ({
+        at: message.at, text: `${shownClock(message.at)} · ${texts.held[state]}`,
+      })),
+      ...[...earlierFailed].reverse().map(earlierLine),
+    ],
   };
 }
 

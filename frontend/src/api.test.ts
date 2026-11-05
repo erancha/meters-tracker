@@ -26,10 +26,10 @@ describe("createApi", () => {
   it("sends the id token as a Bearer header on a GET /chat", async () => {
     const fetchMock = stubFetch(new Response(JSON.stringify({ messages: [], snapshot })));
 
-    const chat = await createApi(cfg, live).getChat();
+    const chat = await createApi(cfg, live).getChat("2026-11-05");
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://api.example.com/chat");
+    expect(url).toBe("https://api.example.com/chat?day=2026-11-05");
     expect(init.method).toBe("GET");
     expect(init.headers.Authorization).toBe("Bearer token");
     expect(chat).toEqual({ messages: [], snapshot });
@@ -90,7 +90,7 @@ describe("createApi", () => {
     const onExpired = vi.fn();
 
     const outcome = await Promise.race([
-      createApi(cfg, expired, onExpired).getChat().then(() => "settled", () => "settled"),
+      createApi(cfg, expired, onExpired).getChat("2026-11-05").then(() => "settled", () => "settled"),
       new Promise((resolve) => setTimeout(() => resolve("pending"), 10)),
     ]);
 
@@ -102,7 +102,7 @@ describe("createApi", () => {
     stubFetch(new Response("Unauthorized", { status: 401 }));
     const onExpired = vi.fn();
 
-    const error = await createApi(cfg, live, onExpired).getChat().then(() => null, (e) => e);
+    const error = await createApi(cfg, live, onExpired).getChat("2026-11-05").then(() => null, (e) => e);
 
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(401);

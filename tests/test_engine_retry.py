@@ -121,3 +121,22 @@ def test_a_retry_of_an_unknown_message_is_already_handled(env, ddb):
     kit = Kit()
     with pytest.raises(AlreadyHandled):
         kit.engine.turn(USER, Action(retry="2026-10-29T08:00:00.000000_aaaa"))
+
+
+def test_today_lists_a_photo_still_failed_from_an_earlier_day(env, ddb):
+    kit = Kit()
+    photo = _failed_photo(kit)
+    _failed_text(kit)
+    assert kit.engine.earlier_failed(USER) == []
+    kit.today = date(2026, 10, 30)
+    assert [m["at"] for m in kit.engine.earlier_failed(USER)] == [photo["at"]]
+    assert [m["at"] for m in kit.engine.earlier_failed(USER, "2026-10-30")] == [photo["at"]]
+    assert kit.engine.earlier_failed(USER, "2026-10-29") == []
+
+
+def test_a_retried_photo_leaves_the_earlier_failed_list(env, ddb):
+    kit = Kit()
+    photo = _failed_photo(kit)
+    kit.today = date(2026, 10, 30)
+    _retry(kit, photo)
+    assert kit.engine.earlier_failed(USER) == []

@@ -1,22 +1,26 @@
 /**
- * The chat screen: the thread, the failure notices, and the composer, driven by useChat.
+ * The chat screen of one day: the thread, the failure notices, and the composer, driven by
+ * useChat. On an earlier day the composer notes that what is sent now is recorded today.
  */
 import type { Api } from "../api";
+import { jerusalemDay, shownDayMonth } from "../messageTime";
 import type { Focus } from "../types";
 import { texts } from "../texts";
 import { useChat } from "../useChat";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 
-export function Chat({ api, onOpen, focus = null }: {
+export function Chat({ api, day, onOpen, focus = null }: {
   api: Api;
+  /** The day shown, as a stamp's date part. */
+  day: string;
   onOpen: (src: string) => void;
   focus?: Focus | null;
 }) {
   const {
     messages, snapshot, sendText, sendPhotos, choose, choosing, pending, failed, rejected,
     retry, loadFailed, locked,
-  } = useChat(api);
+  } = useChat(api, day);
   if (loadFailed) return <div className="alert" role="alert">{texts.loadFailed}</div>;
   if (snapshot === undefined) return null;
   return (
@@ -26,7 +30,8 @@ export function Chat({ api, onOpen, focus = null }: {
                    focus={focus} />
       {failed && <div className="alert" role="alert">{texts.turnFailed}</div>}
       {rejected && <div className="alert" role="alert">{texts.imageRejected}</div>}
-      <Composer onSend={sendText} onPhotos={sendPhotos} locked={locked} />
+      <Composer onSend={sendText} onPhotos={sendPhotos} locked={locked}
+                notice={day === jerusalemDay() ? null : texts.earlierDayNotice(shownDayMonth(day))} />
     </div>
   );
 }

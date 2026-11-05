@@ -1,5 +1,9 @@
 // Every user-visible string of the app. Hebrew lives only in this module.
 
+// The day strip's list buttons drop their word on the narrowest phones, keeping the count.
+const SAVED_WORD = "בוצעו";
+const HELD_WORD = "ממתינות";
+
 export const texts = {
   appTitle: "מונים AI",
   appVersion: (version: string, date: string) => `גירסה ${version}, ${date}`,
@@ -40,15 +44,24 @@ export const texts = {
   signOut: "התנתקות",
   accountMenu: "תפריט חשבון",
   dayTitle: "היום",
+  previousDay: "היום הקודם",
+  nextDay: "היום הבא",
+  pickDay: "בחירת יום",
+  backToToday: "היום",
+  // Shown above the composer while an earlier day is shown: what is sent now is recorded today.
+  earlierDayNotice: (dayMonth: string) => `מוצג ${dayMonth} · שינויים נרשמים היום`,
   resizePanel: "שינוי רוחב חלונית היום",
   weekdays: ["יום ראשון", "יום שני", "יום שלישי", "יום רביעי", "יום חמישי", "יום שישי", "שבת"],
   savedCount: (n: number) => `קריאות שבוצעו · ${n}`,
   heldCount: (n: number) => `קריאות ממתינות · ${n}`,
-  savedShort: (n: number) => `בוצעו ${n}`,
-  heldShort: (n: number) => `ממתינות ${n}`,
+  savedWord: SAVED_WORD,
+  heldWord: HELD_WORD,
+  savedShort: (n: number) => `${SAVED_WORD} ${n}`,
+  heldShort: (n: number) => `${HELD_WORD} ${n}`,
   closeList: "סגירת הרשימה",
   held: { awaiting: "לאישור", failed: "לשליחה", reading: "בקריאה" },
   noReadingsToday: "לא נקראו מונים היום",
+  noReadingsThatDay: "לא נקראו מונים ביום זה",
   tariffsMissing: "חסרים תעריפים",
   meterTypes: { water: "מים", electricity: "חשמל" } as Record<string, string>,
   crashed: "משהו השתבש. רעננו את הדף ונסו שוב.",

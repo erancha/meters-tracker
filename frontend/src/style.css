@@ -120,8 +120,9 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 
 #root .composer {
   position: sticky; bottom: 0; z-index: 5; background: #eef3f6; border-top: 1px solid var(--hair);
-  display: flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.7rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; padding: 0.55rem 0.7rem;
 }
+#root .composer-notice { flex-basis: 100%; font-size: 0.8rem; font-weight: 600; color: var(--warn); }
 #root .glyph { background: #fff; border: 1px solid var(--accent-border); color: var(--accent); border-radius: 50%; width: 2.3rem; height: 2.3rem; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 #root .draft { flex: 1; min-width: 0; background: #fff; border: 1px solid #ccd6dc; border-radius: 18px; padding: 0.45rem 0.8rem; min-height: 2.3rem; font-size: 0.92rem; }
 #root .draft.empty { color: #9aa7af; }
@@ -198,8 +199,14 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
   background: var(--accent-soft); border-bottom: 1px solid var(--accent-border);
 }
 #root .day-strip-row {
-  display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.35rem 0.9rem;
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.3rem 0.6rem;
+  padding: 0.35rem 0.9rem;
 }
+#root .day-strip .day-pick { color: var(--muted); font-size: 0.88em; }
+/* The list buttons keep only their counts where the row would otherwise wrap: on the narrowest
+   phones, and on common phone widths once an earlier day adds its chip back to today. */
+@media (max-width: 340px) { #root .day-strip .chip-word { display: none; } }
+@media (max-width: 420px) { #root .day-strip:has(.chip.today) .chip-word { display: none; } }
 #root .day-strip .chips { flex-wrap: nowrap; }
 #root .day-strip .chip.held { color: var(--warn); }
 #root .day-strip .chip.saved { color: var(--ok); }
@@ -220,3 +227,17 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 #root .msg.thinking .dots::after { content: "…"; display: inline-block; animation: thinking 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; width: 0; }
 @keyframes thinking { to { width: 1.2em; } }
 @media (prefers-reduced-motion: reduce) { #root .msg.thinking .dots::after { animation: none; width: auto; } }
+
+/* day controls: a transparent date field over the label opens the browser's date picker. An
+   earlier day's label takes the warning color, so the owner sees the chat is not on today. */
+#root .day-nav { display: inline-flex; align-items: center; gap: 0.15rem; }
+#root .day-step {
+  flex: none; width: 1.8rem; height: 1.8rem; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--accent); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+#root .day-step:hover:not(:disabled) { background: #fff; }
+#root .day-step:disabled { color: var(--accent-border); cursor: default; }
+#root .day-pick { position: relative; white-space: nowrap; cursor: pointer; }
+#root .day-pick input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+#root .day-nav:has(.chip.today) .day-pick { color: var(--warn); font-weight: 600; }
+#root .day-nav .chip.today { margin-inline-start: 0.3rem; }

@@ -32,5 +32,11 @@ export function shownDay(day: string) {
 /** The day and month, from a stamp's date part (YYYY-MM-DD). */
 export const shownDayMonth = (day: string) => shownTime(`${day}T00:00`).slice(0, 5);
 
+/** The day n days after day (before it when n is negative), both as a stamp's date part. */
+export function shiftDay(day: string, n: number) {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, date + n)).toISOString().slice(0, 10);
+}
+
 /** Today's date in Jerusalem, as a stamp's date part. */
 export const jerusalemDay = () => jerusalemStamp().slice(0, 10);

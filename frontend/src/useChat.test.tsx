@@ -4,11 +4,14 @@ import { ApiError } from "./api";
 import { card, fakeApi, message, snapshot, wrapper } from "./testChat";
 import { useChat } from "./useChat";
 import type { Mock } from "vitest";
+import { jerusalemDay, shiftDay } from "./messageTime";
+
+const TODAY = jerusalemDay();
 
 describe("useChat", () => {
   it("loads the history and the snapshot", async () => {
     const api = fakeApi({ messages: [message("user", "שלום")], snapshot: snapshot(card(), 1) });
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
 
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
     expect(result.current.snapshot).toEqual(snapshot(card(), 1));
@@ -22,7 +25,7 @@ describe("useChat", () => {
       image_key: null,
     });
     const w = wrapper();
-    const { result } = renderHook(() => useChat(api), { wrapper: w.Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: w.Wrapper });
     await waitFor(() => expect(result.current.snapshot).not.toBeUndefined());
     (api.getChat as Mock).mockResolvedValue({
       messages: [message("user", "היי"), message("assistant", "הבנתי")],
@@ -37,7 +40,35 @@ describe("useChat", () => {
       ["assistant", "הבנתי"],
     ]);
     expect(result.current.snapshot?.waiting).toBe(3);
-    expect(w.client.getQueryData(["chat"])).toBeDefined();
+    expect(w.client.getQueryData(["chat", TODAY])).toBeDefined();
+  });
+
+  it("keeps in view a turn sent on an earlier day, which the server records under today", async () => {
+    const earlier = shiftDay(TODAY, -2);
+    const at = (day: string, time: string) => `${day}T${time}.000000_aaaa`;
+    const before = { ...message("assistant", "בוקר"), at: at(TODAY, "08:00:00") };
+    let todays = [before];
+    const api = fakeApi({ messages: [], snapshot: snapshot(null) });
+    (api.getChat as Mock).mockImplementation(async (day: string) => ({
+      admin: false, earlier_failed: [], snapshot: snapshot(null),
+      messages: day === TODAY ? todays : [{ ...message("user", "ישן"), at: at(earlier, "09:00:00") }],
+    }));
+    (api.postTurn as Mock).mockImplementation(async () => {
+      todays = [
+        before,
+        { ...message("user", "תיקון"), at: at(TODAY, "10:00:00") },
+        { ...message("assistant", "תוקן"), at: at(TODAY, "10:00:01") },
+      ];
+      return { replies: [{ text: "תוקן", card: null, image_key: null }],
+               snapshot: snapshot(null), image_key: null };
+    });
+    const { result } = renderHook(() => useChat(api, earlier), { wrapper: wrapper().Wrapper });
+    await waitFor(() => expect(result.current.snapshot).not.toBeUndefined());
+
+    await act(async () => result.current.sendText("תיקון"));
+
+    await waitFor(() => expect(api.getChat).toHaveBeenCalledTimes(4));
+    expect(result.current.messages.map((m) => m.text)).toEqual(["ישן", "תיקון", "תוקן"]);
   });
 
   it("keeps the messages and takes the snapshot of a 409", async () => {
@@ -49,7 +80,7 @@ describe("useChat", () => {
       messages: [message("user", "שלום")],
       snapshot: snapshot(null),
     });
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(result.current.snapshot?.card).not.toBeNull());
 
     await act(async () => result.current.choose(card(), card().options[0]));
@@ -62,7 +93,7 @@ describe("useChat", () => {
   it("fails loudly on a 409 without a snapshot", async () => {
     const api = fakeApi({ messages: [], snapshot: snapshot(card()) });
     (api.postTurn as Mock).mockRejectedValue(new ApiError(409, "409", "already_handled"));
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(result.current.snapshot).toBeDefined());
 
     await act(async () => result.current.choose(card(), card().options[0]));
@@ -74,7 +105,7 @@ describe("useChat", () => {
   it("appends the chosen label as a user message at once", async () => {
     const api = fakeApi({ messages: [], snapshot: snapshot(card()) });
     (api.postTurn as Mock).mockReturnValue(new Promise(() => {}));
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(result.current.snapshot).toBeDefined());
 
     await act(async () => result.current.choose(card(), card().options[0]));
@@ -100,7 +131,7 @@ describe("useChat", () => {
       };
     }));
     const w = wrapper();
-    const { result } = renderHook(() => useChat(api), { wrapper: w.Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: w.Wrapper });
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
     await act(async () => result.current.sendText("היי"));
@@ -121,7 +152,7 @@ describe("useChat lost turns", () => {
   ])("refetches without a failure notice after a %s turn lost to %s", async (kind, _n, error) => {
     const api = fakeApi({ messages: [], snapshot: snapshot(card()) });
     (api.postTurn as Mock).mockRejectedValue(error);
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(result.current.snapshot).toBeDefined());
     (api.getChat as Mock).mockResolvedValue({ messages: [], snapshot: snapshot(null) });
 
@@ -141,7 +172,7 @@ describe("useChat polling", () => {
 
   it("polls the chat while items wait, until the card arrives", async () => {
     const api = fakeApi({ messages: [], snapshot: snapshot(null, 1) });
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(result.current.snapshot?.waiting).toBe(1));
     (api.getChat as Mock).mockResolvedValue({ messages: [], snapshot: snapshot(card()) });
 
@@ -155,7 +186,7 @@ describe("useChat polling", () => {
 
   it("does not poll while a card is live, though more items wait behind it", async () => {
     const api = fakeApi({ messages: [], snapshot: snapshot(card(), 2) });
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(result.current.snapshot?.waiting).toBe(2));
 
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
@@ -166,7 +197,7 @@ describe("useChat polling", () => {
   it("does not poll while a turn is in flight", async () => {
     const api = fakeApi({ messages: [], snapshot: snapshot(null, 1) });
     (api.postTurn as Mock).mockReturnValue(new Promise(() => {}));
-    const { result } = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(result.current.snapshot?.waiting).toBe(1));
 
     await act(async () => result.current.sendText("היי"));
@@ -202,7 +233,7 @@ describe("useChat photos", () => {
   });
 
   async function ready(api: ReturnType<typeof fakeApi>) {
-    const hook = renderHook(() => useChat(api), { wrapper: wrapper().Wrapper });
+    const hook = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
     await waitFor(() => expect(hook.result.current.snapshot).toBeDefined());
     return hook;
   }
@@ -241,7 +272,7 @@ describe("useChat photos", () => {
     const api = fakeApi({ messages: [], snapshot: snapshot(null) });
     (api.postTurn as Mock).mockResolvedValue({ ...photoReply(1), image_key: "k1" });
     const w = wrapper();
-    const { result } = renderHook(() => useChat(api), { wrapper: w.Wrapper });
+    const { result } = renderHook(() => useChat(api, TODAY), { wrapper: w.Wrapper });
     await waitFor(() => expect(result.current.snapshot).toBeDefined());
     (api.getChat as Mock).mockResolvedValue({
       messages: [{ ...message("user", ""), text: null, image_key: "k1" }],

@@ -131,22 +131,38 @@ reason, which names the deployment's admin address to ask for access.
 
 ## Day panel
 
-The chat shows one day, today. On a window at least `sidebar_min_width_px` wide (900 px in
-`config/app.json`), a panel beside it, titled with the day's name and date (`היום · יום ראשון
-01/11/2026`), shows that day's meter photos, dated by when they were uploaded, in up to two
-collapsed sections, each only when it has lines:
+The chat shows one day, today when it opens. On a window at least `sidebar_min_width_px` wide
+(900 px in `config/app.json`), a panel beside it, titled with the day's name and date (`היום · יום
+ראשון 01/11/2026` for today, `יום שישי 30/10/2026` for an earlier day), shows that day's meter
+photos, dated by when they were uploaded, in up to two collapsed sections, each only when it has
+lines:
 
 - `קריאות ממתינות · 2`: photos that still need something. A line is the time and the state:
   `לאישור` (a card awaits an answer), `לשליחה` (failed, awaiting a retry) or `בקריאה` (the model has
-  not answered yet).
+  not answered yet). Today's section also lists every photo still failed from an earlier day, as
+  its date, time and `לשליחה` (`30/10 19:02 · לשליחה`), after today's own lines.
 - `קריאות שבוצעו · 7`: readings saved. A line is the time, the property / apartment and the meter
   type.
 
 While a request for tariffs is open, the panel also shows `חסרים תעריפים` above the sections, even
 when another card is shown first, and a tap scrolls to the card asking for them.
 
-A tap on a line scrolls the chat to that photo and highlights it for a moment. The sections follow
-the chat with no reload. With neither section, the panel says `לא נקראו מונים היום`.
+A tap on a line scrolls the chat to that photo and highlights it for a moment; a line from an
+earlier day first moves the chat to that day, where the photo keeps its retry button. The sections
+follow the chat with no reload. With neither section, the panel says `לא נקראו מונים היום`, or
+`לא נקראו מונים ביום זה` on an earlier day.
+
+### Moving between days
+
+Arrows on either side of the day's title move the chat and the panel one day back or forward, and
+a tap on the title opens the browser's date picker for any earlier day. No day after today can be
+shown, so the forward arrow is disabled on today. While an earlier day is shown, its title takes
+the warning color, and a `היום` button beside it returns to today.
+
+The owner may type or send a photo while an earlier day is shown, for example to correct a
+reading saved that day. The composer then says `מוצג 30/10 · שינויים נרשמים היום`: what is sent is
+recorded under today, and today's thread shows it too. The earlier day's thread keeps showing the
+exchange below its own messages until the owner moves to another day.
 
 The panel opens 18 rem wide. Dragging the border between it and the chat sets its width, and so do
 the arrow keys while the border has focus. The panel stays at least 192 px wide and the chat at
@@ -154,11 +170,13 @@ least 360 px, and the browser brings the chosen width back on the next visit. Th
 72 rem and stays centered in a wider window.
 
 On a narrower window the same day shows as a strip under the header, which stays while the chat
-scrolls: the day as `היום 01/11` (or `חסרים תעריפים` while a request for tariffs is open, tapping
-as above), then a button per section, `ממתינות 2` and `בוצעו 7`, each only when it has lines. A
-tap drops that section's lines over the chat; a tap on the same button, or outside the lines,
-closes them with the chat where it was, and a tap on a line closes them as it scrolls. A day with
-no lines and no missing tariffs shows no strip.
+scrolls: the arrows around the day as `היום 01/11` (`30/10` and the `היום` button on an earlier
+day), then `חסרים תעריפים` while a request for tariffs is open (tapping as above), then a button
+per section, `ממתינות 2` and `בוצעו 7`, each only when it has lines. A tap drops that section's
+lines over the chat; a tap on the same button, or outside the lines, closes them with the chat
+where it was, and a tap on a line closes them as it scrolls. The section buttons show only their
+counts on a window 340 px wide or less, and on an earlier day up to 420 px, so the strip stays one
+row on common phone widths.
 
 ## Report email
 

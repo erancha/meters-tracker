@@ -22,12 +22,18 @@ const ask: Message = {
   card: { ...card(), kind: "tariffs_ask", options: [] },
 };
 
-function setup(messages: Message[], tariffsMissing = false) {
+function setup(
+  messages: Message[], tariffsMissing = false, earlierFailed: Message[] = [], day = "2026-11-01",
+) {
   const onFocus = vi.fn();
   render(<Sidebar messages={messages} tariffsMissing={tariffsMissing} onFocus={onFocus}
-                  day="2026-11-01" />);
+                  day={day} today="2026-11-01" earlierFailed={earlierFailed} onDay={vi.fn()} />);
   return onFocus;
 }
+
+// The line buttons alone, without the day controls in the heading.
+const lineTexts = () =>
+  [...document.querySelectorAll(".day-lines button")].map((b) => b.textContent);
 
 describe("Sidebar", () => {
   it("titles the panel with today's weekday and date", () => {
@@ -75,7 +81,7 @@ describe("Sidebar", () => {
   it("writes a saved line as time, property / apartment and meter type, newest first", () => {
     setup([saved(AT), saved(LATER)]);
 
-    expect(screen.getAllByRole("button", { hidden: true }).map((b) => b.textContent)).toEqual([
+    expect(lineTexts()).toEqual([
       "10:05 · הרצל 5 / דירה 3 · חשמל",
       "09:47 · הרצל 5 / דירה 3 · חשמל",
     ]);
@@ -87,7 +93,7 @@ describe("Sidebar", () => {
       photo(LATER, undefined, true),
     ]);
 
-    expect(screen.getAllByRole("button", { hidden: true }).map((b) => b.textContent)).toEqual([
+    expect(lineTexts()).toEqual([
       `10:05 · ${texts.held.failed}`,
       `09:47 · ${texts.held.awaiting}`,
     ]);
@@ -97,7 +103,7 @@ describe("Sidebar", () => {
     const onFocus = setup([saved(AT)]);
 
     await userEvent.click(screen.getByText(texts.savedCount(1)));
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: "09:47 · הרצל 5 / דירה 3 · חשמל" }));
 
     expect(onFocus).toHaveBeenCalledWith(AT);
   });
@@ -120,13 +126,34 @@ describe("Sidebar", () => {
     setup([], true);
 
     expect(screen.getByText(texts.tariffsMissing)).toBeInTheDocument();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("button", { name: texts.tariffsMissing })).toBeNull();
   });
 
   it("says no meters were read when both lists are empty", () => {
     setup([message("assistant", "שלום")]);
 
     expect(screen.getByText(texts.noReadingsToday)).toBeInTheDocument();
+  });
+
+  it("lists photos still failed from earlier days after today's, each with its date", () => {
+    const earlier = [photo("2026-10-28T08:15:00.000000_cccc", undefined, true),
+                     photo("2026-10-30T19:02:00.000000_dddd", undefined, true)];
+    setup([photo(AT, { state: "awaiting", ...place })], false, earlier);
+
+    expect(screen.getByText(texts.heldCount(3))).toBeInTheDocument();
+    expect(lineTexts()).toEqual([
+      `09:47 · ${texts.held.awaiting}`,
+      `30/10 19:02 · ${texts.held.failed}`,
+      `28/10 08:15 · ${texts.held.failed}`,
+    ]);
+  });
+
+  it("titles an earlier day by its weekday and date alone", () => {
+    setup([], false, [], "2026-10-30");
+
+    expect(screen.getByRole("heading")).toHaveTextContent("יום שישי 30/10/2026");
+    expect(screen.getByRole("heading")).not.toHaveTextContent(`${texts.dayTitle} ·`);
+    expect(screen.getByText(texts.noReadingsThatDay)).toBeInTheDocument();
   });
 
   // The day's title reads as the panel's header in the band the narrow day strip shows it in, so

@@ -1,7 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { fakeApi, message, snapshot, wrapper } from "../testChat";
+import userEvent from "@testing-library/user-event";
+import { jerusalemDay, shiftDay } from "../messageTime";
+import { fakeApi, installResizeObserver, message, snapshot, wrapper } from "../testChat";
 import { texts } from "../texts";
+import type { Message } from "../types";
 import { App } from "./App";
 
 function stubScreen(minWidth: number, width: number) {
@@ -17,13 +20,18 @@ function stubScreen(minWidth: number, width: number) {
   }));
 }
 
-function setup() {
+async function setup(earlierFailed: Message[] = []) {
   const api = fakeApi({
     messages: [{ ...message("user", ""), text: null, image_key: "k1" }],
     snapshot: snapshot(null),
   });
+  const served = await api.getChat(jerusalemDay());
+  (api.getChat as Mock).mockClear().mockImplementation(async (day: string) => ({
+    ...served, earlier_failed: day === jerusalemDay() ? earlierFailed : [],
+  }));
   (api.fileUrl as ReturnType<typeof vi.fn>).mockResolvedValue("https://files/k1");
   render(<App email="a@b.com" api={api} onSignOut={() => {}} />, { wrapper: wrapper().Wrapper });
+  return api;
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -31,7 +39,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("App", () => {
   it("shows the sidebar when the window is at least the configured width", async () => {
     stubScreen(900, 900);
-    setup();
+    await setup();
 
     expect(await screen.findByRole("complementary", { name: texts.dayTitle }))
       .toBeInTheDocument();
@@ -41,7 +49,7 @@ describe("App", () => {
 
   it("shows no sidebar below the configured width", async () => {
     stubScreen(900, 899);
-    setup();
+    await setup();
 
     await screen.findByRole("button", { name: texts.accountMenu });
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("/app.json"));
@@ -51,7 +59,7 @@ describe("App", () => {
 
   it("shows the day strip below the configured width", async () => {
     stubScreen(900, 899);
-    setup();
+    await setup();
 
     expect(await screen.findByRole("region", { name: texts.dayTitle })).toBeInTheDocument();
   });
@@ -59,10 +67,35 @@ describe("App", () => {
   it("shows neither the sidebar nor the strip until the config has loaded", async () => {
     stubScreen(900, 899);
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
-    setup();
+    await setup();
 
     await screen.findByRole("button", { name: texts.accountMenu });
     expect(screen.queryByRole("region", { name: texts.dayTitle })).toBeNull();
     expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  it("loads the previous day's chat and shows that the composer records today", async () => {
+    stubScreen(900, 899);
+    installResizeObserver();
+    const api = await setup();
+    const yesterday = shiftDay(jerusalemDay(), -1);
+
+    await userEvent.click(await screen.findByRole("button", { name: texts.previousDay }));
+
+    await vi.waitFor(() => expect(api.getChat).toHaveBeenCalledWith(yesterday));
+    expect(await screen.findByRole("status")).toHaveTextContent(texts.earlierDayNotice(
+      `${yesterday.slice(8, 10)}/${yesterday.slice(5, 7)}`,
+    ));
+  });
+
+  it("moves to the day of an earlier failed photo tapped in today's list", async () => {
+    stubScreen(900, 900);
+    installResizeObserver();
+    const at = "2026-10-28T08:15:00.000000_cccc";
+    const api = await setup([{ ...message("user", ""), text: null, image_key: "k0", at, failed: true }]);
+
+    await userEvent.click(await screen.findByRole("button", { name: `28/10 08:15 · ${texts.held.failed}` }));
+
+    await vi.waitFor(() => expect(api.getChat).toHaveBeenCalledWith("2026-10-28"));
   });
 });

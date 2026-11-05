@@ -5,6 +5,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "../api";
 import { answer, card, fakeApi, installResizeObserver, message, snapshot, wrapper } from "../testChat";
+import { jerusalemDay } from "../messageTime";
 import { texts } from "../texts";
 import { Chat } from "./Chat";
 
@@ -12,7 +13,7 @@ function setup(chat: Parameters<typeof fakeApi>[0]) {
   const api = fakeApi(chat);
   const w = wrapper();
   const onOpen = vi.fn();
-  render(<Chat api={api} onOpen={onOpen} />, { wrapper: w.Wrapper });
+  render(<Chat api={api} day={jerusalemDay()} onOpen={onOpen} />, { wrapper: w.Wrapper });
   return { api, client: w.client, onOpen };
 }
 
@@ -38,7 +39,7 @@ describe("Chat", () => {
 
   it("scrolls to the message a focus names and highlights it for a moment", async () => {
     const api = fakeApi({ messages: history, snapshot: snapshot(null) });
-    render(<Chat api={api} onOpen={vi.fn()} focus={{ at: history[0].at, n: 1 }} />,
+    render(<Chat api={api} day={jerusalemDay()} onOpen={vi.fn()} focus={{ at: history[0].at, n: 1 }} />,
            { wrapper: wrapper().Wrapper });
 
     const bubble = (await screen.findByText("שלום")).closest("li")!;

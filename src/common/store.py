@@ -16,7 +16,8 @@ Core pieces:
   conditions, and AccessChanged says one failed
 - failed_photo_readings: the one read that spans accounts, a filtered scan of the
   readings table
-- photo_messages: the messages holding a photo's reading tag, across every day
+- photo_messages / failed_messages: the messages holding a photo's reading tag, and those still
+  marked failed, across every day
 - delegates: an account's delegate rows, a filtered scan of the access table, which has the
   address alone as its key
 """
@@ -378,6 +379,13 @@ class Store:
         """Every message of the user, on any day, that carries a photo's reading tag."""
         items = query_all(
             self._tables["messages"], **self._by_pk(user), FilterExpression=Attr("reading").exists()
+        )
+        return [_record(item) for item in items]
+
+    def failed_messages(self, user) -> list:
+        """Every message of the user, on any day, still marked failed, oldest first."""
+        items = query_all(
+            self._tables["messages"], **self._by_pk(user), FilterExpression=Attr("failed").exists()
         )
         return [_record(item) for item in items]
 

@@ -2,7 +2,7 @@
 
 import { endSession, isUnexpired, type Tokens } from "./auth";
 import type { AppConfig } from "./config";
-import type { Message, Snapshot, TurnBody, TurnResult } from "./types";
+import type { ChatData, Snapshot, TurnBody, TurnResult } from "./types";
 
 /**
  * Backend request rejected; the message keeps the method, path, status, and body for diagnosis,
@@ -33,7 +33,8 @@ function errorBody(body: string): { error?: unknown; snapshot?: Snapshot } {
 }
 
 export interface Api {
-  getChat(): Promise<{ messages: Message[]; snapshot: Snapshot; admin: boolean }>;
+  /** The chat of day, a stamp's date part. */
+  getChat(day: string): Promise<ChatData>;
   postTurn(body: TurnBody): Promise<TurnResult>;
   fileUrl(key: string): Promise<string>;
 }
@@ -78,7 +79,7 @@ export function createApi(
     return response.json();
   }
   return {
-    getChat: () => request("GET", "/chat"),
+    getChat: (day) => request("GET", `/chat?day=${day}`),
     postTurn: (body) => request("POST", "/turn", body),
     // The key contains slashes, so it travels percent-encoded as one path segment. The link is
     // good for minutes only, which is why it is asked for at display time.

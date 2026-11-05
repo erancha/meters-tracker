@@ -1,7 +1,12 @@
 /**
- * Chat state over the `["chat"]` query: the history and the snapshot from the backend, and the
- * turns that extend them. The backend flags the admin's chat; here that becomes locked, and the
- * composer takes no input.
+ * Chat state over the `["chat", day]` queries: the shown day's history and the snapshot from the
+ * backend, and the turns that extend them. The backend flags the admin's chat; here that becomes
+ * locked, and the composer takes no input.
+ *
+ * The owner may write while an earlier day is shown, so a correction is made beside the records
+ * that day shows, but the server records every message under today. From the first turn sent on
+ * an earlier day, the thread therefore also shows today's messages that came after the last one
+ * today held at that moment; today's history is kept loaded for this.
  *
  * Every turn writes its outcome into the query cache: the user's own message (the typed text,
  * or the chosen option's label and its card, as the backend records it) is appended before the
@@ -32,17 +37,16 @@ import { downscale } from "./images";
 import { fileKey } from "./fileQuery";
 import { ApiError, type Api } from "./api";
 import { jerusalemStamp } from "./messageTime";
+import { jerusalemDay } from "./messageTime";
 import type {
-  Card, CardOption, CardRef, LocalMessage, Snapshot, TurnBody, TurnResult,
+  Card, CardOption, CardRef, ChatData, LocalMessage, TurnBody, TurnResult,
 } from "./types";
 
-const KEY = ["chat"];
+// Every day's query starts with this, so one invalidation refetches all of them.
+const ROOT = ["chat"];
+const chatKey = (day: string) => [...ROOT, day];
 
-interface Chat {
-  messages: LocalMessage[];
-  snapshot: Snapshot;
-  admin: boolean;
-}
+type Chat = Omit<ChatData, "messages"> & { messages: LocalMessage[] };
 
 const userMessage = (text: string | null, choice: CardRef | null = null): LocalMessage => ({
   at: jerusalemStamp(), role: "user", text, card: null, image_key: null, pdf_key: null,
@@ -76,16 +80,18 @@ type Problem = "failed" | "rejected" | null;
 
 interface TurnVars {
   body: () => Promise<TurnBody>;
+  /** The day shown when the turn was sent, whose history holds its local messages. */
+  day: string;
   local: LocalMessage;
   /** The turn retries the stored message local stands for, so it adds no message. */
   retrying?: boolean;
 }
 
-/** The chat query itself, for views that only read the history; only useChat polls it. */
-export function useChatQuery(api: Api, poll = false) {
+/** The chat query of day, for views that only read the history; only useChat polls it. */
+export function useChatQuery(api: Api, day: string, poll = false) {
   return useQuery<Chat>({
-    queryKey: KEY,
-    queryFn: () => api.getChat(),
+    queryKey: chatKey(day),
+    queryFn: () => api.getChat(day),
     // The interval is first asked for before the first load, while there is no data.
     refetchInterval: ({ state: { data } }) =>
       poll && data !== undefined && data.snapshot.card === null && data.snapshot.waiting > 0
@@ -93,13 +99,18 @@ export function useChatQuery(api: Api, poll = false) {
   });
 }
 
-export function useChat(api: Api) {
+/** The chat of day, a stamp's date part; today unless the owner moved to an earlier day. */
+export function useChat(api: Api, day: string) {
   const client = useQueryClient();
   const pending = useIsMutating() > 0;
   const choosing = useIsMutating({
     predicate: (m) => (m.state.variables as TurnVars).local.choice !== null,
   }) > 0;
-  const chat = useChatQuery(api, !pending);
+  const today = jerusalemDay();
+  const chat = useChatQuery(api, day, !pending);
+  const todayChat = useChatQuery(api, today, !pending && day !== today);
+  // The earlier day the owner sent from, and the stamp of today's last message at that moment.
+  const [sentFrom, setSentFrom] = useState<{ day: string; after: string } | null>(null);
 
   const [problem, setProblem] = useState<Problem>(null);
   const [unsent, setUnsent] = useState<TurnVars[]>([]);
@@ -109,7 +120,7 @@ export function useChat(api: Api) {
 
   const reconcile = async () => {
     // The settling turn still counts as in flight here.
-    if (client.isMutating() <= 1) await client.invalidateQueries({ queryKey: KEY });
+    if (client.isMutating() <= 1) await client.invalidateQueries({ queryKey: ROOT });
   };
 
   const turn = useMutation({
@@ -126,10 +137,15 @@ export function useChat(api: Api) {
         throw err;
       }
     },
-    onMutate: async ({ local, retrying }) => {
+    onMutate: async ({ day: sentDay, local, retrying }) => {
       setProblem(null);
-      await client.cancelQueries({ queryKey: KEY });
-      client.setQueryData<Chat>(KEY, (old) => ({
+      if (sentDay !== today && sentFrom?.day !== sentDay) {
+        // An earlier day renders only once today's history has loaded, so it is here.
+        const held = todayChat.data!.messages;
+        setSentFrom({ day: sentDay, after: held.length === 0 ? "" : held[held.length - 1].at });
+      }
+      await client.cancelQueries({ queryKey: ROOT });
+      client.setQueryData<Chat>(chatKey(sentDay), (old) => ({
         ...old!,
         messages: retrying
           ? old!.messages.map((m) => (m.at === local.at ? local : m))
@@ -146,8 +162,8 @@ export function useChat(api: Api) {
         client.setQueryData(fileKey(result.image_key), sent);
         objectUrls.current.delete(sent);
       }
-      await client.cancelQueries({ queryKey: KEY });
-      client.setQueryData<Chat>(KEY, (old) => ({
+      await client.cancelQueries({ queryKey: ROOT });
+      client.setQueryData<Chat>(chatKey(vars.day), (old) => ({
         ...old!,
         messages: [...old!.messages, ...replyMessages(result)],
         snapshot: result.snapshot,
@@ -156,12 +172,12 @@ export function useChat(api: Api) {
     },
     onError: (err, vars) => {
       if (err instanceof ApiError && err.status === 409) {
-        client.setQueryData<Chat>(KEY, (old) => ({ ...old!, snapshot: err.snapshot! }));
+        client.setQueryData<Chat>(chatKey(vars.day), (old) => ({ ...old!, snapshot: err.snapshot! }));
       } else if (err instanceof ApiError && err.serverError === "message_failed") {
         // Checked before lostInTransit: unlike a gateway's own 503, this one names its error.
         // The refetch below brings the stored message with its failed mark.
       } else if (err instanceof LostRequest && vars.local.choice === null && !vars.retrying) {
-        client.setQueryData<Chat>(KEY, (old) => ({
+        client.setQueryData<Chat>(chatKey(vars.day), (old) => ({
           ...old!,
           messages: old!.messages.filter((m) => !isSameLocal(m, vars.local)),
         }));
@@ -181,9 +197,14 @@ export function useChat(api: Api) {
     setUnsent((held) => held.filter((v) => v !== vars));
     turn.mutate(vars);
   };
+  const sentToday = sentFrom !== null && sentFrom.day === day && day !== today
+    ? todayChat.data!.messages.filter((m) => m.at > sentFrom.after)
+    : [];
   const messages = [
     ...(chat.data?.messages ?? []),
-    ...unsent.map((vars) => ({ ...vars.local, resend: () => resend(vars) })),
+    ...sentToday,
+    ...unsent.filter((vars) => vars.day === day)
+      .map((vars) => ({ ...vars.local, resend: () => resend(vars) })),
   ];
 
   // Local photo messages leave the history when the server's history replaces them.
@@ -195,7 +216,7 @@ export function useChat(api: Api) {
         objectUrls.current.delete(url);
       }
     }
-  }, [chat.data, unsent]);
+  }, [chat.data, todayChat.data, unsent]);
 
   function sendPhoto(file: File) {
     const url = URL.createObjectURL(file);
@@ -207,23 +228,26 @@ export function useChat(api: Api) {
         const { base64, mediaType } = await scaled;
         return { image: base64, media_type: mediaType };
       },
+      day,
       local: { ...userMessage(null), localUrl: url },
     });
   }
 
   return {
     pending,
-    loadFailed: chat.isError,
+    loadFailed: chat.isError || todayChat.isError,
     messages,
-    snapshot: chat.data?.snapshot,
+    // Undefined until today's history has loaded too, which a turn on an earlier day reads.
+    snapshot: todayChat.data === undefined ? undefined : chat.data?.snapshot,
     locked: chat.data?.admin,
     sendText: (text: string) =>
-      turn.mutate({ body: async () => ({ text }), local: userMessage(text) }),
+      turn.mutate({ body: async () => ({ text }), day, local: userMessage(text) }),
     sendPhotos: (files: File[]) => files.forEach(sendPhoto),
     choose: (card: Card, option: CardOption) => {
       const answered = { pending: card.pending, version: card.version };
       turn.mutate({
         body: async () => ({ choice: { ...answered, option: option.id } }),
+        day,
         local: userMessage(option.label, answered),
       });
     },
@@ -234,6 +258,7 @@ export function useChat(api: Api) {
       }
       turn.mutate({
         body: async () => ({ retry: message.at }),
+        day,
         local: { ...message, failed: false, retried_at: jerusalemStamp() },
         retrying: true,
       });

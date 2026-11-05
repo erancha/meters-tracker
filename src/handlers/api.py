@@ -5,7 +5,8 @@ account's own photos.
 The caller's identity comes exclusively from the JWT claims the API Gateway authorizer verified;
 the request body never names a user, and an address Google has not verified is refused before it
 is resolved to an account. The deployment's admin address takes the same path as any other, and
-the chat response flags it so the browser can lock the composer. The engine is built per
+the chat response flags it so the browser can lock the composer. The chat response of today also
+carries the photos still failed from earlier days. The engine is built per
 invocation from the environment, and a model setting it cannot serve or price fails every request
 before any work.
 Photos are validated here, before the engine, so a rejected upload writes nothing to S3 or the
@@ -115,7 +116,15 @@ def _chat(engine, user, admin, query):
         except ValueError:
             raise _invalid()
     messages, snapshot = engine.load(user, day)
-    return response(200, {"messages": messages, "snapshot": asdict(snapshot), "admin": admin})
+    return response(
+        200,
+        {
+            "messages": messages,
+            "snapshot": asdict(snapshot),
+            "admin": admin,
+            "earlier_failed": engine.earlier_failed(user, day),
+        },
+    )
 
 
 def _invalid():
