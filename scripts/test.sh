@@ -10,6 +10,7 @@
 # Creates .venv on the first run and installs requirements-dev.txt into it. Each matrix slice is
 # a pytest run of its own, as many at once as the machine has processors (nproc), so its memory
 # is returned when it ends; every slice runs, then those that failed are named with their output.
+# Every run ends by printing its elapsed time to stderr, whether it passed or failed.
 # Examples:
 #   ./scripts/test.sh -q tests/test_api.py
 #   ./scripts/test.sh --matrix matrix_cards_open_1 matrix_sequences
@@ -23,6 +24,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/common.sh"
 
 case "${1:-}" in -h|--help) print_help; exit 0 ;; esac
+trap 'echo "test.sh: elapsed $((SECONDS / 60))m $((SECONDS % 60))s" >&2' EXIT
 
 # Runs each named slice in its own pytest process, at most nproc at once, then names every slice
 # that failed. Returns non-zero when any did, and when it is given none, since then nothing ran.

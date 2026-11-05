@@ -5,10 +5,10 @@ uses. The owner sends a photo of a meter; the app reads the serial and the count
 reading, and saves it once the owner confirms. It keeps each meter's history and each apartment's
 billing periods, and after every reading reports the consumption and the charge.
 
-**[Walk through the planned chat](docs/demo/demo.html)** — an animated replay of one owner's
-story on a phone screen, from linking an apartment's meters to the closing readings two months
-later; it shows the whole planned product, including the parts not built yet. Open the file in a
-browser; a deployment also publishes it at `/demo.html` beside the app.
+**[Walk through a demo chat](https://dn6u06azerauv.cloudfront.net/demo.html)** — an animated
+replay of one owner's story on a phone screen, from linking an apartment's meters to the closing
+readings two months later. Its source is `docs/demo/demo.html`, which every deployment publishes
+beside the app.
 
 ## Overview
 
