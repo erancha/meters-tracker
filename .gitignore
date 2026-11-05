@@ -18,3 +18,7 @@ docs/superpowers/*
 .claude/*
 !.claude/skills/
 CLAUDE.local.md
+
+# Private data the repo operates on
+# Backups of a deployed stack's rows and photos, written by scripts/backup-restore.sh
+/backups/

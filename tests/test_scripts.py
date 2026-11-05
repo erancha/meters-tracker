@@ -145,6 +145,14 @@ def test_require_aws_config_accepts_real_values(run, tmp_path):
 SCRIPTS = COMMON.parent
 # Argument lists each script refuses before it reads any settings or calls AWS or the model.
 REFUSED_ARGS = {
+    "backup-restore.sh": [
+        [],
+        ["dev"],
+        ["restore"],
+        ["backup", "a", "b"],
+        ["restore", "--yes"],
+        ["dev", "--cron", "a", "b"],
+    ],
     "aws-helper.sh": [[], ["--logs", "api", "dev", "extra"], ["--env", "dev", "--logs", "api"]],
     "reset-account.sh": [[], ["dev", "a@x.com", "extra"], ["--force", "a@x.com"]],
     "set-model-key.sh": [[], ["google"], ["openai", "extra"]],

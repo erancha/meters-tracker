@@ -103,6 +103,7 @@ the browser app and prints its address.
 - `test.sh` — shell syntax check, lint, format check and the backend test suite
 - `read-meter.sh` — reads one photo through the model and prints the result
 - `reset-account.sh` — deletes everything one account owns in a deployed stack
+- `backup-restore.sh` — backs a deployed stack's data up to a local folder and restores it
 
 ## Details
 

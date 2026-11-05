@@ -180,6 +180,15 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
   to the emptied account. The logic is in `reset_account.py` beside it;
   `app_stack.py` resolves a stack's tables, bucket and api function for the scripts that work
   on a deployed stack.
+- [`backup-restore.sh [env] backup | restore <folder> | --cron`](../scripts/backup-restore.sh)
+  — copies a stack's data to a local folder and back. A backup holds every row of the nine
+  tables as typed JSON lines and the current version of every file in the bucket, with each
+  file's content type. It goes to `backups/<timestamp>/`, gitignored, or to
+  `backups/<env>/<timestamp>/` for an env stack, or under `--base-dir`, falling back to
+  `backups/` when that folder cannot be written to. A restore makes the stack hold exactly the
+  backup's rows and files once you type the stack's name; the bucket keeps the versions it
+  replaces. `--cron` adds a midnight crontab entry per stack that logs to `backups/cron.log`.
+  The logic is in `backup_restore.py` beside it.
 
 `scripts/common.sh` holds the helpers the shell scripts source: the `--help` printer, the
 settings-file checks, the `env` suffix parsing and the stack lookups.

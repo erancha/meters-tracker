@@ -234,7 +234,8 @@ Nine DynamoDB tables, billed per request, each holding one kind of record under 
 partition key `pk` and sort key `sk` (`access` has no sort key). The account id is the owner's
 lowercase email. No request of the app crosses accounts or scans a table. Scripts run by the
 owner with their own credentials scan: `scripts/reset-account.sh` finds every row one account
-owns in each table, and a real-model check reads the readings that carry failed photos
+owns in each table, `scripts/backup-restore.sh` copies every table and the files bucket to a
+local folder and back, and a real-model check reads the readings that carry failed photos
 ([Tests](development.md#tests)).
 
 - `access` — pk address, no sk: `email`, `account`, `role` (`owner` or `delegate`).

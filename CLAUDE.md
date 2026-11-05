@@ -22,6 +22,8 @@ deployed by CloudFormation. Layout and parts: docs/architecture.md.
   `LLM_API_KEY`.
 - `reset-account.sh [env] <email> [--yes]` — deletes the account's rows and photos in the stack;
   without `--yes` it only prints the counts.
+- `backup-restore.sh [env] backup [folder] | restore <folder> | --cron [dir]` — copies the
+  stack's rows and files to `backups/` and back; a restore asks for the stack name.
 
 ## Gotchas
 
