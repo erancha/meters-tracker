@@ -27,7 +27,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 
-from common import dates, texts
+from common import dates, prompts, texts
 from common.dates import parse_iso
 from common.fields import (
     PHOTO_KINDS,
@@ -434,7 +434,9 @@ def _reading_date(engine, note, sent_on) -> str:
     if note is None:
         return sent_on
     sent_day = parse_iso(sent_on)
-    intent = engine.model.classify(note, form_context({"date": sent_on}), sent_day)
+    intent = engine.model.classify(
+        note, form_context({"date": sent_on}), sent_day, lambda query: prompts.NOTE_HAS_NO_RECORDS
+    )
     # A bare date has no field, and the note's form has only the date for it to fill.
     named = [
         o.value for o in intent.operations if o.target == CARD_TARGET and o.field in (None, "date")

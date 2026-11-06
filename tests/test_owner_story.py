@@ -93,7 +93,7 @@ class Owner:
         return result
 
     def _context(self, shown) -> str:
-        records, _ = self.kit.engine.records(USER)
+        records, _, _ = self.kit.engine.records(USER)
         card = None if shown is None else classify_context(shown, self.kit.form())
         return message_context(records, card)
 
@@ -316,8 +316,8 @@ def _ask_close(owner):
     """A typed close of the apartment shows the close card listing both closing readings."""
     request = IntentResult(intent="close_period", name=APARTMENT)
     card = owner.say(f"סגור את התקופה של {LABEL}", request).snapshot.card
-    # The request reaches the model with the apartment records it must name one of.
-    assert f"name={APARTMENT}; " in owner.kit.model.classified[-1][1]
+    # The model can look up the apartment records it must name one of.
+    assert f"name={APARTMENT}; " in owner.kit.lookup()
     assert card["kind"] == "close"
     assert card["title"] == f"סגירת התקופה של {APARTMENT} (מ־30/10/2026)"
     # Meters list in serial order, and a digit serial sorts before a Hebrew label.

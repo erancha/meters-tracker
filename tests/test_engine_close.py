@@ -390,15 +390,16 @@ def test_a_photo_after_the_cancel_offer_still_resumes_the_close(env, ddb):
     assert result.snapshot.card["kind"] == "close"
 
 
-def test_a_typed_request_is_classified_with_the_apartment_records(env, ddb):
+def test_a_typed_request_looks_up_the_apartment_records(env, ddb):
     kit = Kit([IntentResult(intent="close_period", name="עורף")], today=date(2026, 11, 2))
     _apartment(kit)
     kit.apartment(name="קדמית", property_name="לאונר 18")
     kit.say("סגור את התקופה של עורף")
     text, context = kit.model.classified[-1]
     assert text == "סגור את התקופה של עורף"
-    assert context.startswith(f"{texts.RECORDS_TITLE}:\n")
-    assert "name=עורף; " in context and "name=קדמית; " in context
+    assert "name=עורף; " not in context
+    every = kit.lookup()
+    assert "name=עורף; " in every and "name=קדמית; " in every
 
 
 def test_a_typed_name_no_apartment_has_is_not_found(env, ddb):

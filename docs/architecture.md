@@ -184,7 +184,12 @@ from a closed list —
 `edit`, a `how_to` or a `which` names. A photo is read as a statement only when its meter read
 finds neither a meter type nor a serial. Each classification is sent with today's date, the
 pending card's text with its fields, the field it asked for again and its button labels, and the
-account's records with their ids, so the model names an apartment or a record exactly as stored.
+waiting cards and dropped photos, but no saved records. The model looks up the records a message
+names with a `find_records` tool, offered by both the Claude and the OpenAI client, so it names an
+apartment or a record exactly as stored while a message that names none sends no records at all.
+The Lambda answers each lookup from the account it loaded for the turn (`account.lookup`); a
+classification takes at most `MAX_LOOKUPS` (3) lookups, and the request after the last turns the
+tool off, so the model still answers ([Domain rules](domain-rules.md#typed-edits-on-a-card)).
 The prompts are in `src/common/prompts.py`. A refusal raises instead of returning a guess. Only
 the owner runs the classifier against the real model, with `scripts/eval-intents.sh` over the
 recorded messages in

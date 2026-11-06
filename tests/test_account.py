@@ -5,18 +5,21 @@ block the classifier is given."""
 import pytest
 from botocore.exceptions import ClientError
 
-from common import texts
+from common import prompts, texts
 from common.access import DELEGATE, OWNER
 from common.account import (
     Account,
     Writes,
-    context,
     diff,
+    listed_context,
     load,
+    lookup,
     move_period,
     realign,
+    record_lines,
     records,
 )
+from common.model import RecordsQuery
 from common.store import MAX_TRANSACTION_ITEMS, TooLarge
 
 ACCOUNT = "acc1"
@@ -201,12 +204,11 @@ def test_records_are_keyed_by_the_id_each_target_names():
     assert set(records(account, "tariff")) == {"2026-01-01"}
 
 
-def test_context_lists_every_record_with_its_id():
+def test_record_lines_list_every_record_with_its_id():
     closing = {**_reading("2026-03-01", "s2", 20), "closes_period": "2026-01-01"}
     opening = {**_reading("2026-01-05", "s1", 10), "opens_period": "2026-01-01", "resets": True}
     empty = texts.EMPTY_VALUE
-    assert context(_block_account([opening, closing]), 12, {}, {}).split("\n") == [
-        f"{texts.RECORDS_TITLE}:",
+    assert record_lines(_block_account([opening, closing]), 12) == [
         "property|p1: name=Main street",
         "apartment|a1: name=Flat 3; property=Main street; months=2",
         f"meter|M1: type=electricity; apartment=Flat 3; display=bottom; retired_at={empty}",
@@ -225,27 +227,27 @@ def test_context_lists_every_record_with_its_id():
     ]
 
 
-def test_context_keeps_each_meters_latest_readings():
+def test_record_lines_keep_each_meters_latest_readings():
     readings = [_reading(f"2026-01-0{day}", f"s{day}", day) for day in range(1, 6)]
-    block = context(_block_account(readings), 2, {}, {})
+    block = "\n".join(record_lines(_block_account(readings), 2))
     assert "reading|M1|2026-01-03#s3" not in block
     assert "reading|M1|2026-01-04#s4" in block and "reading|M1|2026-01-05#s5" in block
 
 
-def test_context_keeps_the_latest_saved_reading_even_when_it_is_back_dated():
+def test_record_lines_keep_the_latest_saved_reading_even_when_it_is_back_dated():
     readings = [
         _reading("2026-01-01", "s9", 1),
         _reading("2026-01-02", "s2", 2),
         _reading("2026-01-03", "s3", 3),
     ]
-    block = context(_block_account(readings), 1, {}, {})
+    block = "\n".join(record_lines(_block_account(readings), 1))
     assert "reading|M1|2026-01-01#s9" in block
     assert "reading|M1|2026-01-02#s2" not in block
     assert "reading|M1|2026-01-03#s3" in block
     assert block.count("latest=true") == 1
 
 
-def test_context_lists_waiting_cards_and_dropped_photos_after_the_records():
+def test_listed_context_lists_waiting_cards_and_dropped_photos():
     empty = texts.EMPTY_VALUE
     cards = {"2026-01-05T08:00:00_ab12": {"value": 10, "serial": None}}
     photos = {
@@ -262,7 +264,7 @@ def test_context_lists_waiting_cards_and_dropped_photos_after_the_records():
             "property": None,
         },
     }
-    lines = context(Account([], [], [], {}, {}, [], []), 12, cards, photos).split("\n")
+    lines = listed_context(cards, photos).split("\n")
     assert lines == [
         f"{texts.RECORDS_TITLE}:",
         f"card|2026-01-05T08:00:00_ab12: value=10; serial={empty}",
@@ -277,8 +279,9 @@ def test_context_lists_waiting_cards_and_dropped_photos_after_the_records():
     ]
 
 
-def test_context_of_an_empty_account_is_empty():
-    assert context(Account([], [], [], {}, {}, [], []), 12, {}, {}) == ""
+def test_an_empty_account_has_no_lines():
+    assert record_lines(Account([], [], [], {}, {}, [], []), 12) == []
+    assert listed_context({}, {}) == ""
 
 
 def _closed_and_next() -> Account:
@@ -356,9 +359,162 @@ def test_a_delegate_is_a_record_kind_the_classifier_reads(store):
     store.access_put_if_absent("helper@x.com", ACCOUNT, DELEGATE)
     state = load(store, ACCOUNT, OWNER)
     assert records(state, "delegate") == {"helper@x.com": state.delegates[0]}
-    assert "delegate|helper@x.com: address=helper@x.com" in context(state, 12, {}, {})
+    assert "delegate|helper@x.com: address=helper@x.com" in record_lines(state, 12)
 
 
 def test_a_delegate_loads_no_delegates(store):
     store.access_put_if_absent("helper@x.com", ACCOUNT, DELEGATE)
     assert load(store, ACCOUNT, DELEGATE).delegates == []
+
+
+def _lookup_account(apartments=None) -> Account:
+    """Two properties; the first holds כניסה מזרח, with a water and an electricity meter of 15
+    readings each, and חדר 2; the second holds דירה 7. One tariff and one delegate."""
+    apartments = apartments or [
+        {"id": "a1", "property_id": "p1", "name": "כניסה מזרח", "period_months": 2},
+        {"id": "a2", "property_id": "p1", "name": "חדר 2", "period_months": 2},
+        {"id": "a3", "property_id": "p2", "name": "דירה 7", "period_months": 2},
+    ]
+    series = {
+        serial: [_reading(f"2026-01-{day:02d}", f"{serial}{day:02d}", day) for day in range(1, 16)]
+        for serial in ("W1", "E1")
+    }
+    return Account(
+        properties=[{"id": "p1", "name": 'אונר 123 ראשל"צ'}, {"id": "p2", "name": "הרצל 5"}],
+        apartments=apartments,
+        meters=[_meter("W1", "a1"), {**_meter("E1", "a1"), "type": "electricity"}],
+        readings=series,
+        periods={"a1": [_period("2026-01-01")], "a2": [_period("2026-01-01")]},
+        tariffs=[
+            {
+                "effective_date": "2026-01-01",
+                "electricity_per_kwh": 0.6,
+                "water_per_m3": 9.5,
+                "source_image_key": None,
+            }
+        ],
+        delegates=[{"email": "helper@x.com"}],
+    )
+
+
+def _query(**fields) -> RecordsQuery:
+    return RecordsQuery(
+        **{
+            "apartment": None,
+            "meter_type": None,
+            "reading_date": None,
+            "tariffs": False,
+            "delegates": False,
+            **fields,
+        }
+    )
+
+
+def _ids(block: str) -> list[str]:
+    return [line.partition(": ")[0] for line in block.splitlines()]
+
+
+def test_lookup_by_apartment_lists_its_property_meters_readings_and_periods():
+    ids = _ids(lookup(_lookup_account(), _query(apartment="כניסה מזרח"), 12))
+    assert ids[:3] == ["property|p1", "apartment|a1", "meter|W1"]
+    assert "apartment|a2" not in ids and "apartment|a3" not in ids
+    assert "meter|E1" in ids and "period|a1|2026-01-01" in ids
+    for serial in ("W1", "E1"):
+        readings = [i for i in ids if i.startswith(f"reading|{serial}|")]
+        assert len(readings) == 12 and readings[-1] == f"reading|{serial}|2026-01-15#{serial}15"
+    assert not any(i.startswith(("tariff|", "delegate|")) for i in ids)
+
+
+def test_lookup_matches_the_apartment_as_written():
+    state = _lookup_account()
+    plain = lookup(state, _query(apartment="כניסה מזרח"), 12)
+    assert lookup(state, _query(apartment='ראשל"צ  כניסה   מזרח'), 12) == plain
+    assert lookup(state, _query(apartment="ראשלצ כניסה"), 12) == plain
+
+
+def test_lookup_by_meter_type_leaves_out_the_other_meter():
+    ids = _ids(lookup(_lookup_account(), _query(apartment="כניסה", meter_type="water"), 12))
+    assert "meter|W1" in ids and "meter|E1" not in ids
+    assert not any(i.startswith("reading|E1|") for i in ids)
+
+
+def test_lookup_adds_the_readings_of_a_named_date_beyond_the_latest():
+    query = _query(apartment="כניסה מזרח", meter_type="water", reading_date="2026-01-02")
+    ids = _ids(lookup(_lookup_account(), query, 12))
+    assert "reading|W1|2026-01-02#W102" in ids and "reading|W1|2026-01-01#W101" not in ids
+
+
+def test_lookup_with_no_apartment_lists_every_apartment_and_meter_without_readings():
+    ids = _ids(lookup(_lookup_account(), _query(), 12))
+    assert ids == [
+        "property|p1",
+        "property|p2",
+        "apartment|a1",
+        "apartment|a2",
+        "apartment|a3",
+        "meter|W1",
+        "meter|E1",
+        "reading|W1|2026-01-15#W115",
+    ]
+
+
+def test_lookup_matching_nothing_names_every_apartment():
+    names = 'אונר 123 ראשל"צ / כניסה מזרח, אונר 123 ראשל"צ / חדר 2, הרצל 5 / דירה 7'
+    expected = prompts.NO_APARTMENT_MATCH.format(query="חדר 9", names=names)
+    block = lookup(_lookup_account(), _query(apartment="חדר 9"), 12)
+    assert block.splitlines()[0] == expected
+    assert _ids(block)[1:] == ["reading|W1|2026-01-15#W115"]
+
+
+def test_lookup_lists_tariffs_and_delegates_only_when_asked():
+    ids = _ids(lookup(_lookup_account(), _query(apartment="דירה 7", tariffs=True), 12))
+    assert "tariff|2026-01-01" in ids and "delegate|helper@x.com" not in ids
+    ids = _ids(lookup(_lookup_account(), _query(apartment="דירה 7", delegates=True), 12))
+    assert "delegate|helper@x.com" in ids and "tariff|2026-01-01" not in ids
+
+
+def test_a_lookup_on_a_hundred_apartments_holds_only_the_named_one():
+    many = [
+        {"id": f"a{n}", "property_id": "p1", "name": f"דירה {n}", "period_months": 2}
+        for n in range(1, 101)
+    ]
+    ids = _ids(lookup(_lookup_account(many), _query(apartment="דירה 42"), 12))
+    assert [i for i in ids if i.startswith("apartment|")] == ["apartment|a42"]
+
+
+def _named(name, property_name="לאונר 18", empty_property=False) -> Account:
+    properties = [{"id": "p1", "name": property_name}]
+    if empty_property:
+        properties.append({"id": "p2", "name": "בית ריק"})
+    apartment = {"id": "a1", "property_id": "p1", "name": name, "period_months": 2}
+    return Account(properties, [apartment], [_meter("M1", "a1")], {"M1": []}, {}, [], [])
+
+
+@pytest.mark.parametrize(
+    "written", ["דירה 3/1", "3/1", "לאונר 18 / דירה 3/1", "לאונר-18 דירה 3/1,"]
+)
+def test_lookup_matches_a_name_with_a_slash_or_hyphen(written):
+    ids = _ids(lookup(_named("דירה 3/1"), _query(apartment=written), 12))
+    assert "apartment|a1" in ids
+
+
+def test_lookup_matches_a_name_copied_from_the_no_match_answer():
+    ids = _ids(lookup(_named("דירה קדמית"), _query(apartment="לאונר 18 / דירה קדמית"), 12))
+    assert "apartment|a1" in ids
+
+
+def test_every_lookup_carries_the_reading_saved_last():
+    block = lookup(_lookup_account(), _query(apartment="דירה 7"), 12)
+    assert "reading|W1|2026-01-15#W115" in block and block.count("latest=true") == 1
+    assert "latest=true" in lookup(_lookup_account(), _query(), 12)
+
+
+def test_a_property_with_no_apartments_is_found_and_listed():
+    state = _named("דירה קדמית", empty_property=True)
+    assert "property|p2" in _ids(lookup(state, _query(apartment="בית ריק"), 12))
+    assert "property|p2" in _ids(lookup(state, _query(), 12))
+
+
+def test_a_blank_apartment_lists_as_no_apartment_does():
+    state = _lookup_account()
+    assert lookup(state, _query(apartment="  "), 12) == lookup(state, _query(), 12)

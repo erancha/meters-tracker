@@ -12,9 +12,9 @@ import httpx2
 import pytest
 from fake_model import FakeModel
 
-from common import texts
+from common import account, texts
 from common.flows import classify_context, message_context
-from common.model import IntentResult
+from common.model import IntentResult, RecordsQuery
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import eval_intents
@@ -24,8 +24,10 @@ from eval_intents import (
     FORMS,
     RECORDS,
     Case,
+    _listed_ids,
     context,
     evaluate,
+    finder,
     load_cases,
     mismatches,
     report,
@@ -109,12 +111,11 @@ def test_a_card_that_asked_for_a_field_names_it():
     assert f"\n{texts.ASKED_TITLE}: serial\n" in asked
 
 
-def test_a_case_with_records_is_sent_with_the_account_its_card_and_the_cards_behind():
-    sent = context(_case(card="reading", records="story"))
-    lines = sent.splitlines()
+def test_a_case_with_records_is_sent_with_its_card_and_the_cards_behind_and_no_records():
+    case = _case(card="reading", records="story")
+    lines = context(case).splitlines()
     records = lines[lines.index(f"{texts.RECORDS_TITLE}:") + 1 :]
-    assert "property|p1: name=לאונר 18" in records
-    assert any(line.startswith("reading|4410290|2026-10-29#") for line in records)
+    assert not any(line.startswith(("property|", "reading|")) for line in records)
     cards = [line for line in records if line.startswith("card|")]
     assert cards[0] == _card_line("reading")
     assert len(cards) == 1 + len(RECORDS["story"].behind)
@@ -163,14 +164,29 @@ def test_the_recorded_cases_cover_corrections_and_questions(env):
     assert {"delegate", "photo"} <= targets
 
 
-def test_a_request_is_sent_with_the_records_after_any_standby_card():
+def test_a_request_finds_the_apartments_its_case_lists():
     names = ["דירה קדמית", "עורף"]
-    records = context(_case(card=None, apartments=names))
-    assert records.startswith(f"{texts.RECORDS_TITLE}:\n")
-    assert all(f"name={name}; " in records for name in names)
+    assert context(_case(card=None, apartments=names)) == ""
+    found = finder(_case(card=None, apartments=names))(QUERY_ALL)
+    assert all(f"name={name}; " in found for name in names)
     asked = context(_case(card="tariffs_ask", apartments=names))
     standby = classify_context(CARDS["tariffs_ask"], FORMS["tariffs_ask"])
-    assert asked == message_context(f"{records}\n{_card_line('tariffs_ask')}", standby)
+    block = f"{texts.RECORDS_TITLE}:\n{_card_line('tariffs_ask')}"
+    assert asked == message_context(block, standby)
+
+
+def test_evaluate_passes_each_case_a_lookup_over_its_records():
+    model = LookingModel({}, [IntentResult(intent="unknown")])
+    list(evaluate([_case(card="reading", records="story")], model))
+    assert "property|p1: name=לאונר 18" in model.found
+    assert "reading|4410290|2026-10-29#" in model.found
+
+
+def test_an_expected_target_may_be_any_record_of_the_case_account():
+    ids = _listed_ids(_case(card="reading", records="story"))
+    lines = account.record_lines(RECORDS["story"].state, 12)
+    assert {line.partition(": ")[0] for line in lines} <= ids
+    assert {"card", f"card|{CARD_SEQ}"} <= ids
 
 
 def test_apartments_on_a_card_that_awaits_an_answer_are_refused(tmp_path):
@@ -202,9 +218,23 @@ class DatedModel(FakeModel):
         super().__init__({}, intents)
         self.days = []
 
-    def classify(self, text, context, today):
+    def classify(self, text, context, today, find):
         self.days.append(today)
-        return super().classify(text, context, today)
+        return super().classify(text, context, today, find)
+
+
+# A find_records query that names nothing, so it lists every apartment and meter.
+QUERY_ALL = RecordsQuery(
+    apartment=None, meter_type=None, reading_date=None, tariffs=False, delegates=False
+)
+
+
+class LookingModel(FakeModel):
+    """Looks every case's records up as the real model may, keeping the answer in found."""
+
+    def classify(self, text, context, today, find):
+        self.found = find(QUERY_ALL.model_copy(update={"apartment": "עורף"}))
+        return super().classify(text, context, today, find)
 
 
 def test_evaluate_classifies_each_case_with_its_context_and_today():
@@ -248,10 +278,10 @@ def test_main_exits_zero_when_every_case_passes(tmp_path, monkeypatch, capsys):
 class FailingModel(FakeModel):
     """Answers the first case, then fails as an unreachable provider does."""
 
-    def classify(self, text, context, today):
+    def classify(self, text, context, today, find):
         if self.classified:
             raise anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api"))
-        return super().classify(text, context, today)
+        return super().classify(text, context, today, find)
 
 
 def test_main_stops_with_one_line_on_a_provider_error(tmp_path, monkeypatch, capsys):

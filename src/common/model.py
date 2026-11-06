@@ -4,9 +4,11 @@ and classifying chat text.
 Core pieces:
 - MeterReadingResult / StatementResult / IntentResult (with its Operation list): pydantic schemas
   the model's answers are parsed into
+- RecordsQuery: the find_records tool's input, the records a typed message names
 - Model: the Protocol the rest of the app depends on (tests use a fake)
 - ClaudeModel / OpenAIModel: one implementation per provider, each asking its API for answers
-  shaped to the schema through the provider's own SDK
+  shaped to the schema through the provider's own SDK; a classification may first answer up to
+  MAX_LOOKUPS find_records calls
 - parse_model_spec / build_model: check a "provider:model" setting, then pick the
   implementation it names
 - model_from_env: build_model over LLM_MODEL and LLM_API_KEY, for the local scripts
@@ -22,6 +24,7 @@ import base64
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal, Protocol
@@ -42,6 +45,10 @@ MAX_TOKENS = 2000
 # a photo's read and its note's classification share that Lambda's time limit.
 REQUEST_TIMEOUT_SECONDS = 25
 MAX_RETRIES = 1
+# The find_records rounds one classification may take; the request after the last one turns the
+# tool off, so a model that keeps asking still answers.
+MAX_LOOKUPS = 3
+FIND_RECORDS_TOOL = "find_records"
 # Dollars per million input, output, cache-read and cache-write tokens, from the providers' price
 # pages on 2026-11-06. A model missing here cannot be built, so every logged call carries its cost.
 # Anthropic prices a cache write, for an entry that lives five minutes, at 1.25 times the input
@@ -90,6 +97,18 @@ class Operation(BaseModel):
     target: str
     field: str | None
     value: str | None
+
+
+class RecordsQuery(BaseModel):
+    """The records a typed message names, as the classifier asks for them through the
+    find_records tool. Every field is required, null or false when the message does not name it,
+    so the schema can be a strict tool's."""
+
+    apartment: str | None
+    meter_type: Literal["water", "electricity"] | None
+    reading_date: str | None
+    tariffs: bool
+    delegates: bool
 
 
 class IntentResult(BaseModel):
@@ -158,14 +177,22 @@ def call_cost(model_id: str, usage: Usage) -> float:
 
 class Model(Protocol):
     """What the app needs from a model: read one meter photo, read one photo as a previous
-    statement, classify one chat message given the text describing the pending card and the
-    account's records (empty when there is neither)."""
+    statement, classify one chat message given the text describing the pending card, the waiting
+    cards and dropped photos (empty when there is none), and find, which answers a find_records
+    call with the record lines it asks for."""
 
     def read_meter(self, image: bytes, media_type: str) -> MeterReadingResult: ...
 
     def read_statement(self, image: bytes, media_type: str) -> StatementResult: ...
 
-    def classify(self, text: str, context: str, today: date) -> IntentResult: ...
+    def classify(
+        self, text: str, context: str, today: date, find: Callable[["RecordsQuery"], str]
+    ) -> IntentResult: ...
+
+
+def _query_schema() -> dict:
+    """RecordsQuery as a strict tool's parameters: every field required, no other field."""
+    return {**RecordsQuery.model_json_schema(), "additionalProperties": False}
 
 
 def _classify_content(text: str, context: str, today: date) -> str:
@@ -247,8 +274,9 @@ class _BilledModel:
 
 
 class ClaudeModel(_BilledModel, Model):
-    """Model backed by the Anthropic API: one request per call, its answer parsed into the
-    result schema, a refusal raised as ModelRefused."""
+    """Model backed by the Anthropic API: one request per photo read, and per classification one
+    more per round of find_records calls; the answer parsed into the result schema, a refusal
+    raised as ModelRefused."""
 
     PROVIDER = "anthropic"
 
@@ -280,22 +308,60 @@ class ClaudeModel(_BilledModel, Model):
             {"type": "text", "text": instruction},
         ]
 
-    def classify(self, text: str, context: str, today: date) -> IntentResult:
-        content = _classify_content(text, context, today)
-        return self._parse("classify", prompts.CLASSIFY, content, IntentResult)
+    def classify(self, text, context, today, find) -> IntentResult:
+        tool = {
+            "name": FIND_RECORDS_TOOL,
+            "description": prompts.FIND_RECORDS,
+            "input_schema": _query_schema(),
+            "strict": True,
+        }
+        messages = [{"role": "user", "content": _classify_content(text, context, today)}]
+        for lookups in range(MAX_LOOKUPS + 1):
+            choice = {"type": "auto"} if lookups < MAX_LOOKUPS else {"type": "none"}
+            response = self._request(
+                "classify",
+                prompts.CLASSIFY,
+                messages,
+                IntentResult,
+                tools=[tool],
+                tool_choice=choice,
+            )
+            if response.stop_reason != "tool_use":
+                return response.parsed_output
+            results = [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": find(RecordsQuery.model_validate(block.input)),
+                }
+                for block in response.content
+                if block.type == "tool_use"
+            ]
+            messages = [
+                *messages,
+                {"role": "assistant", "content": response.content},
+                {"role": "user", "content": results},
+            ]
+        raise RuntimeError("the model asked for a lookup with the tool turned off")
+
+    def _parse(self, kind: str, system: str, content, output_format):
+        messages = [{"role": "user", "content": content}]
+        return self._request(kind, system, messages, output_format).parsed_output
 
     # The installed SDK's messages.parse takes no fallbacks/betas; see the claude-api skill,
     # section "Refusal Fallbacks", when upgrading.
-    def _parse(self, kind: str, system: str, content, output_format):
+    def _request(self, kind: str, system: str, messages: list, output_format, **tools):
+        """One billed request; a refusal raises ModelRefused."""
         started = time.perf_counter()
         response = self._client.messages.parse(
             model=self.model_id,
             max_tokens=MAX_TOKENS,
-            # The instructions of each kind of call are fixed text, the same from one call to the
-            # next, so the API caches them and later calls pay the cache-read price for them.
+            # The instructions and tools of each kind of call are fixed text, the same from one
+            # call to the next, so the API caches them and later calls pay the cache-read price.
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": content}],
+            messages=messages,
             output_format=output_format,
+            **tools,
         )
         usage = response.usage
         self._billed(
@@ -310,12 +376,13 @@ class ClaudeModel(_BilledModel, Model):
         )
         if response.stop_reason == "refusal":
             raise ModelRefused(f"model refused: {response.stop_details}")
-        return response.parsed_output
+        return response
 
 
 class OpenAIModel(_BilledModel, Model):
-    """Model backed by the OpenAI Responses API: one request per call, its answer parsed into
-    the result schema, a refusal raised as ModelRefused."""
+    """Model backed by the OpenAI Responses API: one request per photo read, and per
+    classification one more per round of find_records calls; the answer parsed into the result
+    schema, a refusal raised as ModelRefused."""
 
     PROVIDER = "openai"
 
@@ -341,17 +408,50 @@ class OpenAIModel(_BilledModel, Model):
             {"type": "input_text", "text": instruction},
         ]
 
-    def classify(self, text: str, context: str, today: date) -> IntentResult:
-        content = _classify_content(text, context, today)
-        return self._parse("classify", prompts.CLASSIFY, content, IntentResult)
+    def classify(self, text, context, today, find) -> IntentResult:
+        tool = {
+            "type": "function",
+            "name": FIND_RECORDS_TOOL,
+            "description": prompts.FIND_RECORDS,
+            "parameters": _query_schema(),
+            "strict": True,
+        }
+        items = [
+            {"role": "system", "content": prompts.CLASSIFY},
+            {"role": "user", "content": _classify_content(text, context, today)},
+        ]
+        for lookups in range(MAX_LOOKUPS + 1):
+            choice = "auto" if lookups < MAX_LOOKUPS else "none"
+            response = self._request(
+                "classify", items, IntentResult, tools=[tool], tool_choice=choice
+            )
+            calls = [item for item in response.output if item.type == "function_call"]
+            if not calls:
+                return response.output_parsed
+            outputs = [
+                {
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": find(RecordsQuery.model_validate_json(call.arguments)),
+                }
+                for call in calls
+            ]
+            items = [*items, *response.output, *outputs]
+        raise RuntimeError("the model asked for a lookup with the tool turned off")
 
     def _parse(self, kind: str, system: str, content, text_format):
+        items = [{"role": "system", "content": system}, {"role": "user", "content": content}]
+        return self._request(kind, items, text_format).output_parsed
+
+    def _request(self, kind: str, items: list, text_format, **tools):
+        """One billed request; a refusal raises ModelRefused."""
         started = time.perf_counter()
         response = self._client.responses.parse(
             model=self.model_id,
             max_output_tokens=MAX_TOKENS,
-            input=[{"role": "system", "content": system}, {"role": "user", "content": content}],
+            input=items,
             text_format=text_format,
+            **tools,
         )
         usage = response.usage
         # OpenAI caches a long prompt on its own, counts the tokens the cache served inside
@@ -366,4 +466,4 @@ class OpenAIModel(_BilledModel, Model):
             for part in item.content:
                 if part.type == "refusal":
                     raise ModelRefused(f"model refused: {part.refusal}")
-        return response.output_parsed
+        return response

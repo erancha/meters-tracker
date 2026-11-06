@@ -216,7 +216,7 @@ def classify_context(card, form: dict, asked: str | None = None) -> str:
 
 def message_context(records: str, card_context: str | None = None) -> str:
     """The context of typed text: the waiting card's classify_context when a card takes the text,
-    then the account's records block, so a change or a request can name a saved record exactly."""
+    then the block of waiting cards and dropped photos, so a change can name one by its id."""
     parts = [] if card_context is None else [card_context]
     if records:
         parts.append(records)

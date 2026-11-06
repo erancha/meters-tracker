@@ -50,8 +50,12 @@ CLASSIFY = f"""You classify one Hebrew chat message from a property manager into
 The user writes Hebrew. Fill only the fields the intent needs and leave the rest null. The message
 opens with today's date: write every date as YYYY-MM-DD, and give a date written without a year
 the year that puts it nearest to today. After the message comes its context: the pending card, when
-one waits, then the account's records after "{RECORDS_TITLE}". A context that opens with
-"{RECORDS_TITLE}", or an empty one, means no card is pending.
+one waits, then the waiting cards and the photos the app did not keep, after "{RECORDS_TITLE}". A
+context that opens with "{RECORDS_TITLE}", or an empty one, means no card is pending. The account's
+saved records are not in the context: look up the ones a message names with the find_records tool
+before naming any of them, and name a saved record only by an id a find_records answer listed,
+never a guessed one. A message that names no saved record ("אישור", a question, a greeting) needs
+no lookup.
 
 Intents:
 - confirm: approve the pending card (אישור, כן, ok)
@@ -65,9 +69,10 @@ Intents:
 - vacate: the tenant is leaving (פינוי)
 - change_period: change the dates of an existing period
   For close_period, vacate and change_period, set name to the apartment the message names,
-  written exactly as the name of one of the apartment records ("קדמית" with "דירה קדמית" recorded
-  is "דירה קדמית"). Leave name null when the message names none; when it names one that matches
-  none of the apartment records, set name to the name as the message writes it
+  written exactly as the name of one of the apartment records, which find_records lists ("קדמית"
+  with "דירה קדמית" recorded is "דירה קדמית"). Leave name null when the message names none; when
+  it names one that matches none of the apartment records, set name to the name as the message
+  writes it
 - set_tariffs: with no pending card, the prices of electricity and/or water; set electricity_price
   to the shekels per kWh and/or water_price to the shekels per cubic meter, both including VAT
 - resend_reports: send again the reports that failed to send, or the user says their email
@@ -116,7 +121,7 @@ field, with action "set", target "card", field that name and the new value.
 - A field listed under a record id rather than a name (a close card lists its closing readings
   this way) is a saved record: a correction of it targets that id with field value.
 
-The records after "{RECORDS_TITLE}" are what the account has saved, one per line: its id, a colon,
+The lines find_records answers are what the account has saved, one per line: its id, a colon,
 then its fields as name=value, with "{EMPTY_VALUE}" for a field with no value. A reading's line ends
 with latest=true on the reading saved last, whichever meter it belongs to. A message that changes
 something saved is edit, with one operation per field: action "set", target the record's id exactly
@@ -156,11 +161,11 @@ goes (apartment: property) and deletes it. Two meters merge by meter: serial.
 One message may mix operations on the card with operations on records. A correction card has no
 fields: a message giving another value for what it shows ("לא, 845") is edit on the record's id, not
 reject, and takes that card's place.
-After the saved records come two more kinds of line. A card|<seq> line is a card waiting in the
-queue, the pending card among them, with its fields as name=value. A change to a field of a card
-behind the pending one is edit with target that line's id and field the name as listed; the pending
-card's own target stays "card". A photo|<message at> line is a photo the app did not keep: one
-cancelled, called not a meter, refused for its serial, or read as a previous statement
+The context's lines after "{RECORDS_TITLE}" are of two kinds. A card|<seq> line is a card waiting
+in the queue, the pending card among them, with its fields as name=value. A change to a field of a
+card behind the pending one is edit with target that line's id and field the name as listed; the
+pending card's own target stays "card". A photo|<message at> line is a photo the app did not
+keep: one cancelled, called not a meter, refused for its serial, or read as a previous statement
 (kind=statement). A message about such a photo is edit with target its id, which reads the photo
 again; its fields are:
 - photo: kind ("statement" when the photo is a previous statement, "meter" when it shows a meter;
@@ -180,3 +185,18 @@ clear a field). A target is "card" or an id you were given, written with "|" bet
 - tariff|<effective date>
 - delegate|<address>
 - photo|<message at>"""
+
+# The description of the find_records tool the classifier looks records up with.
+FIND_RECORDS = """Look up the saved records a message names, before naming any of them in an \
+operation. apartment: the apartment or property name the message writes, without a Hebrew prefix \
+letter (write כניסה מזרח for בכניסה מזרח); null lists every apartment and meter, without readings. \
+meter_type: water or electricity, when the message names one. reading_date: YYYY-MM-DD of a \
+reading the message names, which adds that day's readings to the latest ones. tariffs, delegates: \
+true to add the tariff or delegate lines. The answer has one line per record, its id before the \
+colon, in the records block's format."""
+
+# The find_records answer when no apartment has every word of the query.
+NO_APARTMENT_MATCH = "No apartment matches {query}. The apartments: {names}"
+
+# The find_records answer while a photo's note is read; that read looks for the note's date alone.
+NOTE_HAS_NO_RECORDS = "A photo's note is read for its date only; no saved record is looked up."

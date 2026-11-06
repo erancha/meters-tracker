@@ -13,7 +13,14 @@ from fake_model import FakeModel
 from common.access import User
 from common.engine import Action, Choice, Engine
 from common.files import Files
-from common.model import Candidate, IntentResult, MeterReadingResult, Operation, StatementResult
+from common.model import (
+    Candidate,
+    IntentResult,
+    MeterReadingResult,
+    Operation,
+    RecordsQuery,
+    StatementResult,
+)
 from common.notify import Mailer
 from common.store import Store
 
@@ -214,6 +221,13 @@ class Kit:
 
     def tariffs(self):
         return self.store.tariffs(self.account)
+
+    def lookup(self, **fields) -> str:
+        """What the last classification's find_records would answer for the fields given, the
+        rest null or false."""
+        empty = {"apartment": None, "meter_type": None, "reading_date": None}
+        query = RecordsQuery(**{**empty, "tariffs": False, "delegates": False, **fields})
+        return self.model.finds[-1](query)
 
     def readings(self, serial):
         return self.store.readings(self.account, serial)

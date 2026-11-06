@@ -16,12 +16,14 @@ from openai.lib._pydantic import to_strict_json_schema
 
 from common import prompts
 from common.model import (
+    MAX_LOOKUPS,
     ClaudeModel,
     IntentResult,
     MeterReadingResult,
     ModelRefused,
     OpenAIModel,
     Operation,
+    RecordsQuery,
     StatementResult,
     Usage,
     build_model,
@@ -52,13 +54,16 @@ def _reading():
     )
 
 
-def _stub_anthropic(monkeypatch, response):
+def _stub_anthropic(monkeypatch, *responses):
+    """Records the client options, then each request; answers the requests with responses in
+    order, the last one again once they run out."""
     calls = []
+    queued = list(responses)
 
     class Messages:
         def parse(self, **kwargs):
             calls.append(kwargs)
-            return response
+            return queued.pop(0) if len(queued) > 1 else queued[0]
 
     class Client:
         def __init__(self, **options):
@@ -69,13 +74,15 @@ def _stub_anthropic(monkeypatch, response):
     return calls
 
 
-def _stub_openai(monkeypatch, response):
+def _stub_openai(monkeypatch, *responses):
+    """As _stub_anthropic, for the OpenAI client."""
     calls = []
+    queued = list(responses)
 
     class Responses:
         def parse(self, **kwargs):
             calls.append(kwargs)
-            return response
+            return queued.pop(0) if len(queued) > 1 else queued[0]
 
     class Client:
         def __init__(self, **options):
@@ -84,6 +91,10 @@ def _stub_openai(monkeypatch, response):
 
     monkeypatch.setattr(openai, "OpenAI", Client)
     return calls
+
+
+def _no_lookup(query):
+    raise AssertionError(f"no lookup expected, got {query}")
 
 
 def _message(*parts):
@@ -133,7 +144,7 @@ def test_a_claude_call_logs_its_cached_tokens(monkeypatch, caplog):
     )
     _stub_anthropic(monkeypatch, _answered(_reading(), usage))
     with caplog.at_level(logging.INFO, logger="common.model"):
-        ClaudeModel("key", "claude-opus-5-5").classify("כן", "", date(2026, 10, 29))
+        ClaudeModel("key", "claude-opus-5-5").classify("כן", "", date(2026, 10, 29), _no_lookup)
     [line] = _call_lines(caplog)
     assert (line["cache_read_tokens"], line["cache_write_tokens"]) == (3500, 0)
     assert line["cost"] == pytest.approx(call_cost("claude-opus-5-5", Usage(40, 10, 3500, 0)))
@@ -190,10 +201,10 @@ def test_fake_model_returns_by_image_hash():
     reading = _reading()
     fake = FakeModel({hashlib.sha256(IMAGE).hexdigest(): reading}, [IntentResult(intent="confirm")])
     assert fake.read_meter(IMAGE, "image/jpeg") is reading
-    assert fake.classify("כן", "card", date(2026, 10, 29)).intent == "confirm"
+    assert fake.classify("כן", "card", date(2026, 10, 29), _no_lookup).intent == "confirm"
     assert fake.classified == [("כן", "card")]
     with pytest.raises(IndexError):
-        fake.classify("עוד", "", date(2026, 10, 29))
+        fake.classify("עוד", "", date(2026, 10, 29), _no_lookup)
 
 
 def test_claude_model_builds_parse_request(monkeypatch):
@@ -231,7 +242,9 @@ def test_classify_tells_the_model_today_and_the_pending_card(monkeypatch, cls, s
         usage=USAGE,
     )
     calls = (_stub_anthropic if stub == "anthropic" else _stub_openai)(monkeypatch, response)
-    assert cls("key", MODEL_IDS[cls]).classify("כן", "כרטיס", date(2026, 10, 29)) is intent
+    assert (
+        cls("key", MODEL_IDS[cls]).classify("כן", "כרטיס", date(2026, 10, 29), _no_lookup) is intent
+    )
     _, call = calls
     content = call["messages"][0]["content"] if stub == "anthropic" else call["input"][1]["content"]
     assert content == "Today: 2026-10-29\n\nכן\n\nContext:\nכרטיס"
@@ -270,7 +283,7 @@ def test_openai_model_raises_on_refusal(monkeypatch):
     response = SimpleNamespace(output=[_message(refusal)], output_parsed=None, usage=USAGE)
     _stub_openai(monkeypatch, response)
     with pytest.raises(ModelRefused, match="policy"):
-        OpenAIModel("key", "gpt-6.1-sol").classify("כן", "", date(2026, 10, 29))
+        OpenAIModel("key", "gpt-6.1-sol").classify("כן", "", date(2026, 10, 29), _no_lookup)
 
 
 @pytest.mark.parametrize("cls, stub", [(ClaudeModel, _stub_anthropic), (OpenAIModel, _stub_openai)])
@@ -396,7 +409,7 @@ def test_each_call_logs_its_kind_model_tokens_seconds_and_cost(
     model = cls("key", MODEL_IDS[cls])
     with caplog.at_level(logging.INFO, logger="common.model"):
         model.read_meter(IMAGE, "image/jpeg")
-        model.classify("כן", "", date(2026, 10, 29))
+        model.classify("כן", "", date(2026, 10, 29), _no_lookup)
     meter, classify = _call_lines(caplog)
     assert meter["event"] == "model_call"
     assert (meter["kind"], classify["kind"]) == ("read_meter", "classify")
@@ -415,3 +428,125 @@ def test_a_refused_call_logs_its_line(monkeypatch, caplog):
         ClaudeModel("key", "claude-opus-5-5").read_statement(IMAGE, "image/png")
     (line,) = _call_lines(caplog)
     assert (line["kind"], line["input_tokens"]) == ("read_statement", 1500)
+
+
+QUERY = {
+    "apartment": "כניסה מזרח",
+    "meter_type": "water",
+    "reading_date": None,
+    "tariffs": False,
+    "delegates": False,
+}
+
+
+def _claude_lookup(*ids):
+    blocks = [SimpleNamespace(type="tool_use", id=i, name="find_records", input=QUERY) for i in ids]
+    return SimpleNamespace(stop_reason="tool_use", content=blocks, parsed_output=None, usage=USAGE)
+
+
+def _openai_lookup(*ids):
+    calls = [
+        SimpleNamespace(
+            type="function_call", call_id=i, name="find_records", arguments=json.dumps(QUERY)
+        )
+        for i in ids
+    ]
+    return SimpleNamespace(output=calls, output_parsed=None, usage=USAGE)
+
+
+def _finder():
+    asked = []
+
+    def find(query):
+        asked.append(query)
+        return f"records for {query.apartment}"
+
+    return find, asked
+
+
+def test_claude_answers_a_lookup_then_returns_the_parsed_intent(monkeypatch, caplog):
+    intent = IntentResult(intent="confirm")
+    lookup = _claude_lookup("t1")
+    calls = _stub_anthropic(monkeypatch, lookup, _answered(intent))
+    find, asked = _finder()
+    with caplog.at_level(logging.INFO, logger="common.model"):
+        result = ClaudeModel("key", "claude-opus-5-5").classify("x", "", date(2026, 10, 29), find)
+    assert result is intent
+    assert asked == [RecordsQuery(**QUERY)]
+    _, first, second = calls
+    assert first["tools"][0]["name"] == "find_records" and first["tools"][0]["strict"] is True
+    assert first["tool_choice"] == {"type": "auto"}
+    assert second["messages"][-2] == {"role": "assistant", "content": lookup.content}
+    assert second["messages"][-1] == {
+        "role": "user",
+        "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "records for כניסה מזרח"}
+        ],
+    }
+    assert len(_call_lines(caplog)) == 2
+
+
+def test_openai_answers_a_lookup_then_returns_the_parsed_intent(monkeypatch):
+    intent = IntentResult(intent="confirm")
+    lookup = _openai_lookup("c1")
+    calls = _stub_openai(monkeypatch, lookup, _answered(intent))
+    find, asked = _finder()
+    result = OpenAIModel("key", "gpt-6.1-sol").classify("x", "", date(2026, 10, 29), find)
+    assert result is intent
+    assert asked == [RecordsQuery(**QUERY)]
+    _, first, second = calls
+    assert first["tools"][0]["name"] == "find_records" and first["tools"][0]["strict"] is True
+    assert first["tool_choice"] == "auto"
+    assert second["input"][-2] is lookup.output[0]
+    assert second["input"][-1] == {
+        "type": "function_call_output",
+        "call_id": "c1",
+        "output": "records for כניסה מזרח",
+    }
+
+
+@pytest.mark.parametrize(
+    "cls, stub, lookup",
+    [(ClaudeModel, _stub_anthropic, _claude_lookup), (OpenAIModel, _stub_openai, _openai_lookup)],
+)
+def test_both_lookups_of_one_response_are_answered_in_one_turn(monkeypatch, cls, stub, lookup):
+    calls = stub(monkeypatch, lookup("a", "b"), _answered(IntentResult(intent="confirm")))
+    find, asked = _finder()
+    cls("key", MODEL_IDS[cls]).classify("x", "", date(2026, 10, 29), find)
+    assert len(asked) == 2 and len(calls) == 3
+    if cls is ClaudeModel:
+        assert [r["tool_use_id"] for r in calls[2]["messages"][-1]["content"]] == ["a", "b"]
+    else:
+        assert [i["call_id"] for i in calls[2]["input"][-2:]] == ["a", "b"]
+
+
+@pytest.mark.parametrize(
+    "cls, stub, lookup, off",
+    [
+        (ClaudeModel, _stub_anthropic, _claude_lookup, {"type": "none"}),
+        (OpenAIModel, _stub_openai, _openai_lookup, "none"),
+    ],
+)
+def test_after_max_lookups_the_next_request_turns_tools_off(monkeypatch, cls, stub, lookup, off):
+    intent = IntentResult(intent="unknown")
+    asking = [lookup(f"t{n}") for n in range(MAX_LOOKUPS)]
+    calls = stub(monkeypatch, *asking, _answered(intent))
+    find, asked = _finder()
+    assert cls("key", MODEL_IDS[cls]).classify("x", "", date(2026, 10, 29), find) is intent
+    requests = calls[1:]
+    assert len(asked) == MAX_LOOKUPS and len(requests) == MAX_LOOKUPS + 1
+    assert requests[-1]["tool_choice"] == off
+    assert all(r["tool_choice"] != off for r in requests[:-1])
+
+
+@pytest.mark.parametrize("cls, stub", [(ClaudeModel, _stub_anthropic), (OpenAIModel, _stub_openai)])
+def test_a_message_needing_no_lookup_takes_one_request(monkeypatch, cls, stub):
+    calls = stub(monkeypatch, _answered(IntentResult(intent="confirm")))
+    cls("key", MODEL_IDS[cls]).classify("כן", "", date(2026, 10, 29), _no_lookup)
+    assert len(calls) == 2
+
+
+def test_a_photo_read_offers_no_tools(monkeypatch):
+    calls = _stub_anthropic(monkeypatch, _answered(_reading()))
+    ClaudeModel("key", "claude-opus-5-5").read_meter(IMAGE, "image/jpeg")
+    assert "tools" not in calls[1]

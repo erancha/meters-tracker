@@ -36,7 +36,7 @@ charge, with the exact values the code uses. The arithmetic lives in
 | `close_days_before_end`: 7 | `config/app.json` | Days before a period's end that may close it |
 | `file_url_minutes`: 10 | `config/app.json` | Lifetime of a photo's presigned URL |
 | `sidebar_min_width_px`: 900 | `config/app.json` | Narrowest window with the day panel |
-| `correction_recent_readings`: 12 | `config/app.json` | Readings per meter the classifier gets |
+| `correction_recent_readings`: 12 | `config/app.json` | Latest readings a lookup gives a meter |
 | `correction_dropped_photos`: 5 | `config/app.json` | Latest dropped photos the classifier gets |
 | 100 | `src/common/store.py` | Most rows one correction writes |
 | 4 MiB, JPEG or PNG | `src/handlers/api.py` | Largest accepted photo, after base64 decoding |
@@ -143,6 +143,16 @@ edit may change any field of the card at any step, and the card the flow then ar
   at once. A card that now reads differently is shown anew; one whose records are gone is dropped,
   saying why and what to do next, and the card after it is built again in turn. An answer to a
   card that changed since it was shown is not acted on: the card is shown again.
+- **Looking records up.** The classifier gets no saved records with a typed message; it looks up
+  the ones the message names with `find_records`, by apartment, meter type and date. An apartment
+  matches when every word of the query is a word of its property and apartment names, ignoring
+  quotes, geresh and case, with a slash, hyphen or punctuation mark splitting words as a space
+  does; a property matches on its own name too. A match brings its property, its meters of the
+  named type with their latest `correction_recent_readings` readings and every reading of the
+  named date, and its periods; no name brings every property, apartment and meter without
+  readings; every answer carries the reading saved last, which an undo names; tariffs and
+  delegates come when asked. A name that matches nothing answers with every apartment's name,
+  so the model can look again. A record from any day can be corrected from today's chat.
 - **A card behind the first.** The classifier gets every waiting card with its fields, so an edit
   may name a card further back in the queue. That card takes the edit and is shown; the first card
   stays in front.

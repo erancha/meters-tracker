@@ -384,7 +384,7 @@ def test_another_typed_request_passes_the_waiting_request(env, ddb):
     assert result.snapshot.card["kind"] == "correction"
     _, context = kit.model.classified[-1]
     assert context.startswith("חסרים תעריפים")
-    assert "name=עורף" in context.split(f"{texts.RECORDS_TITLE}:")[1]
+    assert "name=עורף" in kit.lookup(apartment="עורף")
     kit.choose("confirm")
     assert kit.card()["kind"] == "tariffs_ask"
 

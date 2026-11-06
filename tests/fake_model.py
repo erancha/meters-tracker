@@ -1,12 +1,13 @@
 """In-memory stand-in for the Model interface: meter readings and statements are looked up by
 the sha256 of the image bytes, intents are returned in the order they were queued (at
 construction or by queue), and every classify call is recorded as (text, context) in
-classified."""
+classified, with its records lookup in finds, so a test can look up what the model could have."""
 
 import hashlib
+from collections.abc import Callable
 from datetime import date
 
-from common.model import IntentResult, MeterReadingResult, StatementResult
+from common.model import IntentResult, MeterReadingResult, RecordsQuery, StatementResult
 
 
 class FakeModel:
@@ -20,6 +21,7 @@ class FakeModel:
         self._statements = {} if statements is None else statements
         self._intents = list(intents)
         self.classified: list[tuple[str, str]] = []
+        self.finds: list[Callable[[RecordsQuery], str]] = []
 
     def queue(self, intent: IntentResult):
         self._intents.append(intent)
@@ -30,6 +32,9 @@ class FakeModel:
     def read_statement(self, image: bytes, media_type: str) -> StatementResult:
         return self._statements[hashlib.sha256(image).hexdigest()]
 
-    def classify(self, text: str, context: str, today: date) -> IntentResult:
+    def classify(
+        self, text: str, context: str, today: date, find: Callable[[RecordsQuery], str]
+    ) -> IntentResult:
         self.classified.append((text, context))
+        self.finds.append(find)
         return self._intents.pop(0)

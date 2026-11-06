@@ -560,18 +560,41 @@ def test_a_parked_close_has_no_form(env, ddb):
     assert kit.form() == {}
 
 
-def test_the_records_block_is_sent_with_a_card_and_with_no_card(env, ddb):
+def test_the_records_lookup_is_offered_with_a_card_and_with_no_card(env, ddb):
     kit = Kit(today=date(2026, 8, 20))
     _seeded(kit)
     kit.send_photo(water(960, serial=SERIAL))
     _say(kit, IntentResult(intent="unknown"))
     on_card = kit.model.classified[-1][1]
-    assert texts.FORM_TITLE in on_card and f"meter|{SERIAL}" in on_card
+    assert texts.FORM_TITLE in on_card and f"meter|{SERIAL}" not in on_card
+    assert f"meter|{SERIAL}" in kit.lookup(apartment="עורף")
     _say(kit, IntentResult(intent="reject"), "בטל")
     _say(kit, IntentResult(intent="unknown"))
     no_card = kit.model.classified[-1][1]
-    assert no_card.startswith(f"{texts.RECORDS_TITLE}:")
-    assert f"meter|{SERIAL}" in no_card and "name=עורף" in no_card
+    assert f"meter|{SERIAL}" not in no_card
+    assert f"meter|{SERIAL}" in kit.lookup(apartment="עורף")
+
+
+def test_a_message_naming_no_record_sends_no_records(env, ddb):
+    kit = Kit(today=date(2026, 8, 20))
+    _seeded(kit)
+    _say(kit, IntentResult(intent="unknown"), "ניסוי")
+    _, context = kit.model.classified[-1]
+    assert not any(kind in context for kind in ("apartment|", "meter|", "reading|"))
+
+
+def test_a_correction_of_a_reading_saved_days_ago_works_from_today(env, ddb):
+    kit = Kit(today=date(2026, 8, 20))
+    _seeded(kit)
+    kit.send_photo(water(960, serial=SERIAL))
+    kit.choose("confirm")
+    [saved] = [r for r in kit.readings(SERIAL) if r["value"] == 960]
+    kit.today = date(2026, 8, 29)
+    _say(kit, IntentResult(intent="unknown"), "ניסוי")
+    target = f"reading|{SERIAL}|{saved['date']}#{saved['seq']}"
+    assert target in kit.lookup(apartment="עורף", reading_date=saved["date"])
+    result = _say(kit, edit("value", "965", target))
+    assert result.snapshot.card["kind"] == "correction"
 
 
 def test_a_close_request_still_finds_its_apartment_by_name_beside_the_records(env, ddb):
@@ -1717,11 +1740,9 @@ def test_the_records_block_carries_delegate_addresses_on_an_owner_message_only(e
     kit.apartment()
     _with_delegate(kit)
     _say_as_delegate(kit, IntentResult(intent="unknown"))
-    _, context = kit.model.classified[-1]
-    assert OLD not in context
+    assert OLD not in kit.lookup(delegates=True)
     _say(kit, IntentResult(intent="unknown"))
-    _, context = kit.model.classified[-1]
-    assert f"delegate|{OLD}" in context
+    assert f"delegate|{OLD}" in kit.lookup(delegates=True)
 
 
 def test_a_delegate_correction_leaves_the_access_rows(env, ddb):
@@ -1962,8 +1983,7 @@ def test_a_reopened_photo_a_retake_replaces_is_listed_once_among_failed_photos(e
 
 
 def _listed_photo(kit, at) -> bool:
-    """Whether the records block of the user's next message lists the photo message stamped
-    at."""
+    """Whether the context of the user's next message lists the photo message stamped at."""
     _say(kit, IntentResult(intent="unknown"))
     _, context = kit.model.classified[-1]
     return f"photo|{at}:" in context

@@ -80,10 +80,9 @@ after a deploy. Each script's header documents it in full.
 - [`eval-intents.sh`](../scripts/eval-intents.sh) — classifies the recorded messages in
   `tests/intents.json` (a message, the card it answers, the account it is sent with, the day it
   is typed on, and the expected intent and fields) and reports each case that differs. Each case
-  is sent as the engine sends it, the card listed in the records block beside the account's
-  records, waiting cards and dropped photos. It
-  needs no AWS settings and no recorded data. A message the deployed app misunderstood becomes a
-  new case.
+  is sent as the engine sends it, the card listed beside the waiting cards and dropped photos,
+  with a lookup of the account's records. It needs no AWS settings and no recorded data. A
+  message the deployed app misunderstood becomes a new case.
 - [`eval-readings.sh`](../scripts/eval-readings.sh) `[env] [--limit N]` — scores a model on the
   photos the deployed model failed on (the failed-photos record of
   [Domain rules](domain-rules.md)), against the serial and value the owner confirmed. It scans

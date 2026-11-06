@@ -5,8 +5,9 @@ A case is a message, the card it answers (by name, or null for a message with no
 it is typed on, the expected intent and the expected fields; only the fields a case lists are
 compared. The cards are rendered by texts.py, as the engine renders them, so a wording change
 reaches the evaluation too. Every message is sent as the engine sends it: the card with its
-fields, the field it asked for again and its button labels, then a records block, which lists the
-card as a card|<seq> line. The block is the named account a case lists under records, or else an
+fields, the field it asked for again and its button labels, then the block of waiting cards and
+dropped photos, which lists the card as a card|<seq> line. The model looks saved records up with
+find_records in the case's account: the named account a case lists under records, or else an
 account holding only the apartments the case lists, which go only with a request no card takes
 (no card, or a standby card).
 
@@ -15,13 +16,13 @@ account holding only the apartments the case lists, which go only with a request
 - RECORDS: the accounts a case may name, each with the cards waiting behind the case's card and
   the dropped photos it lists
 - load_cases: reads and validates the case file, naming the case that is wrong; an expected
-  operation must target the card or an id the case's records block lists, and a set must name a
+  operation must target the card or an id the case's context or account lists, and a set must name a
   field that target has, with a value that fits the field
 - selected: the cases expecting the intents a comma-separated list names, for a cheap run while
   a change is in progress
-- context / mismatches / evaluate: one case's classifier context, its differences from the
-  expectation (operations in any order), and the run over all cases, yielding each as soon as the
-  model answers
+- context / finder / mismatches / evaluate: one case's classifier context and records lookup, its
+  differences from the expectation (operations in any order), and the run over all cases,
+  yielding each as soon as the model answers
 - main: prints one PASS or FAIL line per case and the total; exits 1 when any case fails, 2
   with one line naming the cause when the intent list is wrong or a model call fails
 """
@@ -32,6 +33,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from sys import maxsize
 from typing import get_args
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -227,7 +229,7 @@ FORMS = {
 }
 # Key: card name; value: the field that card asked for again
 ASKED = {"reading_asked_serial": "serial"}
-# The seq the case's own card is listed under in the records block, as the engine lists it.
+# The seq the case's own card is listed under in the context, as the engine lists it.
 CARD_SEQ = "2026-10-29T15:00:00.000000_a1b2"
 
 
@@ -340,7 +342,7 @@ RECORDS = {
     )
 }
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "app.json"
-# How many of a meter's latest readings the records block lists, as the engine lists them.
+# How many of a meter's latest readings a lookup lists, as the engine's does.
 RECENT_READINGS = json.loads(_CONFIG.read_text())["correction_recent_readings"]
 
 # The cards that wait on standby: typed text reaches them as a request, sent with the records.
@@ -389,7 +391,9 @@ def _case(raw: dict) -> Case:
     known = _listed_ids(case)
     for operation in fields.get("operations", []):
         if operation["target"] not in known:
-            raise ValueError(f"target {operation['target']!r} is not in the case's records block")
+            raise ValueError(
+                f"target {operation['target']!r} is not in the case's context or account"
+            )
         if operation["action"] == "set":
             _check_value(case, operation)
     return case
@@ -471,18 +475,30 @@ def _apartments_only(apartments: list[str]) -> Records:
     return Records(Account(properties, rows, [], {}, {}, [], []), {}, {})
 
 
+def _held(case: Case) -> Records:
+    return _apartments_only(case.apartments) if case.records is None else RECORDS[case.records]
+
+
 def _records(case: Case) -> str:
-    """The case's records block, listing its card first, then the cards behind it."""
-    held = _apartments_only(case.apartments) if case.records is None else RECORDS[case.records]
+    """The case's block of waiting cards and dropped photos, listing its card first, then the
+    cards behind it."""
+    held = _held(case)
     own = {} if case.card is None else {CARD_SEQ: FORMS[case.card]}
-    cards = {**own, **held.behind}
-    return account.context(held.state, RECENT_READINGS, cards, held.photos)
+    return account.listed_context({**own, **held.behind}, held.photos)
+
+
+def finder(case: Case):
+    """The find_records lookup over the case's account, as the engine's is over the owner's."""
+    state = _held(case).state
+    return lambda query: account.lookup(state, query, RECENT_READINGS)
 
 
 def _listed_ids(case: Case) -> set[str]:
     """The targets an operation may name: the card, which is also how a bare value with no card
-    is named, every id the block lists, and a record id the card lists as a field."""
-    ids = {line.partition(": ")[0] for line in _records(case).splitlines()[1:]}
+    is named, every id the block lists, every record of the case's account, since a lookup by
+    date reaches any reading, and a record id the card lists as a field."""
+    lines = [*_records(case).splitlines()[1:], *account.record_lines(_held(case).state, maxsize)]
+    ids = {line.partition(": ")[0] for line in lines}
     fields = {} if case.card is None else FORMS[case.card]
     return {"card", *ids, *(name for name in fields if "|" in name)}
 
@@ -515,7 +531,7 @@ def evaluate(cases: list[Case], model) -> Iterator[tuple[Case, list[str]]]:
     """Each case with its mismatches; a refusal is the case's one mismatch."""
     for case in cases:
         try:
-            result = model.classify(case.message, context(case), case.today)
+            result = model.classify(case.message, context(case), case.today, finder(case))
         except ModelRefused as error:
             yield case, [f"refused: {error}"]
         else:

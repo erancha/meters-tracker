@@ -32,6 +32,8 @@ PHOTO_KIND_NAMES = {"statement": "חשבון קודם", "meter": "מונה"}
 FORM_TITLE = "שדות"
 BUTTONS_TITLE = "כפתורים"
 RECORDS_TITLE = "רשומות"
+# Quote marks, Hebrew gershayim and geresh among them, a name may be written with or without.
+QUOTE_MARKS = "\"'״׳"
 # Names the field a card's last question asked for, which a bare answer then fills.
 ASKED_TITLE = "שאלה"
 EMPTY_VALUE = "ריק"

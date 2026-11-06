@@ -20,19 +20,27 @@ Core pieces:
 - apartment_readings / move_period / realign: an apartment's readings and the rules that keep
   periods and their reading flags in step on a copy
 - display_position: a meter's stored display choice as the field's value
-- context: the records block the classifier is given, one line per record, then per waiting card
-  and per dropped photo, so an operation can name each by its id
+- record_lines / listed_context: the lines the classifier reads, one per record, and one per
+  waiting card and per dropped photo, so an operation can name each by its id
+- lookup: the record lines a find_records call asks for, by apartment, meter type and date
 """
 
 import copy
+import re
 from dataclasses import dataclass, field
 
-from common import texts
+from common import prompts, texts
 from common.access import OWNER
 from common.dates import next_day
 from common.fields import DISPLAY_POSITIONS, PHOTO_KINDS
+from common.model import RecordsQuery
 from common.periods import PRICES
 from common.store import reading_key, row_key
+
+_UNQUOTED = str.maketrans("", "", texts.QUOTE_MARKS)
+# What splits a name into words besides spaces: slash, hyphen, the Hebrew hyphen (maqaf) and
+# punctuation.
+_WORD_BREAKS = re.compile(r"[\s/\-\u05be,.;:()]+")
 
 # Tables that hold one list of records for the whole account.
 _FLAT_TABLES = ("properties", "apartments", "meters", "tariffs")
@@ -204,14 +212,14 @@ def _line(kind, record_id, fields: dict) -> str:
     return f"{kind}|{record_id}: {shown}"
 
 
-def _reading_lines(state, meter, limit, latest) -> list[str]:
+def _reading_lines(state, meter, limit, latest, on_date=None) -> list[str]:
     """The meter's latest limit readings, with the account's latest saved reading wherever it
-    sorts, since a back-dated reading can be the one just saved."""
+    sorts, since a back-dated reading can be the one just saved, and every reading of on_date."""
     readings = state.readings[meter["serial"]]
     lines = []
     for index, r in enumerate(readings):
         is_latest = r is latest
-        if index < len(readings) - limit and not is_latest:
+        if index < len(readings) - limit and not is_latest and r["date"] != on_date:
             continue
         fields = {
             "value": r["value"],
@@ -224,6 +232,62 @@ def _reading_lines(state, meter, limit, latest) -> list[str]:
             fields["latest"] = True
         lines.append(_line("reading", reading_id(meter["serial"], r), fields))
     return lines
+
+
+def _latest_reading(state: Account):
+    """The reading saved last across meters: a seq is a time stamp, so the highest one."""
+    readings = [r for rows in state.readings.values() for r in rows]
+    return max(readings, key=lambda r: r["seq"], default=None)
+
+
+def _property_line(p) -> str:
+    return _line("property", p["id"], {"name": p["name"]})
+
+
+def _apartment_line(a, properties) -> str:
+    fields = {
+        "name": a["name"],
+        "property": properties[a["property_id"]]["name"],
+        "months": a["period_months"],
+    }
+    return _line("apartment", a["id"], fields)
+
+
+def _meter_line(m, apartments) -> str:
+    fields = {
+        "type": m["type"],
+        "apartment": apartments[m["apartment_id"]]["name"],
+        "display": display_position(m),
+        "retired_at": m["retired_at"],
+    }
+    return _line("meter", m["serial"], fields)
+
+
+def _period_lines(state: Account, apartment_id, apartments) -> list[str]:
+    lines = []
+    for p in state.periods.get(apartment_id, []):
+        fields = {
+            "apartment": apartments[apartment_id]["name"],
+            "months": p["months"],
+            "closed_on": p["closed_on"],
+        }
+        lines.append(_line("period", period_id(apartment_id, p["start"]), fields))
+    return lines
+
+
+def _tariff_lines(state: Account) -> list[str]:
+    return [
+        _line(
+            "tariff",
+            t["effective_date"],
+            {"electricity_price": t[PRICES["electricity"]], "water_price": t[PRICES["water"]]},
+        )
+        for t in state.tariffs
+    ]
+
+
+def _delegate_lines(state: Account) -> list[str]:
+    return [_line("delegate", d["email"], {"address": d["email"]}) for d in state.delegates]
 
 
 def photo_kind(tag) -> str:
@@ -241,48 +305,98 @@ def _photo_fields(tag) -> dict:
     }
 
 
-def context(state: Account, limit: int, cards: dict, photos: dict) -> str:
-    """The account's records as the classifier reads them, each by its id and its fields' names,
-    then cards, each waiting card's form by its seq, and photos, each dropped photo's reading tag
-    by its message's at; empty when there is none of these. A meter lists only its latest limit
-    readings, and a seq is a time stamp, so the highest one across meters marks the reading saved
-    last."""
+def record_lines(state: Account, limit: int) -> list[str]:
+    """Every saved record of the account as the classifier reads it, each by its id and its
+    fields' names; a meter lists only its latest limit readings."""
     properties = records(state, "property")
     apartments = records(state, "apartment")
-    readings = [r for rows in state.readings.values() for r in rows]
-    latest = max(readings, key=lambda r: r["seq"], default=None)
-    lines = [_line("property", p["id"], {"name": p["name"]}) for p in state.properties]
-    for a in state.apartments:
-        fields = {
-            "name": a["name"],
-            "property": properties[a["property_id"]]["name"],
-            "months": a["period_months"],
-        }
-        lines.append(_line("apartment", a["id"], fields))
+    latest = _latest_reading(state)
+    lines = [_property_line(p) for p in state.properties]
+    lines.extend(_apartment_line(a, properties) for a in state.apartments)
     for m in state.meters:
-        fields = {
-            "type": m["type"],
-            "apartment": apartments[m["apartment_id"]]["name"],
-            "display": display_position(m),
-            "retired_at": m["retired_at"],
-        }
-        lines.append(_line("meter", m["serial"], fields))
+        lines.append(_meter_line(m, apartments))
         lines.extend(_reading_lines(state, m, limit, latest))
-    for apartment_id, periods in state.periods.items():
-        for p in periods:
-            fields = {
-                "apartment": apartments[apartment_id]["name"],
-                "months": p["months"],
-                "closed_on": p["closed_on"],
-            }
-            lines.append(_line("period", period_id(apartment_id, p["start"]), fields))
-    for t in state.tariffs:
-        fields = {
-            "electricity_price": t[PRICES["electricity"]],
-            "water_price": t[PRICES["water"]],
-        }
-        lines.append(_line("tariff", t["effective_date"], fields))
-    lines.extend(_line("delegate", d["email"], {"address": d["email"]}) for d in state.delegates)
-    lines.extend(_line("card", seq, form) for seq, form in cards.items())
+    for apartment_id in state.periods:
+        lines.extend(_period_lines(state, apartment_id, apartments))
+    return [*lines, *_tariff_lines(state), *_delegate_lines(state)]
+
+
+def listed_context(cards: dict, photos: dict) -> str:
+    """The waiting cards, each one's form by its seq, and the dropped photos, each one's reading
+    tag by its message's at, under the records title; empty when there is neither."""
+    lines = [_line("card", seq, form) for seq, form in cards.items()]
     lines.extend(_line("photo", at, _photo_fields(tag)) for at, tag in photos.items())
     return "\n".join([f"{texts.RECORDS_TITLE}:", *lines]) if lines else ""
+
+
+def _words(text: str) -> set[str]:
+    """The words of a name as a lookup compares them: quotes dropped, case folded, and a slash,
+    hyphen or punctuation mark splitting words as a space does, so "Flat 3/1" and the
+    "property / apartment" form a no-match answer lists both match."""
+    return {w for w in _WORD_BREAKS.split(text.translate(_UNQUOTED).casefold()) if w}
+
+
+def lookup(state: Account, query: RecordsQuery, limit: int) -> str:
+    """The records a find_records call asks for. A named apartment, matched when every word of
+    the query is a word of its property and apartment names, brings its property, its meters of
+    the named type with their latest limit readings and those of the named date, and its periods;
+    a property matched by its own name comes with no apartment. No name, or a blank one, brings
+    every property, apartment and meter without readings. Every answer carries the reading saved
+    last, which an undo names, and tariff and delegate lines join when asked for. A name nothing
+    matches answers with every apartment's name."""
+    properties = records(state, "property")
+    apartments = records(state, "apartment")
+    wanted = set() if query.apartment is None else _words(query.apartment)
+
+    def place(a) -> str:
+        return f"{properties[a['property_id']]['name']} / {a['name']}"
+
+    if wanted:
+        chosen = [a for a in state.apartments if wanted <= _words(place(a))]
+        named = [p for p in state.properties if wanted <= _words(p["name"])]
+        if not chosen and not named:
+            names = ", ".join(place(a) for a in state.apartments)
+            lines = [prompts.NO_APARTMENT_MATCH.format(query=query.apartment, names=names)]
+            return "\n".join(lines + _extra_lines(state, query, lines))
+        shown = {a["property_id"] for a in chosen} | {p["id"] for p in named}
+    else:
+        chosen, shown = state.apartments, {p["id"] for p in state.properties}
+    chosen_ids = {a["id"] for a in chosen}
+    lines = [_property_line(p) for p in state.properties if p["id"] in shown]
+    lines.extend(_apartment_line(a, properties) for a in chosen)
+    latest = _latest_reading(state)
+    for m in state.meters:
+        if m["apartment_id"] not in chosen_ids:
+            continue
+        if query.meter_type is not None and m["type"] != query.meter_type:
+            continue
+        lines.append(_meter_line(m, apartments))
+        if wanted:
+            lines.extend(_reading_lines(state, m, limit, latest, query.reading_date))
+    if wanted:
+        for a in chosen:
+            lines.extend(_period_lines(state, a["id"], apartments))
+    return "\n".join(lines + _extra_lines(state, query, lines))
+
+
+def _extra_lines(state: Account, query: RecordsQuery, shown: list[str]) -> list[str]:
+    """The asked-for tariff and delegate lines, after the reading saved last when shown lacks it."""
+    latest = _latest_reading(state)
+    lines = []
+    if latest is not None:
+        serial = next(s for s, rows in state.readings.items() if any(r is latest for r in rows))
+        line = _latest_line(state, serial, latest)
+        if line not in shown:
+            lines.append(line)
+    if query.tariffs:
+        lines.extend(_tariff_lines(state))
+    if query.delegates:
+        lines.extend(_delegate_lines(state))
+    return lines
+
+
+def _latest_line(state: Account, serial, latest) -> str:
+    meter = next(m for m in state.meters if m["serial"] == serial)
+    # A limit of 0 keeps no reading but the one marked latest.
+    [line] = _reading_lines(state, meter, 0, latest)
+    return line

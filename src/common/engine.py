@@ -1,9 +1,10 @@
 """The conversation engine: one turn in, replies and a snapshot out. It records every user action
 and every reply in the user's message history, then routes the action: a photo starts the meter
 photo flow, a choice goes to the pending item it names once it claims that item, and text is
-classified with the first awaiting item's card, when one waits, and the account's records, so an
-operation or a request names a saved record exactly. The records block also lists every waiting
-card by its seq with its fields, and the user's last dropped photos by their message's at. An
+classified with the first awaiting item's card, when one waits, and a lookup of the account's
+records, so an operation or a request names a saved record exactly. The context also lists every
+waiting card by its seq with its fields, and the user's last dropped photos by their message's at.
+An
 edit's operations go to what each names, in this order and in the same turn: the card the text was
 classified with, a card behind it, a dropped photo, which is read again from its stored copy, and
 saved records, through a correction. A how-to question, a message fitting several records and a
@@ -46,6 +47,7 @@ a verified SES identity.
 """
 
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import timedelta
 
@@ -90,7 +92,7 @@ from common.flows import (
     tariffs,
 )
 from common.log import get_logger
-from common.model import IntentResult
+from common.model import IntentResult, RecordsQuery
 
 logger = get_logger(__name__)
 
@@ -120,14 +122,14 @@ FLOWS = {
 FIRST_KINDS = (question.KIND, correction.KIND)
 
 
-# The record name of a dropped photo's id in the records block.
+# The record name of a dropped photo's id in the classifier's context.
 PHOTO_TARGET = "photo"
 
 
 @dataclass
 class Listed:
-    """The waiting cards and dropped photos a records block lists, by the id an operation names
-    each with after its record name."""
+    """The waiting cards and dropped photos the classifier's context lists, by the id an
+    operation names each with after its record name."""
 
     # Key: pending seq; value: the item, awaiting cards first in queue order, then standby ones
     cards: dict
@@ -476,27 +478,31 @@ class Engine:
         recent = photos[-self.config["correction_dropped_photos"] :]
         return Listed({i["seq"]: i for i in cards}, {m["at"]: m for m in recent})
 
-    def records(self, user) -> tuple[str, Listed]:
-        """The records block the classifier is given with the user's typed text, and the cards
-        and photos it lists."""
+    def records(self, user) -> tuple[str, Listed, Callable[[RecordsQuery], str]]:
+        """What the classifier is given with the user's typed text: the block of waiting cards
+        and dropped photos, the cards and photos it lists, and the lookup of saved records over
+        the account loaded for the turn."""
         state = account.load(self.store, user.account, user.role)
         listed = self._listed(user, state)
-        block = account.context(
-            state,
-            self.config["correction_recent_readings"],
+        block = account.listed_context(
             {seq: self.flow(item).form(item) for seq, item in listed.cards.items()},
             {at: message["reading"] for at, message in listed.photos.items()},
         )
-        return block, listed
+        return block, listed, self.finder(state)
+
+    def finder(self, state) -> Callable[[RecordsQuery], str]:
+        """The find_records lookup over the account the turn loaded."""
+        limit = self.config["correction_recent_readings"]
+        return lambda query: account.lookup(state, query, limit)
 
     def _text(self, user, action: Action) -> list[Reply]:
-        records, listed = self.records(user)
+        records, listed, find = self.records(user)
         awaiting = self._awaiting(user)
         if awaiting:
             item = awaiting[0]
             return self._dispatch(
                 user,
-                self._classify(action, records, item),
+                self._classify(action, records, find, item),
                 lambda intent: self._answer(user, item, replace(action, intent=intent)),
                 listed,
                 item,
@@ -505,7 +511,7 @@ class Engine:
         if not standby:
             return self._dispatch(
                 user,
-                self._classify(action, records),
+                self._classify(action, records, find),
                 lambda intent: self._request(user, intent),
                 listed,
             )
@@ -519,17 +525,19 @@ class Engine:
             gone = self._refresh(user, item)
             return flow.answer_standby(self, user, item, intent) if gone is None else gone
 
-        return self._dispatch(user, self._classify(action, records, item), answer, listed, item)
+        return self._dispatch(
+            user, self._classify(action, records, find, item), answer, listed, item
+        )
 
-    def _classify(self, action: Action, records: str, item=None):
-        """What the model makes of typed text, given the records and item's card when there is
-        one."""
+    def _classify(self, action: Action, records: str, find, item=None):
+        """What the model makes of typed text, given the waiting cards and photos, the lookup of
+        saved records, and item's card when there is one."""
         card_context = None
         if item is not None:
             flow = self.flow(item)
             card_context = classify_context(flow.card(item), flow.form(item), asked_field(item))
         context = message_context(records, card_context)
-        return self.model.classify(action.text, context, self.clock())
+        return self.model.classify(action.text, context, self.clock(), find)
 
     def _dispatch(self, user, intent, answer, listed: Listed, item=None) -> list[Reply]:
         """Sends an edit's operations to what each names, and the rest of the intent to answer,
