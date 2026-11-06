@@ -207,12 +207,13 @@ through `deploy.sh`. The values and what each controls are listed in
 
 The api Lambda logs JSON at INFO and above: one line per request, and one line per model call
 with `"event": "model_call"`, the kind of call (`read_meter`, `read_statement`, `classify`), the
-`provider:model` value, the input and output tokens, the seconds the call took and its cost in
+`provider:model` value, the input tokens billed at the full price, the tokens read from and
+written to the prompt cache, the output tokens, the seconds the call took and its cost in
 dollars ([Domain rules](domain-rules.md#model-call-cost)). The spend of a stack over a span:
 
 ```bash
 ./scripts/aws-helper.sh --costs --since 1d
 ```
 
-It prints the calls, tokens and dollars by UTC day, by kind of call, and in total; the summing is
-in `aws_helper.py` beside the script.
+It prints the calls, tokens (cache reads and writes in their own columns) and dollars by UTC
+day, by kind of call, and in total; the summing is in `aws_helper.py` beside the script.

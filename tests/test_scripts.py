@@ -273,12 +273,13 @@ def test_helper_listing_names_the_deploy_for_a_missing_stack(helper):
     assert "meters-tracker-dev" in result.stderr and "./scripts/deploy.sh dev" in result.stderr
 
 
-def _model_call_event(timestamp, kind, cost):
+def _model_call_event(timestamp, kind, cost, **cached):
     line = {
         "event": "model_call",
         "kind": kind,
         "model": "anthropic:claude-opus-5-5",
         "input_tokens": 1000,
+        **cached,
         "output_tokens": 100,
         "seconds": 2.5,
         "cost": cost,
@@ -291,7 +292,9 @@ def test_helper_sums_the_model_calls_by_day_and_kind(helper):
     events = (
         _model_call_event("2026-11-02T22:00:00Z", "read_meter", 0.01)
         + _model_call_event("2026-11-03T08:00:00Z", "classify", 0.02)
-        + _model_call_event("2026-11-03T09:00:00Z", "classify", 0.03)
+        + _model_call_event(
+            "2026-11-03T09:00:00Z", "classify", 0.03, cache_read_tokens=3000, cache_write_tokens=500
+        )
     )
     result = helper("--costs", "--since", "2d", stdout="fn-1", logs=events)
     assert result.returncode == 0, result.stderr
@@ -299,11 +302,11 @@ def test_helper_sums_the_model_calls_by_day_and_kind(helper):
     assert tail.startswith("logs tail /aws/lambda/fn-1 ")
     assert "--since 2d" in tail and "--filter-pattern model_call" in tail
     rows = [line.split() for line in result.stdout.splitlines()]
-    assert ["2026-11-02", "1", "1000", "100", "0.0100"] in rows
-    assert ["2026-11-03", "2", "2000", "200", "0.0500"] in rows
-    assert ["classify", "2", "2000", "200", "0.0500"] in rows
-    assert ["read_meter", "1", "1000", "100", "0.0100"] in rows
-    assert ["total", "3", "3000", "300", "0.0600"] in rows
+    assert ["2026-11-02", "1", "1000", "0", "0", "100", "0.0100"] in rows
+    assert ["2026-11-03", "2", "2000", "3000", "500", "200", "0.0500"] in rows
+    assert ["classify", "2", "2000", "3000", "500", "200", "0.0500"] in rows
+    assert ["read_meter", "1", "1000", "0", "0", "100", "0.0100"] in rows
+    assert ["total", "3", "3000", "3000", "500", "300", "0.0600"] in rows
     assert "PRICE_PER_MILLION in src/common/model.py" in result.stderr
 
 

@@ -12,7 +12,8 @@ Core pieces:
 - model_from_env: build_model over LLM_MODEL and LLM_API_KEY, for the local scripts
 - api_key_from_ssm: loads the API key from an SSM SecureString parameter
 - Usage: the billed tokens of one call, which each client keeps for its last call as last_usage
-- PRICE_PER_MILLION / call_cost: the listed token prices and the dollars one call costs at them
+- PRICE_PER_MILLION / call_cost: the listed prices per million tokens, for input, output, cache
+  reads and cache writes, and the dollars one call costs at them
 - _BilledModel: the per-call bookkeeping both clients share, last_usage and one log line with
   the call's kind, tokens, seconds and cost
 """
@@ -41,12 +42,14 @@ MAX_TOKENS = 2000
 # a photo's read and its note's classification share that Lambda's time limit.
 REQUEST_TIMEOUT_SECONDS = 25
 MAX_RETRIES = 1
-# Dollars per million input and output tokens, from the providers' price pages on 2026-10-29.
-# A model missing here cannot be built, so every logged call carries its cost.
+# Dollars per million input, output, cache-read and cache-write tokens, from the providers' price
+# pages on 2026-11-06. A model missing here cannot be built, so every logged call carries its cost.
+# Anthropic prices a cache write, for an entry that lives five minutes, at 1.25 times the input
+# price; OpenAI charges nothing to write.
 PRICE_PER_MILLION = {
-    "claude-opus-5-5": (4.0, 20.0),
-    "gpt-6.1-sol": (2.0, 10.0),
-    "gpt-6-astra": (10.0, 50.0),
+    "claude-opus-5-5": (4.0, 20.0, 0.2, 5.0),
+    "gpt-6.1-sol": (2.0, 10.0, 0.1, 0.0),
+    "gpt-6-astra": (10.0, 50.0, 1.0, 0.0),
 }
 
 
@@ -130,17 +133,27 @@ PROVIDER_ERRORS = (anthropic.APIError, openai.APIError)
 
 @dataclass(frozen=True)
 class Usage:
-    """Billed tokens of one call; reasoning tokens count as output."""
+    """Billed tokens of one call; reasoning tokens count as output. input_tokens are the ones
+    billed at the full input price, so they leave out the tokens read from or written to the
+    prompt cache."""
 
     input_tokens: int
     output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
 
 
 def call_cost(model_id: str, usage: Usage) -> float:
     """Dollars for one call at the model's listed prices; a model missing from PRICE_PER_MILLION
     raises KeyError."""
-    per_input, per_output = PRICE_PER_MILLION[model_id]
-    return (usage.input_tokens * per_input + usage.output_tokens * per_output) / 1_000_000
+    per_input, per_output, per_read, per_write = PRICE_PER_MILLION[model_id]
+    dollars = (
+        usage.input_tokens * per_input
+        + usage.output_tokens * per_output
+        + usage.cache_read_tokens * per_read
+        + usage.cache_write_tokens * per_write
+    )
+    return dollars / 1_000_000
 
 
 class Model(Protocol):
@@ -225,6 +238,8 @@ class _BilledModel:
             "model": f"{self.PROVIDER}:{self.model_id}",
             "input_tokens": usage.input_tokens,
             "output_tokens": usage.output_tokens,
+            "cache_read_tokens": usage.cache_read_tokens,
+            "cache_write_tokens": usage.cache_write_tokens,
             "seconds": round(time.perf_counter() - started, 2),
             "cost": call_cost(self.model_id, usage),
         }
@@ -276,12 +291,22 @@ class ClaudeModel(_BilledModel, Model):
         response = self._client.messages.parse(
             model=self.model_id,
             max_tokens=MAX_TOKENS,
-            system=system,
+            # The instructions of each kind of call are fixed text, the same from one call to the
+            # next, so the API caches them and later calls pay the cache-read price for them.
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": content}],
             output_format=output_format,
         )
+        usage = response.usage
         self._billed(
-            kind, started, Usage(response.usage.input_tokens, response.usage.output_tokens)
+            kind,
+            started,
+            Usage(
+                usage.input_tokens,
+                usage.output_tokens,
+                usage.cache_read_input_tokens,
+                usage.cache_creation_input_tokens,
+            ),
         )
         if response.stop_reason == "refusal":
             raise ModelRefused(f"model refused: {response.stop_details}")
@@ -328,8 +353,12 @@ class OpenAIModel(_BilledModel, Model):
             input=[{"role": "system", "content": system}, {"role": "user", "content": content}],
             text_format=text_format,
         )
+        usage = response.usage
+        # OpenAI caches a long prompt on its own, counts the tokens the cache served inside
+        # input_tokens, and charges nothing to write them.
+        cached = usage.input_tokens_details.cached_tokens
         self._billed(
-            kind, started, Usage(response.usage.input_tokens, response.usage.output_tokens)
+            kind, started, Usage(usage.input_tokens - cached, usage.output_tokens, cached, 0)
         )
         for item in response.output:
             if item.type != "message":

@@ -30,7 +30,14 @@ from common.model import (
 )
 
 IMAGE = b"\xff\xd8fake-jpeg"
-USAGE = SimpleNamespace(input_tokens=1500, output_tokens=200)
+# The Anthropic fields, and OpenAI's input_tokens_details, name the tokens the prompt cache served.
+USAGE = SimpleNamespace(
+    input_tokens=1500,
+    output_tokens=200,
+    cache_read_input_tokens=0,
+    cache_creation_input_tokens=0,
+    input_tokens_details=SimpleNamespace(cached_tokens=0),
+)
 MODEL_IDS = {ClaudeModel: "claude-opus-5-5", OpenAIModel: "gpt-6.1-sol"}
 
 
@@ -111,8 +118,47 @@ def test_build_model_refuses_a_model_with_no_listed_price():
         build_model("anthropic:claude-unlisted", "key")
 
 
+def test_call_cost_prices_cache_reads_and_writes_at_their_own_rates():
+    # 100 input, 3,000 read from the cache and 1,000 written to it, at $4, $0.20 and $5 a million.
+    usage = Usage(100, 0, 3000, 1000)
+    assert call_cost("claude-opus-5-5", usage) == pytest.approx((400 + 600 + 5000) / 1_000_000)
+
+
+def test_a_claude_call_logs_its_cached_tokens(monkeypatch, caplog):
+    usage = SimpleNamespace(
+        input_tokens=40,
+        output_tokens=10,
+        cache_read_input_tokens=3500,
+        cache_creation_input_tokens=0,
+    )
+    _stub_anthropic(monkeypatch, _answered(_reading(), usage))
+    with caplog.at_level(logging.INFO, logger="common.model"):
+        ClaudeModel("key", "claude-opus-5-5").classify("כן", "", date(2026, 10, 29))
+    [line] = _call_lines(caplog)
+    assert (line["cache_read_tokens"], line["cache_write_tokens"]) == (3500, 0)
+    assert line["cost"] == pytest.approx(call_cost("claude-opus-5-5", Usage(40, 10, 3500, 0)))
+
+
+def test_an_openai_call_logs_its_cached_tokens_out_of_the_input_count(monkeypatch, caplog):
+    usage = SimpleNamespace(
+        input_tokens=3540,
+        output_tokens=10,
+        input_tokens_details=SimpleNamespace(cached_tokens=3500),
+    )
+    _stub_openai(monkeypatch, _answered(_reading(), usage))
+    with caplog.at_level(logging.INFO, logger="common.model"):
+        OpenAIModel("key", "gpt-6.1-sol").read_meter(IMAGE, "image/jpeg")
+    [line] = _call_lines(caplog)
+    assert (line["input_tokens"], line["cache_read_tokens"], line["cache_write_tokens"]) == (
+        40,
+        3500,
+        0,
+    )
+    assert line["cost"] == pytest.approx(call_cost("gpt-6.1-sol", Usage(40, 10, 3500, 0)))
+
+
 def test_call_cost_prices_input_and_output_tokens_per_million():
-    assert call_cost("claude-opus-5-5", Usage(1500, 200)) == pytest.approx(0.01)
+    assert call_cost("claude-opus-5-5", Usage(1500, 200, 0, 0)) == pytest.approx(0.01)
 
 
 @pytest.mark.parametrize("missing", ["LLM_MODEL", "LLM_API_KEY"])
@@ -158,7 +204,9 @@ def test_claude_model_builds_parse_request(monkeypatch):
     client, call = calls
     assert client == {"api_key": "key", "timeout": 25, "max_retries": 1}
     assert call["model"] == "claude-opus-5-5"
-    assert call["system"] == prompts.READ_METER
+    assert call["system"] == [
+        {"type": "text", "text": prompts.READ_METER, "cache_control": {"type": "ephemeral"}}
+    ]
     assert call["output_format"] is MeterReadingResult
     image, text = call["messages"][0]["content"]
     assert image == {
@@ -239,7 +287,7 @@ def test_model_keeps_the_last_calls_usage(monkeypatch, cls, stub):
     model = cls("key", MODEL_IDS[cls])
     assert model.last_usage is None
     model.read_meter(IMAGE, "image/jpeg")
-    assert model.last_usage == Usage(1500, 200)
+    assert model.last_usage == Usage(1500, 200, 0, 0)
 
 
 def test_fake_model_returns_statements_by_image_hash():
@@ -254,7 +302,7 @@ def test_claude_model_builds_statement_request(monkeypatch):
     calls = _stub_anthropic(monkeypatch, response)
     assert ClaudeModel("key", "claude-opus-5-5").read_statement(IMAGE, "image/png") is statement
     _, call = calls
-    assert call["system"] == prompts.READ_STATEMENT
+    assert call["system"][0]["text"] == prompts.READ_STATEMENT
     assert call["output_format"] is StatementResult
     image, text = call["messages"][0]["content"]
     assert image["source"]["media_type"] == "image/png"
@@ -323,13 +371,13 @@ def test_strict_schema_carries_no_non_null_default():
     assert non_null_defaults(to_strict_json_schema(IntentResult)) == []
 
 
-def _answered(result):
+def _answered(result, usage=USAGE):
     return SimpleNamespace(
         stop_reason="end_turn",
         parsed_output=result,
         output=[_message(SimpleNamespace(type="output_text"))],
         output_parsed=result,
-        usage=USAGE,
+        usage=usage,
     )
 
 
@@ -355,7 +403,7 @@ def test_each_call_logs_its_kind_model_tokens_seconds_and_cost(
     assert meter["model"] == f"{provider}:{MODEL_IDS[cls]}"
     assert (meter["input_tokens"], meter["output_tokens"]) == (1500, 200)
     assert meter["seconds"] >= 0
-    assert meter["cost"] == pytest.approx(call_cost(MODEL_IDS[cls], Usage(1500, 200)))
+    assert meter["cost"] == pytest.approx(call_cost(MODEL_IDS[cls], Usage(1500, 200, 0, 0)))
 
 
 def test_a_refused_call_logs_its_line(monkeypatch, caplog):

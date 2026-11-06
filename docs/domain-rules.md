@@ -431,14 +431,23 @@ reply and writes nothing.
 ## Model call cost
 
 Every call to the model, a refused one included since it is billed, costs its input tokens at the
-model's input price plus its output tokens at its output price; reasoning tokens count as output.
-The prices are dollars per million tokens in `PRICE_PER_MILLION` in `src/common/model.py`:
+model's input price, its output tokens at its output price, and the tokens the prompt cache served
+at the cache-read price, or at the cache-write price on the call that stored them; reasoning
+tokens count as output. The prices are dollars per million tokens in `PRICE_PER_MILLION` in
+`src/common/model.py`:
 
-| Model | Input | Output |
-|---|---|---|
-| `claude-opus-5-5` | 4.00 | 20.00 |
-| `gpt-6.1-sol` | 2.00 | 10.00 |
-| `gpt-6-astra` | 10.00 | 50.00 |
+| Model | Input | Output | Cache read | Cache write |
+|---|---|---|---|---|
+| `claude-opus-5-5` | 4.00 | 20.00 | 0.20 | 5.00 |
+| `gpt-6.1-sol` | 2.00 | 10.00 | 0.10 | 0.00 |
+| `gpt-6-astra` | 10.00 | 50.00 | 1.00 | 0.00 |
+
+Each kind of call has fixed instructions, the same text on every call of that kind, and a request
+is cached up to their end, so a call pays the full input price only for what follows them. The
+Claude client asks for the cache with a marker on the instructions; the first call of a kind in
+five minutes writes the entry and later ones read it. OpenAI caches a prompt of 1,024 tokens or
+more on its own, charges nothing to write it, and reports the cached tokens inside the input
+count, from which the client takes them.
 
 A model missing from the table cannot be built: the api Lambda refuses every request on such an
 `LLM_MODEL`, and the error names the table. A call the provider fails outright is not billed and
