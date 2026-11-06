@@ -38,6 +38,8 @@ charge, with the exact values the code uses. The arithmetic lives in
 | `sidebar_min_width_px`: 900 | `config/app.json` | Narrowest window with the day panel |
 | `correction_recent_readings`: 12 | `config/app.json` | Latest readings a lookup gives a meter |
 | `correction_dropped_photos`: 5 | `config/app.json` | Latest dropped photos the classifier gets |
+| `reading_jump_multiple`: 5 | `config/app.json` | Daily-average multiple that questions a reading |
+| `reading_jump_ceiling_per_day`: 10, 200 | `config/app.json` | Daily use questioned, per type |
 | 100 | `src/common/store.py` | Most rows one correction writes |
 | 4 MiB, JPEG or PNG | `src/handlers/api.py` | Largest accepted photo, after base64 decoding |
 | 200 | `src/common/store.py` | Messages `GET /chat` returns |
@@ -61,8 +63,9 @@ the photo was sent, which a retry on a later day keeps.
 - **Unreadable.** A missing or unreadable serial asks for a retake. A value the model could not
   read at all asks for a retake or a typed value. A value read with an uncertain digit is
   proposed on the reading card, and on a new meter's summary, with a line naming the doubt; a
-  typed value settles it. A new photo replaces an earlier unreadable card that had no serial or
-  had the same serial.
+  typed value settles it. A value, read or typed, that equals the meter's own serial is no
+  reading: the reply says so and the card asks for the reading. A new photo replaces an earlier
+  unreadable card that had no serial or had the same serial.
 - **Retired meter.** A photo of a retired meter is refused, naming the live meter that replaced
   it, when its apartment has one of its type.
 - **Two-number display.** With no saved choice, the card offers both numbers as its only
@@ -291,9 +294,19 @@ Run in this order on confirmation, each stopping at its own card:
 2. **Lower than before.** The value is below the meter's latest earlier reading. The user picks
    misread (retake or type the value), replaced (refused: a replaced meter has a new serial, so
    the new one is photographed instead), or reset (the reading is saved flagged as a reset).
-3. **No open period.** The apartment is vacant: confirming opens a period starting on the
+3. **Far above the meter's history.** The consumption per day since the meter's latest earlier
+   reading is above `reading_jump_multiple` times the meter's own daily average, taken over its
+   earlier readings since its last reset. A meter with fewer than two such readings, or no
+   consumption between them, has no average and is judged against its type's
+   `reading_jump_ceiling_per_day`, set well above what an apartment uses: a typical apartment
+   draws under a cubic metre of water and under 30 kWh a day, so a reading past the ceiling is
+   a mistyped or misread digit far more often than a real reading. The card names the daily
+   consumption and the figure it is judged against; confirm saves the reading, a typed value
+   corrects it. A reading saved as a reset is not judged, since its consumption since the
+   previous reading is unknown.
+4. **No open period.** The apartment is vacant: confirming opens a period starting on the
    reading's date, with the apartment's length, and the reading opens it.
-4. **Near the latest closing reading** of this meter:
+5. **Near the latest closing reading** of this meter:
    - dated before it, yet on or after the closed period's end — a **swap** is offered;
    - dated after it by at most `reclose_days` days — a **re-close** is offered.
 
@@ -301,7 +314,7 @@ Run in this order on confirmation, each stopping at its own card:
    sets the closed period's `closed_on` to its latest closing reading's date. A next period, when
    there is one, moves to start the day after, as a close opens it. Declining saves an ordinary
    reading.
-5. **Period end near or reached.** With no close already waiting, a reading dated on or after the
+6. **Period end near or reached.** With no close already waiting, a reading dated on or after the
    open period's last day, or at most `close_days_before_end` days before it, offers to close the
    period with it or keep it as an ordinary reading; typing that the apartment is empty
    (`vacate`) closes the period with it and marks the apartment vacant.

@@ -106,15 +106,15 @@ def test_duplicate_same_date_is_offered_not_saved(env, ddb):
 def test_backdated_reading_inserts_by_date(env, ddb):
     kit = Kit([edit("date", "2026-10-10")])
     _water_apartment(
-        kit, [reading("2026-10-01", 1000, opens="2026-10-01"), reading("2026-10-20", 1200)]
+        kit, [reading("2026-10-01", 1000, opens="2026-10-01"), reading("2026-10-20", 1100)]
     )
-    kit.send_photo(water(1100), note="צולם ב-10/10")
+    kit.send_photo(water(1050), note="צולם ב-10/10")
     assert "10/10/2026" in "\n".join(kit.card()["lines"])
     kit.choose("confirm")
     assert [(r["date"], r["value"]) for r in kit.readings("W-1250")] == [
         ("2026-10-01", 1000),
-        ("2026-10-10", 1100),
-        ("2026-10-20", 1200),
+        ("2026-10-10", 1050),
+        ("2026-10-20", 1100),
     ]
 
 
@@ -663,3 +663,50 @@ def test_a_read_of_a_known_serial_logs_no_match(env, ddb, caplog):
     kit.send_photo(water(1250))
     [line] = _meter_read_lines(caplog)
     assert line["matched_serial"] is None
+
+
+def test_typing_the_serial_as_the_reading_asks_for_the_reading(env, ddb):
+    kit = Kit([edit("value", "2721058")])
+    apartment = kit.apartment(start="2026-10-01")
+    kit.meter(apartment, "2721058", "water", [reading("2026-10-01", 843, opens="2026-10-01")])
+    kit.send_photo(water(None, serial="2721058", unreadable=True))
+    result = kit.say("2721058")
+    assert "2721058" in result.replies[0].text
+    assert result.snapshot.card["kind"] == "unreadable"
+    assert kit.form()["value"] is None
+    assert len(kit.readings("2721058")) == 1
+
+
+def test_a_reading_far_above_any_apartment_is_questioned_before_it_is_saved(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 843, opens="2026-10-01")])
+    kit.send_photo(water(8431))
+    result = kit.choose("confirm")
+    card = result.snapshot.card
+    assert (card["kind"], options(card)) == ("jump", ["confirm"])
+    assert "8,431" in card_text(card) and "271" in card_text(card)
+    assert len(kit.readings("W-1250")) == 1
+    kit.choose("confirm")
+    assert kit.readings("W-1250")[-1]["value"] == 8431
+
+
+def test_a_jump_is_judged_against_the_meters_own_daily_average(env, ddb):
+    kit = Kit()
+    _water_apartment(
+        kit, [reading("2026-10-01", 1000, opens="2026-10-01"), reading("2026-10-15", 1014)]
+    )
+    kit.send_photo(water(1100))
+    result = kit.choose("confirm")
+    assert result.snapshot.card["kind"] == "jump"
+    assert "6.1" in card_text(result.snapshot.card) and "1.0" in card_text(result.snapshot.card)
+
+
+def test_a_reading_within_the_meters_usual_consumption_is_saved_with_one_press(env, ddb):
+    kit = Kit()
+    _water_apartment(
+        kit, [reading("2026-10-01", 1000, opens="2026-10-01"), reading("2026-10-15", 1014)]
+    )
+    kit.send_photo(water(1070))
+    result = kit.choose("confirm")
+    assert result.snapshot.card is None
+    assert kit.readings("W-1250")[-1]["value"] == 1070

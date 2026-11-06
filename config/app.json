@@ -1,1 +1,1 @@
-{"default_period_months": 2, "reclose_days": 7, "close_days_before_end": 7, "sidebar_min_width_px": 900, "file_url_minutes": 10, "correction_recent_readings": 12, "correction_dropped_photos": 5}
+{"default_period_months": 2, "reclose_days": 7, "close_days_before_end": 7, "sidebar_min_width_px": 900, "file_url_minutes": 10, "correction_recent_readings": 12, "correction_dropped_photos": 5, "reading_jump_multiple": 5, "reading_jump_ceiling_per_day": {"water": 10, "electricity": 200}}

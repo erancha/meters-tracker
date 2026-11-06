@@ -51,6 +51,10 @@ reason, which names the deployment's admin address to ask for access.
 - Each question card highlights the answer it expects: closing the period on a reading near the
   period's end, closing again on a reading just after a close, and "misread" on a reading lower
   than the one before. A card whose options are even, such as the period start, highlights none.
+- A reading far above what the meter's history makes plausible gets a card naming the daily
+  consumption and the meter's usual figure before it is saved; confirm saves it, a typed value
+  corrects it. A value typed that is the meter's own serial is answered as the serial, and the
+  card asks for the reading.
 - The new-meter questions offer each existing property and apartment as a button. A typed name
   that is a prefix of an existing one, or two letters or fewer from it, gets a card asking which
   was meant, with the existing name highlighted and a button for a new one by the typed name.

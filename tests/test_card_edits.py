@@ -414,11 +414,11 @@ def test_a_period_already_open_is_no_field_of_the_card(env, ddb):
 
 def test_a_date_on_a_check_step_runs_the_checks_again_on_confirm(env, ddb):
     kit = _start("duplicate")
-    _say(kit, edit("date", "2026-10-20"))
+    _say(kit, edit("date", "2026-10-27"))
     assert kit.choose("confirm").snapshot.card is None
     assert [(r["date"], r["value"]) for r in kit.readings(SERIAL)] == [
         (OPENED, 1000),
-        ("2026-10-20", 1250),
+        ("2026-10-27", 1250),
         ("2026-10-29", 1100),
     ]
 

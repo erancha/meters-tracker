@@ -1784,7 +1784,7 @@ def test_an_address_too_long_to_be_one_asks_again(env, ddb):
 def _second_apartment_photo_waits(kit, value=1300):
     """A reading card of a second apartment's meter, waiting behind the first photo's card."""
     other = kit.apartment(name="קדמית", start="2026-08-01")
-    kit.meter(other, "W-2", "water", [reading("2026-08-01", 1000, opens="2026-08-01")])
+    kit.meter(other, "W-2", "water", [reading("2026-08-01", 1200, opens="2026-08-01")])
     kit.send_photo(water(960, serial=SERIAL))
     kit.send_photo(water(value, serial="W-2"))
     first, second = sorted(kit.store.pending(USER.email), key=lambda i: i["seq"])

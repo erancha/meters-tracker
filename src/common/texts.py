@@ -43,6 +43,12 @@ def number(value) -> str:
     return f"{value:,}"
 
 
+def rate(per_day: float) -> str:
+    """A consumption per day: whole from 10 up, else to one decimal, so a water meter's fraction
+    of a cubic metre a day does not read as zero."""
+    return f"{per_day:,.0f}" if per_day >= 10 else f"{per_day:.1f}"
+
+
 def months_phrase(months: int) -> str:
     if months == 1:
         return "לחודש"
@@ -119,6 +125,29 @@ def duplicate_reading(value, d: date):
     return (
         f"קריאה של המונה הזה מ־{fmt(d)} כבר קיימת: {number(value)}",
         ["אישור יחליף אותה בקריאה החדשה."],
+    )
+
+
+def value_is_serial(serial) -> str:
+    return f"{serial} הוא המספר הסידורי של המונה, לא הקריאה."
+
+
+def jump_reading(meter_type, prev: dict, value, per_day: float, average: float | None):
+    unit = UNITS[meter_type]
+    usual = (
+        "הרבה מעל הרגיל בדירת מגורים"
+        if average is None
+        else f"לעומת ממוצע של {rate(average)} {unit} ביום במונה הזה עד כה"
+    )
+    return (
+        (
+            f"הקריאה {number(value)} גבוהה בהרבה מהקודמת ({number(prev['value'])}, "
+            f"{fmt(parse_iso(prev['date']))})"
+        ),
+        [
+            f"זו צריכה של {rate(per_day)} {unit} ביום, {usual}.",
+            "אישור ישמור את הקריאה; אם זו טעות, אפשר לכתוב את הקריאה הנכונה.",
+        ],
     )
 
 

@@ -7,9 +7,11 @@ like a reading. A water serial one character off exactly one live meter is taken
 meter's, and any other unknown serial is handed to the link flow. On a reading near the
 period's end, the close option or a typed vacate hands the apartment to the close flow after the
 reading is saved, and the reading's reply is built after the close, so it reports the closed
-period. The value, date and serial take a typed edit on every step.
+period. The value, date and serial take a typed edit on every step. A value that is the meter's
+own serial is no reading, so the card asks for the reading; one that is far above what the
+meter's history makes plausible is questioned before it is saved.
 
-Steps: unreadable -> reading -> one of duplicate, lower_reading, swap, propose_reclose,
+Steps: unreadable -> reading -> one of duplicate, lower_reading, jump, swap, propose_reclose,
 open_period, propose_close -> saved. A reading is never saved twice for one meter and date. A
 back-dated reading never displaces a confirmed closing reading without the user's choice. A
 two-number display's choice becomes the meter's only when a reading is saved. A failed read
@@ -88,7 +90,7 @@ logger = get_logger(__name__)
 KIND = "meter_photo"
 SWAP_OPTIONS = ["reclose", "keep_open"]
 # The steps whose card rests on data["other"], a copy of a saved reading.
-OTHER_STEPS = ("duplicate", "lower_reading", "swap", "propose_reclose")
+OTHER_STEPS = ("duplicate", "lower_reading", "jump", "swap", "propose_reclose")
 STATEMENT, METER = PHOTO_KINDS
 # The fields a typed correction may give a dropped photo, in the order they apply: an unreadable
 # card's, since the photo has no card until it is read again.
@@ -151,6 +153,12 @@ STEPS = {
     "lower_reading": (
         lambda d: texts.lower_reading(d["other"], d["value"]),
         lambda d: ["misread", "replaced", "reset"],
+    ),
+    "jump": (
+        lambda d: texts.jump_reading(
+            d["meter_type"], d["other"], d["value"], d["jump"]["per_day"], d["jump"]["average"]
+        ),
+        lambda d: ["confirm"],
     ),
     "swap": (lambda d: texts.propose_swap(_date(d, "other")), lambda d: SWAP_OPTIONS),
     "propose_reclose": (lambda d: texts.propose_reclose(_date(d, "other")), lambda d: SWAP_OPTIONS),
@@ -470,6 +478,10 @@ def route(engine, user, item) -> list[Reply]:
         return ask(engine, user, item, "unreadable", card)
     if meter is None:
         return link_meter.start(engine, user, item)
+    if str(data["value"]) == meter["serial"]:
+        data.update(value=None, unreadable=[texts.UNREADABLE_VALUE])
+        reply = Reply(texts.value_is_serial(meter["serial"]))
+        return [reply, *ask(engine, user, item, "unreadable", card)]
     _name_meter(engine, user, data, meter)
     return ask(engine, user, item, "reading", card)
 
@@ -514,6 +526,8 @@ def answer(engine, user, item, action) -> list[Reply]:
     if step == "lower_reading" and key == "reset":
         data["resets"] = True
         return _check(engine, user, item, lower_checked=True)
+    if step == "jump" and key == "confirm":
+        return _check(engine, user, item, jump_checked=True)
     if step in ("swap", "propose_reclose") and key == "reclose":
         return _reclose(engine, user, item)
     if step == "open_period" and key == "confirm":
@@ -539,7 +553,7 @@ def _meter(engine, user, data) -> dict:
     return engine.store.meter(user.account, data["serial"])
 
 
-def _check(engine, user, item, lower_checked=False) -> list[Reply]:
+def _check(engine, user, item, lower_checked=False, jump_checked=False) -> list[Reply]:
     data = item["data"]
     meter = _meter(engine, user, data)
     day = data["reading_date"]
@@ -552,6 +566,11 @@ def _check(engine, user, item, lower_checked=False) -> list[Reply]:
     if not lower_checked and earlier and data["value"] < earlier[-1]["value"]:
         data["other"] = earlier[-1]
         return ask(engine, user, item, "lower_reading", card)
+    if not jump_checked and earlier and not data["resets"]:
+        jump = _jump(data, earlier, meter["type"], engine.config)
+        if jump is not None:
+            data.update(other=earlier[-1], jump=jump)
+            return ask(engine, user, item, "jump", card)
     periods = engine.store.periods(user.account, meter["apartment_id"])
     current = current_period(engine, user, meter["apartment_id"])
     if current is None:
@@ -570,6 +589,33 @@ def _check(engine, user, item, lower_checked=False) -> list[Reply]:
         data["period_end"] = period_end(current).isoformat()
         return ask(engine, user, item, "propose_close", card)
     return [*_save(engine, user, item), *close_period.resume(engine, user, parked)]
+
+
+def _jump(data, earlier, meter_type, config) -> dict | None:
+    """The reading's consumption per day since the meter's latest earlier reading, with the
+    meter's own daily average, when it is implausibly high; None for a plausible reading. The
+    average runs from the meter's last reset over its earlier readings, and the reading is
+    implausible above reading_jump_multiple times it. A meter with fewer than two earlier
+    readings since its reset, or no consumption between them, has no average (None) and is
+    judged against its type's reading_jump_ceiling_per_day instead."""
+    previous = earlier[-1]
+    per_day = (data["value"] - previous["value"]) / _days(previous, data["reading_date"])
+    resets = [i for i, r in enumerate(earlier) if r["resets"]]
+    history = earlier[resets[-1] :] if resets else earlier
+    used = history[-1]["value"] - history[0]["value"]
+    if len(history) >= 2 and used > 0:
+        average = used / _days(history[0], history[-1]["date"])
+        limit = config["reading_jump_multiple"] * average
+    else:
+        average = None
+        limit = config["reading_jump_ceiling_per_day"][meter_type]
+    if per_day <= limit:
+        return None
+    return {"per_day": per_day, "average": average}
+
+
+def _days(reading, day) -> int:
+    return (parse_iso(day) - parse_iso(reading["date"])).days
 
 
 def _closing_step(closing, closed, day, config) -> str | None:

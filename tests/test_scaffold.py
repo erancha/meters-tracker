@@ -32,6 +32,8 @@ def test_app_config_values():
         "file_url_minutes": 10,
         "correction_recent_readings": 12,
         "correction_dropped_photos": 5,
+        "reading_jump_multiple": 5,
+        "reading_jump_ceiling_per_day": {"water": 10, "electricity": 200},
     }
 
 
