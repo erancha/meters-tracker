@@ -7,7 +7,8 @@
 # parameter; store it with scripts/set-model-key.sh before deploying.
 # SES_SENDER: From address of every mail the app sends; must be a verified SES identity.
 # ADMIN_EMAIL: the Google address that signs in as the deployment's admin; the browser locks its
-# composer, so it manages no meters. A refused sign-up names it as the address to ask for access.
+# composer, so it manages no meters. A refused sign-up names it as the address to ask for access,
+# and the refusal page offers to copy it.
 # ALLOWED_EMAILS: a regex a Google address must fully match to sign up, ignoring case. Join
 # addresses with "|" and escape their dots; ".*" admits everyone. List the admin and every
 # delegate too. Only a first sign-in is checked, so removing an address does not lock out an

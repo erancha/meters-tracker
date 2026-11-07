@@ -7,6 +7,8 @@ export interface AppConfig {
   clientId: string;
   apiUrl: string;
   redirectUri: string;
+  // The deployment's admin, whom a refused sign-in is offered to email.
+  adminEmail: string;
 }
 
 declare global {

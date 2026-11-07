@@ -1,5 +1,5 @@
 // Entry point: resolves the session before mounting — a signed-in user gets the app, a signed-out
-// visitor the landing page, and a sign-in the Cognito Hosted UI rejected an alert banner.
+// visitor the landing page, and a sign-in that did not complete its reason with a way to retry.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -10,6 +10,7 @@ import { getConfig } from "./config";
 import { App } from "./components/App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Landing } from "./components/Landing";
+import { SignInError } from "./components/SignInError";
 import "./style.css";
 
 const cfg = getConfig();
@@ -41,5 +42,8 @@ try {
   }
 } catch (err) {
   if (!(err instanceof AuthError)) throw err;
-  root.render(<div className="alert">{err.message}</div>);
+  root.render(
+    <SignInError reason={err.message} adminEmail={cfg.adminEmail}
+                 onSignIn={() => redirectToLogin(cfg)} />,
+  );
 }

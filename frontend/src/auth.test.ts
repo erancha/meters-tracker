@@ -8,6 +8,7 @@ const cfg: AppConfig = {
   clientId: "client123",
   apiUrl: "https://api.example.com",
   redirectUri: "https://app.example.com/",
+  adminEmail: "admin@example.com",
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -25,7 +26,7 @@ describe("ensureSignedIn", () => {
     sessionStorage.removeItem("tokens");
     history.replaceState(null, "", search);
 
-    const err = await ensureSignedIn(cfg).then(
+    const err = await ensureSignedIn({ ...cfg, redirectUri: `${location.origin}/` }).then(
       () => { throw new Error("resolved instead of rejecting"); },
       (e: unknown) => e,
     );
@@ -45,6 +46,12 @@ describe("ensureSignedIn", () => {
     const err = await rejectionFor(`/?error=invalid_request&error_description=${description}`);
 
     expect(err.message).toBe(reason);
+  });
+
+  it("drops the error from the address bar, so a reload lands on the landing page", async () => {
+    await rejectionFor("/?error=access_denied&error_description=Refused");
+
+    expect(location.search).toBe("");
   });
 
   it("unwraps the refusal when Cognito ends it with a trailing space", async () => {

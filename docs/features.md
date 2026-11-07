@@ -13,9 +13,11 @@ it, a three-paragraph pitch, a "more" toggle and the "sign in with Google" butto
 the pitch for seven bullets condensing the README's overview, and back. Below the card, one link
 opens the animated demo in a new tab, a second opens WhatsApp with an invite to the app prefilled
 as a received recommendation, and a third opens the source repository on GitHub. A sign-in whose
-final step fails shows a banner asking to reload and sign in again. A first sign-in by an address
-not on the deployment's allowed list is refused: in place of the chat, the page shows the Hebrew
-reason, which names the deployment's admin address to ask for access.
+final step fails, or a first sign-in by an address not on the deployment's allowed list, shows the
+Hebrew reason in place of the chat; a refusal's reason names the deployment's admin address to ask
+for access. Beside it, one button starts sign-in again with another Google account, and a second
+copies the admin's address to the clipboard, with a note below saying it was copied. The reason
+leaves the address bar once shown, so a reload lands on the landing page.
 
 ## Chat
 

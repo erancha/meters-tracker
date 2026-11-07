@@ -5,4 +5,5 @@ window.CONFIG = {
   clientId: "<user-pool-client-id>",
   apiUrl: "https://<api-id>.execute-api.eu-central-1.amazonaws.com",
   redirectUri: window.location.origin + "/",
+  adminEmail: "<admin-google-address>",
 };

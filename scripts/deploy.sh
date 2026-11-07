@@ -116,6 +116,7 @@ window.CONFIG = {
   clientId: "$CLIENT_ID",
   apiUrl: "$API_URL",
   redirectUri: window.location.origin + "/",
+  adminEmail: "$ADMIN_EMAIL",
 };
 CONFIG
 

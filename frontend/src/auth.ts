@@ -19,8 +19,9 @@ const b64url = (buf: ArrayBuffer | Uint8Array) =>
 
 const navigateTo = (url: string) => { location.href = url; };
 
-// Returns the app to its canonical address, dropping the Hosted UI's one-time code: left in the
-// address bar, a reload would re-submit a code Cognito has already spent.
+// Returns the app to its canonical address, dropping the Hosted UI's one-time code or error: left
+// in the address bar, a reload would re-submit a code Cognito has already spent, or show the same
+// refusal again.
 const dropAuthCode = (cfg: AppConfig) => history.replaceState(null, "", cfg.redirectUri);
 
 /**
@@ -46,9 +47,13 @@ export async function ensureSignedIn(cfg: AppConfig): Promise<Tokens | null> {
   const code = params.get("code");
   if (code) return exchangeCode(cfg, code);
   // A rejected sign-in comes back as an OAuth error redirect; surface it instead of treating it
-  // as signed-out, which would silently offer another doomed sign-in.
+  // as signed-out, which would silently offer another doomed sign-in. The error leaves the address
+  // bar once read, so a reload lands on the landing page rather than on the same refusal.
   const error = params.get("error");
-  if (error) throw new AuthError(triggerReason(params.get("error_description") ?? error));
+  if (error) {
+    dropAuthCode(cfg);
+    throw new AuthError(triggerReason(params.get("error_description") ?? error));
+  }
   return null;
 }
 

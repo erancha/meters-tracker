@@ -64,6 +64,11 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 /* Dark text on an outline, the look of a third-party sign-in rather than the app's own actions. */
 #root .landing .sign-in { background: #fff; color: inherit; border: 1px solid #ccc; border-radius: 999px; padding: 0.6rem 2.5rem; font-weight: 600; }
 #root .landing .sign-in:hover { filter: brightness(0.93); }
+/* The refusal screen's two ways forward share a row, wrapping onto two on a narrow phone. */
+#root .sign-in-error-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+#root .sign-in-error-actions .sign-in { flex: 1 1 auto; }
+@media (min-width: 48rem) { #root .sign-in-error-actions .sign-in { flex: 0 0 auto; } }
+#root .sign-in-error-copied { margin: 0.6rem 0 0; font-size: 0.9rem; color: var(--accent); }
 #root .landing .sign-in-mark { color: #1f4e8c; font-weight: 700; margin-inline-end: 0.6rem; }
 /* A phone gets a full-width button, the easiest target; across a wider measure the same button
    would read as a banner, so it falls back to its content width on the start edge. */

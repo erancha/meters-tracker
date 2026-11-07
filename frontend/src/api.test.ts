@@ -8,6 +8,7 @@ const cfg: AppConfig = {
   clientId: "client123",
   apiUrl: "https://api.example.com",
   redirectUri: "https://app.example.com/",
+  adminEmail: "admin@example.com",
 };
 
 const live: Tokens = { id_token: "token", expires_at: Date.now() + 3_600_000 };
