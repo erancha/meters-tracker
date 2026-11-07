@@ -170,13 +170,15 @@ follow the chat with no reload. With neither section, the panel says `לא נק�
 
 Arrows on either side of the day's title move the chat and the panel one day back or forward, and
 a tap on the title opens the browser's date picker for any earlier day. No day after today can be
-shown, so the forward arrow is disabled on today. While an earlier day is shown, its title takes
+shown, so the forward arrow is disabled on today. While today's thread opens a new account, the
+title shows alone, without arrows or date picker. While an earlier day is shown, its title takes
 the warning color, and a `היום` button beside it returns to today.
 
 The owner may type or send a photo while an earlier day is shown, for example to correct a
 reading saved that day. The composer then says `מוצג 30/10 · שינויים נרשמים היום`: what is sent is
 recorded under today, and today's thread shows it too. The earlier day's thread keeps showing the
-exchange below its own messages until the owner moves to another day.
+exchange below its own messages until the owner moves to another day. An earlier day with no
+reading has nothing to correct, so its composer is disabled and carries no such note.
 
 The panel opens 18 rem wide. Dragging the border between it and the chat sets its width, and so do
 the arrow keys while the border has focus. The panel stays at least 192 px wide and the chat at

@@ -27,7 +27,8 @@ function setup(
 ) {
   const onFocus = vi.fn();
   render(<Sidebar messages={messages} tariffsMissing={tariffsMissing} onFocus={onFocus}
-                  day={day} today="2026-11-01" earlierFailed={earlierFailed} onDay={vi.fn()} />);
+                  day={day} today="2026-11-01" newAccount={false}
+                  earlierFailed={earlierFailed} onDay={vi.fn()} />);
   return onFocus;
 }
 

@@ -1,6 +1,7 @@
 /**
  * The chat screen of one day: the thread, the failure notices, and the composer, driven by
- * useChat. On an earlier day the composer notes that what is sent now is recorded today.
+ * useChat. On an earlier day the composer notes that what is sent now is recorded today; a closed
+ * day, an earlier one with no reading to correct, disables the composer and drops the note.
  */
 import type { Api } from "../api";
 import { jerusalemDay, shownDayMonth } from "../messageTime";
@@ -10,12 +11,13 @@ import { useChat } from "../useChat";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 
-export function Chat({ api, day, onOpen, focus = null }: {
+export function Chat({ api, day, onOpen, focus = null, closed = false }: {
   api: Api;
   /** The day shown, as a stamp's date part. */
   day: string;
   onOpen: (src: string) => void;
   focus?: Focus | null;
+  closed?: boolean;
 }) {
   const {
     messages, snapshot, sendText, sendPhotos, choose, choosing, pending, failed, rejected,
@@ -30,8 +32,9 @@ export function Chat({ api, day, onOpen, focus = null }: {
                    focus={focus} />
       {failed && <div className="alert" role="alert">{texts.turnFailed}</div>}
       {rejected && <div className="alert" role="alert">{texts.imageRejected}</div>}
-      <Composer onSend={sendText} onPhotos={sendPhotos} locked={locked}
-                notice={day === jerusalemDay() ? null : texts.earlierDayNotice(shownDayMonth(day))} />
+      <Composer onSend={sendText} onPhotos={sendPhotos} locked={locked || closed}
+                notice={closed || day === jerusalemDay()
+                  ? null : texts.earlierDayNotice(shownDayMonth(day))} />
     </div>
   );
 }

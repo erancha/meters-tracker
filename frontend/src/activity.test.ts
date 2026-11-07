@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { dayActivity } from "./activity";
+import { dayActivity, opensNewAccount } from "./activity";
+import { texts } from "./texts";
 import { message } from "./testChat";
 import type { Message, Reading } from "./types";
 
@@ -47,5 +48,15 @@ describe("dayActivity", () => {
 
   it("leaves out a photo on its way, which has no stored key yet", () => {
     expect(dayActivity([photo("1", { image_key: null })]).held).toEqual([]);
+  });
+});
+
+describe("opensNewAccount", () => {
+  it("spots the welcome of a new account and nothing else", () => {
+    const welcome = message("assistant", `${texts.newAccountOpener}\nאפשר להתחיל`);
+
+    expect(opensNewAccount([welcome, photo("2026-11-07T09:00:00")])).toBe(true);
+    expect(opensNewAccount([message("assistant", "שלום"), message("user", texts.newAccountOpener)]))
+      .toBe(false);
   });
 });

@@ -26,7 +26,7 @@ const ask: Message = {
 function strip(messages: Message[], onFocus: (at: string) => void, tariffsMissing: boolean) {
   return (
     <DayStrip messages={messages} tariffsMissing={tariffsMissing} onFocus={onFocus}
-              day="2026-11-01" today="2026-11-01" earlierFailed={[]} onDay={vi.fn()} />
+              day="2026-11-01" today="2026-11-01" newAccount={false} earlierFailed={[]} onDay={vi.fn()} />
   );
 }
 

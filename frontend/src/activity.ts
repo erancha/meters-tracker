@@ -3,7 +3,8 @@
  * and the photos that still need something. Failed outranks anything the photo read; a stored
  * photo with neither mark nor reading is one the model has not answered yet. dayLines turns each
  * list into text lines, the held list followed by the photos still failed from earlier days, each
- * naming its date; tariffsAsk finds the card asking for missing tariffs.
+ * naming its date, and hasLines tells whether either list has one; opensNewAccount spots the
+ * welcome of a new account; tariffsAsk finds the card asking for missing tariffs.
  */
 import { shownClock, shownDayMonth } from "./messageTime";
 import { texts } from "./texts";
@@ -69,6 +70,15 @@ export function dayLines(
     ],
   };
 }
+
+export function hasLines(messages: Message[], earlierFailed: Message[]): boolean {
+  const { saved, held } = dayLines(messages, earlierFailed);
+  return saved.length + held.length > 0;
+}
+
+/** The messages hold the welcome of a new owner's account, which has no other day yet. */
+export const opensNewAccount = (messages: Message[]) =>
+  messages.some((m) => m.role === "assistant" && m.text?.startsWith(texts.newAccountOpener));
 
 export const tariffsAsk = (messages: Message[]) =>
   [...messages].reverse().find((m) => m.card?.kind === "tariffs_ask");

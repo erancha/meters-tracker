@@ -63,6 +63,8 @@ export const texts = {
   heldShort: (n: number) => `${HELD_WORD} ${n}`,
   closeList: "סגירת הרשימה",
   held: { awaiting: "לאישור", failed: "לשליחה", reading: "בקריאה" },
+  // The opening line of the backend's welcome to a new owner's account (texts.welcome).
+  newAccountOpener: "שלום. החשבון חדש ועדיין ריק.",
   noReadingsToday: "לא נקראו מונים היום",
   noReadingsThatDay: "לא נקראו מונים ביום זה",
   tariffsMissing: "חסרים תעריפים",

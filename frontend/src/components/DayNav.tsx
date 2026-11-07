@@ -1,16 +1,18 @@
 /**
  * Moves the chat between days: a button for the previous and the next day around the shown day's
  * label, the browser's date picker on a tap on the label, and a chip back to today while an
- * earlier day is shown. No day after today can be shown.
+ * earlier day is shown. No day after today can be shown; a new account has no other day, so only
+ * the label shows.
  */
 import { shiftDay } from "../messageTime";
 import { texts } from "../texts";
 import { Icon } from "./Icon";
 
-export function DayNav({ day, today, label, onDay }: {
+export function DayNav({ day, today, newAccount, label, onDay }: {
   /** The day shown, as a stamp's date part. */
   day: string;
   today: string;
+  newAccount: boolean;
   label: string;
   onDay: (day: string) => void;
 }) {
@@ -18,6 +20,7 @@ export function DayNav({ day, today, label, onDay }: {
   const pick = (value: string) => {
     if (value !== "") onDay(value > today ? today : value);
   };
+  if (newAccount) return <span className="day-nav"><span>{label}</span></span>;
   return (
     <span className="day-nav">
       <button type="button" className="day-step" aria-label={texts.previousDay}

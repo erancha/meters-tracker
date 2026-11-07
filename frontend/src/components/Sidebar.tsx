@@ -23,6 +23,8 @@ export interface DayView {
   /** The day the chat shows, as a stamp's date part. */
   day: string;
   today: string;
+  /** Today's thread opens a new account, so there is no other day to move to. */
+  newAccount: boolean;
   onDay: (day: string) => void;
 }
 
@@ -65,14 +67,14 @@ function Section({ kind, title, lines, onFocus }: {
 }
 
 export function Sidebar(
-  { messages, earlierFailed, tariffsMissing, onFocus, day, today, onDay }: DayView,
+  { messages, earlierFailed, tariffsMissing, onFocus, day, today, newAccount, onDay }: DayView,
 ) {
   const { saved, held } = dayLines(messages, earlierFailed);
   const isToday = day === today;
   return (
     <aside className="sidebar" aria-label={texts.dayTitle}>
       <h2>
-        <DayNav day={day} today={today} onDay={onDay}
+        <DayNav day={day} today={today} newAccount={newAccount} onDay={onDay}
                 label={isToday ? `${texts.dayTitle} · ${shownDay(day)}` : shownDay(day)} />
       </h2>
       {tariffsMissing && <TariffsAlert ask={tariffsAsk(messages)} onFocus={onFocus} />}

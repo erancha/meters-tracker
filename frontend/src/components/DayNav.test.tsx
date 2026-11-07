@@ -6,9 +6,9 @@ import { DayNav } from "./DayNav";
 
 const TODAY = "2026-11-05";
 
-function setup(day: string) {
+function setup(day: string, newAccount = false) {
   const onDay = vi.fn();
-  render(<DayNav day={day} today={TODAY} label="label" onDay={onDay} />);
+  render(<DayNav day={day} today={TODAY} newAccount={newAccount} label="label" onDay={onDay} />);
   return onDay;
 }
 
@@ -45,5 +45,13 @@ describe("DayNav", () => {
     fireEvent.change(picker, { target: { value: "2026-12-01" } });
 
     expect(onDay.mock.calls).toEqual([["2026-10-12"], [TODAY]]);
+  });
+
+  it("shows only the label on a new account", () => {
+    setup(TODAY, true);
+
+    expect(screen.getByText("label")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByLabelText(texts.pickDay)).toBeNull();
   });
 });

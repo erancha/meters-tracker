@@ -14,7 +14,7 @@ import { LineList, TariffsAlert, type DayView } from "./Sidebar";
 type List = "held" | "saved";
 
 export function DayStrip(
-  { messages, earlierFailed, tariffsMissing, onFocus, day, today, onDay }: DayView,
+  { messages, earlierFailed, tariffsMissing, onFocus, day, today, newAccount, onDay }: DayView,
 ) {
   const [open, setOpen] = useState<List | null>(null);
   const lines = dayLines(messages, earlierFailed);
@@ -31,7 +31,7 @@ export function DayStrip(
     <section className={shown.length > 0 ? "day-strip open" : "day-strip"}
              aria-label={texts.dayTitle}>
       <div className="day-strip-row">
-        <DayNav day={day} today={today} onDay={onDay}
+        <DayNav day={day} today={today} newAccount={newAccount} onDay={onDay}
                 label={day === today
                   ? `${texts.dayTitle} ${shownDayMonth(day)}` : shownDayMonth(day)} />
         <span className="chips">

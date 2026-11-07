@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import type { Api } from "../api";
+import { hasLines, opensNewAccount } from "../activity";
 import { useAppConfig, useMinWidth } from "../useAppConfig";
 import { useChatQuery } from "../useChat";
 import { Chat } from "./Chat";
@@ -40,6 +41,7 @@ export function App({ email, api, onSignOut }: { email: string; api: Api; onSign
     tariffsMissing: history.data?.snapshot.tariffs_missing ?? false,
     day,
     today,
+    newAccount: todayHistory.data !== undefined && opensNewAccount(todayHistory.data.messages),
     onDay: show,
     onFocus: (at: string) => {
       const target = at.slice(0, 10);
@@ -52,7 +54,8 @@ export function App({ email, api, onSignOut }: { email: string; api: Api; onSign
       <Header email={email} onSignOut={onSignOut} />
       {wide === false && <DayStrip {...dayView} />}
       <div className="columns" style={panel.style}>
-        <Chat api={api} day={day} onOpen={setOpened} focus={focus} />
+        <Chat api={api} day={day} onOpen={setOpened} focus={focus}
+              closed={day !== today && !hasLines(dayView.messages, dayView.earlierFailed)} />
         {wide && (
           <>
             <PanelResizer width={panel.width} resize={panel.resize} />

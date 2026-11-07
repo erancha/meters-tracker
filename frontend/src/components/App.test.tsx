@@ -88,6 +88,21 @@ describe("App", () => {
     ));
   });
 
+  it("closes the composer on an earlier day with no reading", async () => {
+    stubScreen(900, 899);
+    installResizeObserver();
+    const api = await setup();
+    const served = await api.getChat(jerusalemDay());
+    (api.getChat as Mock).mockResolvedValue({ ...served, messages: [] });
+
+    await userEvent.click(await screen.findByRole("button", { name: texts.previousDay }));
+
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: texts.attach }))
+      .toBeDisabled());
+    expect(screen.getByPlaceholderText(texts.composerPlaceholder)).toBeDisabled();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("moves to the day of an earlier failed photo tapped in today's list", async () => {
     stubScreen(900, 900);
     installResizeObserver();
