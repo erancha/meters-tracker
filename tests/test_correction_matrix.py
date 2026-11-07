@@ -998,9 +998,13 @@ def _answer_photo(run: Run, card, last: bool) -> str:
     raise AssertionError(f"{run.case.id}: photo card {card['kind']} offers {offered}")
 
 
+# The cards a later photo may meet on its way to a saved reading. A jump card is among them: a
+# state whose history is sparse, such as a vacant apartment, makes the walk's daily photos read
+# as implausibly high, and confirming saves them as they are.
 PHOTO_STEPS = (
     "reading",
     "duplicate",
+    "jump",
     "swap",
     "propose_reclose",
     "open_period",
