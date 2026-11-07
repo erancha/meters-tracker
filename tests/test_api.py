@@ -17,7 +17,7 @@ from handlers import api
 
 USER_EMAIL = ACCOUNT
 TOO_LARGE = 4 * 1024 * 1024 + 1
-EMPTY_SNAPSHOT = {"card": None, "waiting": 0, "tariffs_missing": False}
+EMPTY_SNAPSHOT = {"card": None, "queued": [], "tariffs_missing": False}
 
 
 def event(route, body=None, key=None, email=USER_EMAIL, email_verified="true", query=None):
@@ -76,7 +76,7 @@ def test_get_chat_returns_history_and_snapshot(kit):
     body = _body(result)
     assert body["messages"][0]["role"] == "user"
     assert body["snapshot"]["card"]["kind"] == "reading"
-    assert body["snapshot"]["waiting"] == 0
+    assert body["snapshot"]["queued"] == []
     assert body["admin"] is False
     assert body["earlier_failed"] == []
 

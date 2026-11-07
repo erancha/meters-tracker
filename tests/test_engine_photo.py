@@ -239,7 +239,7 @@ def test_retake_replaces_the_unreadable_card(env, ddb):
     kit.send_photo(water(None, unreadable=True))
     result = kit.send_photo(water(1250))
     assert result.snapshot.card["kind"] == "reading"
-    assert result.snapshot.waiting == 0
+    assert len(result.snapshot.queued) == 0
     assert len(kit.store.pending(USER.email)) == 1
 
 
@@ -250,10 +250,67 @@ def test_two_photos_show_oldest_first_and_confirm_pulls_next(env, ddb):
     first = kit.send_photo(electricity())
     second = kit.send_photo(water())
     assert second.snapshot.card == first.snapshot.card
-    assert second.snapshot.waiting == 1
+    assert second.snapshot.queued == [second.replies[-1].card["pending"]]
+    assert [r.card["pending"] for r in second.replies if r.card] == second.snapshot.queued
     result = kit.choose("confirm")
     assert result.snapshot.card == second.replies[-1].card
-    assert result.snapshot.waiting == 0
+    assert len(result.snapshot.queued) == 0
+
+
+def test_confirm_shows_the_next_card_again_at_the_end_of_the_chat(env, ddb):
+    kit = Kit()
+    apartment = _electric_apartment(kit, display_choice=0)
+    kit.meter(apartment, "W-1250", "water", [reading("2026-10-01", 1000, opens="2026-10-01")])
+    kit.send_photo(electricity())
+    second = kit.send_photo(water()).replies[-1].card
+    result = kit.choose("confirm")
+    assert result.replies[-1].card == second
+    [latest] = kit.store.messages(USER.email, kit.today.isoformat())[-1:]
+    assert latest["card"] == second
+
+
+def test_a_photo_card_names_its_photo(env, ddb):
+    kit = Kit()
+    _electric_apartment(kit, display_choice=0)
+    result = kit.send_photo(electricity())
+    assert result.snapshot.card["photo"] == result.image_key
+
+
+def test_a_photo_sent_before_an_unreadable_card_showed_is_no_retake_of_it(env, ddb):
+    kit = Kit()
+    _water_apartment(kit, [reading("2026-10-01", 1000, opens="2026-10-01")])
+    first = kit.send_photo(water(None, unreadable=True)).snapshot.card
+    # Several photos in flight together: the next one was sent before this card was shown.
+    [item] = kit.store.pending(USER.email)
+    item["data"]["unreadable_at"] = "2999-01-01T00:00:00.000000_0000"
+    kit.store.put_pending(USER.email, item)
+    kit.send_photo(water(None, unreadable=True))
+    assert first["pending"] in {i["seq"] for i in kit.store.pending(USER.email)}
+    assert len(kit.store.pending(USER.email)) == 2
+
+
+def test_an_older_photo_read_during_a_turn_is_not_shown_again(env, ddb):
+    kit = Kit()
+    apartment = _electric_apartment(kit, display_choice=0)
+    kit.meter(apartment, "W-1250", "water", [reading("2026-10-01", 1000, opens="2026-10-01")])
+    shown = kit.send_photo(electricity()).snapshot.card
+    [item] = kit.store.pending(USER.email)
+    read = kit.model.read_meter
+
+    def older_photo_finishes(image, media_type):
+        # A photo sent before the shown one finishes its read while this turn runs.
+        older = {**item, "seq": "2000-01-01T00:00:00.000000_0000", "data": dict(item["data"])}
+        kit.store.put_pending(USER.email, older)
+        return read(image, media_type)
+
+    kit.model.read_meter = older_photo_finishes
+    result = kit.send_photo(water())
+    assert result.snapshot.card["pending"] != shown["pending"]
+    assert [r.card["kind"] for r in result.replies if r.card] == ["reading"]
+    assert result.replies[-1].card["pending"] not in (
+        shown["pending"],
+        result.snapshot.card["pending"],
+    )
 
 
 def test_unreadable_digit_asks_for_retake_or_value(env, ddb):
@@ -315,7 +372,7 @@ def test_photo_still_within_the_lambda_timeout_stays_in_the_queue(env, ddb):
     kit = Kit()
     _photo_being_read(kit, seconds_ago=kit.engine.lambda_timeout.total_seconds() - 5)
     snapshot = kit.engine.snapshot(USER)
-    assert (snapshot.card, snapshot.waiting) == (None, 1)
+    assert (snapshot.card, len(snapshot.queued)) == (None, 1)
 
 
 def test_photo_read_past_the_lambda_timeout_asks_for_a_retake(env, ddb):
@@ -513,15 +570,26 @@ def test_an_electricity_photo_is_identified_by_its_handwritten_label(env, ddb):
     assert [r["value"] for r in kit.readings("כניסה_מזרח")] == [392000, 392691]
 
 
-def test_an_electricity_photo_with_no_label_asks_for_the_serial(env, ddb):
+def test_an_electricity_photo_with_no_label_asks_for_the_label(env, ddb):
     kit = Kit()
     result = kit.send_photo(electricity(label=None))
-    assert result.snapshot.card["kind"] == "unreadable"
+    card = result.snapshot.card
+    assert card["kind"] == "unreadable"
+    assert texts.UNREADABLE_LABEL in card["title"]
+    assert "אפשר לכתוב את השם" in card["lines"][-1]
     [item] = kit.store.pending(USER.email)
     assert (item["data"]["serial"], item["data"]["unreadable"]) == (
         None,
-        [texts.UNREADABLE_SERIAL],
+        [texts.UNREADABLE_LABEL],
     )
+
+
+def test_a_water_photo_with_no_serial_asks_for_the_serial(env, ddb):
+    kit = Kit()
+    result = kit.send_photo(water(serial=None))
+    assert result.snapshot.card["kind"] == "unreadable"
+    [item] = kit.store.pending(USER.email)
+    assert item["data"]["unreadable"] == [texts.UNREADABLE_SERIAL]
 
 
 def test_an_electricity_label_one_character_off_a_live_meter_is_a_new_meter(env, ddb):

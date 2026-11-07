@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { ApiError } from "./api";
-import { card, fakeApi, message, snapshot, wrapper } from "./testChat";
+import { card, fakeApi, message, queued, snapshot, wrapper } from "./testChat";
 import { useChat } from "./useChat";
 import type { Mock } from "vitest";
 import { jerusalemDay, shiftDay } from "./messageTime";
@@ -10,18 +10,18 @@ const TODAY = jerusalemDay();
 
 describe("useChat", () => {
   it("loads the history and the snapshot", async () => {
-    const api = fakeApi({ messages: [message("user", "שלום")], snapshot: snapshot(card(), 1) });
+    const api = fakeApi({ messages: [message("user", "שלום")], snapshot: snapshot(card(), queued(1)) });
     const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
 
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
-    expect(result.current.snapshot).toEqual(snapshot(card(), 1));
+    expect(result.current.snapshot).toEqual(snapshot(card(), queued(1)));
   });
 
   it("writes the user text, the replies and the snapshot into the query cache", async () => {
     const api = fakeApi({ messages: [], snapshot: snapshot(null) });
     (api.postTurn as Mock).mockResolvedValue({
       replies: [{ text: "הבנתי", card: card(), image_key: null }],
-      snapshot: snapshot(card(), 3),
+      snapshot: snapshot(card(), queued(3)),
       image_key: null,
     });
     const w = wrapper();
@@ -29,7 +29,7 @@ describe("useChat", () => {
     await waitFor(() => expect(result.current.snapshot).not.toBeUndefined());
     (api.getChat as Mock).mockResolvedValue({
       messages: [message("user", "היי"), message("assistant", "הבנתי")],
-      snapshot: snapshot(card(), 3),
+      snapshot: snapshot(card(), queued(3)),
     });
 
     await act(async () => result.current.sendText("היי"));
@@ -39,7 +39,7 @@ describe("useChat", () => {
       ["user", "היי"],
       ["assistant", "הבנתי"],
     ]);
-    expect(result.current.snapshot?.waiting).toBe(3);
+    expect(result.current.snapshot?.queued).toHaveLength(3);
     expect(w.client.getQueryData(["chat", TODAY])).toBeDefined();
   });
 
@@ -171,9 +171,9 @@ describe("useChat polling", () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it("polls the chat while items wait, until the card arrives", async () => {
-    const api = fakeApi({ messages: [], snapshot: snapshot(null, 1) });
+    const api = fakeApi({ messages: [], snapshot: snapshot(null, queued(1)) });
     const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
-    await waitFor(() => expect(result.current.snapshot?.waiting).toBe(1));
+    await waitFor(() => expect(result.current.snapshot?.queued).toHaveLength(1));
     (api.getChat as Mock).mockResolvedValue({ messages: [], snapshot: snapshot(card()) });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
@@ -185,9 +185,9 @@ describe("useChat polling", () => {
   });
 
   it("does not poll while a card is live, though more items wait behind it", async () => {
-    const api = fakeApi({ messages: [], snapshot: snapshot(card(), 2) });
+    const api = fakeApi({ messages: [], snapshot: snapshot(card(), queued(2)) });
     const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
-    await waitFor(() => expect(result.current.snapshot?.waiting).toBe(2));
+    await waitFor(() => expect(result.current.snapshot?.queued).toHaveLength(2));
 
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
 
@@ -195,10 +195,10 @@ describe("useChat polling", () => {
   });
 
   it("does not poll while a turn is in flight", async () => {
-    const api = fakeApi({ messages: [], snapshot: snapshot(null, 1) });
+    const api = fakeApi({ messages: [], snapshot: snapshot(null, queued(1)) });
     (api.postTurn as Mock).mockReturnValue(new Promise(() => {}));
     const { result } = renderHook(() => useChat(api, TODAY), { wrapper: wrapper().Wrapper });
-    await waitFor(() => expect(result.current.snapshot?.waiting).toBe(1));
+    await waitFor(() => expect(result.current.snapshot?.queued).toHaveLength(1));
 
     await act(async () => result.current.sendText("היי"));
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
@@ -228,7 +228,7 @@ describe("useChat photos", () => {
 
   const photoReply = (n: number) => ({
     replies: [{ text: `תמונה ${n}`, card: null, image_key: null }],
-    snapshot: snapshot(card({ pending: `p${n}` }), 3 - n),
+    snapshot: snapshot(card({ pending: `p${n}` }), queued(3 - n)),
     image_key: `k${n}`,
   });
 

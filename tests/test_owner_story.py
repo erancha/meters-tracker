@@ -130,7 +130,7 @@ def _periods(owner):
 def _welcome(owner):
     messages, snapshot = owner.load()
     assert [m["text"] for m in messages] == [texts.welcome(OWNER, ACCOUNT)]
-    assert (snapshot.card, snapshot.waiting) == (None, 0)
+    assert (snapshot.card, len(snapshot.queued)) == (None, 0)
 
 
 def _ask_property(owner, result, serial):
@@ -225,7 +225,7 @@ def _close_by_reading(owner):
     assert ask.card["kind"] == "tariffs_ask"
     lacks = [texts.report_gap("no_meter", "water"), texts.report_gap("no_price", "electricity")]
     assert held.text == texts.report_held(PROPERTY, APARTMENT, date(2026, 9, 1), lacks)
-    assert (result.snapshot.card, result.snapshot.waiting) == (ask.card, 0)
+    assert (result.snapshot.card, len(result.snapshot.queued)) == (ask.card, 0)
     assert result.snapshot.card["options"] == []
     assert _periods(owner) == [("2026-09-01", 2, "2026-10-29"), ("2026-10-30", 2, None)]
     closing = owner.kit.readings(LABEL)[-1]
@@ -250,7 +250,7 @@ def _price_by_typing(owner):
         "חשמל: ₪ 0.6432 לקוט״ש",
         "מים: ₪ 15.62 לקוב",
         "כולל מע״מ.",
-        "בתוקף מ־29/10/2026 (תאריך סגירת התקופה)",
+        "בתוקף מ־29/10/2026 (תאריך קריאת הסגירה)",
     ]
     assert _labelled(card) == [("confirm", "אישור ושמירה")]
 
@@ -279,7 +279,7 @@ def _link_water(owner):
 
     result = owner.photo(_water(WATER_OPENING))
     card = result.snapshot.card
-    assert (card["kind"], result.snapshot.waiting) == ("property", 0)
+    assert (card["kind"], len(result.snapshot.queued)) == ("property", 0)
     assert card["title"] == f"מונה מים {WATER_SERIAL} עדיין לא מקושר לדירה. לאיזה נכס הוא שייך?"
     assert card["lines"] == ["אפשר לבחור נכס קיים, או לכתוב כתובת של נכס חדש."]
     assert _labelled(card) == [("name_0", PROPERTY)]
@@ -380,10 +380,12 @@ def test_a_photo_sent_while_tariffs_are_asked_is_shown_ahead_of_the_request(env,
     _close_by_reading(owner)
     ask = owner.card()
     result = owner.photo(_water(WATER_OPENING))
-    assert (result.snapshot.card["kind"], result.snapshot.waiting) == ("property", 1)
+    assert (result.snapshot.card["kind"], len(result.snapshot.queued)) == ("property", 1)
     result = owner.say(CANCEL, IntentResult(intent="reject"))
-    assert _texts(result) == [texts.discarded()]
-    assert (result.snapshot.card, result.snapshot.waiting) == (ask, 0)
+    # The request for tariffs, shown before the photo, is shown again at the end of the chat.
+    assert [r.card for r in result.replies] == [None, ask]
+    assert result.replies[0].text == texts.discarded()
+    assert (result.snapshot.card, len(result.snapshot.queued)) == (ask, 0)
 
 
 def test_typed_tariffs_price_the_closed_period(env, ddb):

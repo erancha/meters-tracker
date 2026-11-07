@@ -81,7 +81,7 @@ def test_the_question_comes_before_a_waiting_card_and_its_answer_never_reaches_i
     waiting = kit.send_photo(water(900, serial=SERIAL)).snapshot.card
     asked = _say(kit, edit("value", None, _target(OPENED)))
     assert asked.snapshot.card["kind"] == "question"
-    assert asked.snapshot.waiting == 1
+    assert len(asked.snapshot.queued) == 1
     result = _say(kit, edit(None, "843"), "843")
     assert result.snapshot.card["kind"] == "correction"
     kit.choose("confirm")

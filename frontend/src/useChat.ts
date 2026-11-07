@@ -28,8 +28,8 @@
  *
  * A photo the model is still reading when the gateway gives up arrives later as a card, which
  * no response carries; so while no card is shown, items wait and no turn is in flight, the chat
- * is polled. With a card shown, the waiting count includes cards queued behind it, which only
- * change after the user answers.
+ * is polled. With a card shown, the queued items include cards behind it, which only change after
+ * the user answers.
  */
 import { useEffect, useRef, useState } from "react";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -94,7 +94,7 @@ export function useChatQuery(api: Api, day: string, poll = false) {
     queryFn: () => api.getChat(day),
     // The interval is first asked for before the first load, while there is no data.
     refetchInterval: ({ state: { data } }) =>
-      poll && data !== undefined && data.snapshot.card === null && data.snapshot.waiting > 0
+      poll && data !== undefined && data.snapshot.card === null && data.snapshot.queued.length > 0
         ? POLL_MS : false,
   });
 }

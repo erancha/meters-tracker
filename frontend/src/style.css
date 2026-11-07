@@ -92,6 +92,12 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 #root .msg-failed button { font: inherit; padding: 0.1rem 0.6rem; border: 1px solid var(--accent-border); border-radius: 999px; background: var(--card); color: var(--accent); cursor: pointer; }
 #root .msg.photo .shots { display: flex; gap: 0.3rem; }
 #root .msg.focused { outline: 2px solid var(--accent); outline-offset: 2px; }
+#root .msg.live { border: 2px solid var(--accent); }
+#root .msg.queued { opacity: 0.7; border-style: dashed; }
+#root .card-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+#root .card-tag { margin: 0; font-size: 0.72rem; font-weight: 600; color: var(--accent); }
+#root .msg.queued .card-tag { color: var(--muted); }
+#root .card-photo img { display: block; width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
 
 #root .card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; font-weight: 600; margin-bottom: 0.4rem; }
 #root .kind { font-size: 0.75rem; font-weight: 600; border-radius: 999px; padding: 0.05rem 0.55rem; }
@@ -135,7 +141,7 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 #root .alert { margin: 1rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--warn-soft); border: 1px solid #f0d6a8; color: var(--warn); }
 #root .text { white-space: pre-line; }
 
-#root .msg.photo .shot { display: block; padding: 0; border: 0; background: none; cursor: pointer; }
+#root .msg.photo .shot, #root .card-photo .shot { display: block; padding: 0; border: 0; background: none; cursor: pointer; }
 #root .msg.photo img { display: block; width: 168px; height: auto; border-radius: 8px; }
 #root .msg.photo .shots img { width: 128px; }
 #root .lightbox {

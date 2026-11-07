@@ -111,7 +111,8 @@ def _name_options(d) -> dict[str, str]:
 
 
 # The apartment question's button for the handwritten label, which the owner usually writes
-# beside the meter to name the apartment.
+# beside the meter to name the apartment. Its text names the label as a new apartment, so
+# pressing it chooses the name as new.
 LABEL_OPTION = "name_label"
 
 
@@ -205,9 +206,11 @@ def default_field(item) -> str:
 
 def edit(engine, user, item, field, value):
     """The period question asks for a date, so a date named there is its answer, not the
-    reading's own."""
+    reading's own. Naming the property or apartment the card already holds changes nothing."""
     data = item["data"]
     if field in ("property", "apartment"):
+        if data[field] == value:
+            return
         if data["apartment"] is not None:
             _forget_period(data)
         data[field] = value
@@ -351,7 +354,10 @@ def answer(engine, user, item, action) -> list[Reply]:
         edit(engine, user, item, step, _name_options(data)[key])
         return next_step(engine, user, item)
     if step == "apartment" and key in _apartment_options(data):
-        edit(engine, user, item, step, _apartment_options(data)[key])
+        name = _apartment_options(data)[key]
+        if key == LABEL_OPTION:
+            data["accepted_new"].append(name)
+        edit(engine, user, item, step, name)
         return next_step(engine, user, item)
     if step in ("property_near", "apartment_near") and key in NEAR_OPTIONS:
         field, typed, match = data["near"]

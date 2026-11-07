@@ -28,9 +28,11 @@ A text or photo is stored before it is handled, so when handling fails the messa
 failed and a retry handles that same message again, with no second message. A retried photo is
 read from its stored copy and keeps the day it was sent as its reading date.
 
-The snapshot is the first awaiting item's card, else the oldest standby item's, plus the count of
-items behind it and whether a request for tariffs is open, even behind other cards; the browser
-shows it and never orders the queue itself. A photo still being read after the api Lambda's time
+The snapshot is the first awaiting item's card, else the oldest standby item's, plus the seqs of
+the items queued behind it and whether a request for tariffs is open, even behind other cards; the
+browser shows it and never orders the queue itself. A turn that ends the shown card and moves the
+queue to a card shown earlier shows that card again at the end of the chat, so the card the next
+message answers is always the latest one. A photo still being read after the api Lambda's time
 limit was being read by an invocation that was killed, so the snapshot turns it into a retake card
 and the queue clears. "Today" is the injected clock throughout, including the date prefix of every
 pending seq and message timestamp, so the once-a-day greeting and the reading dates agree on what
@@ -205,10 +207,11 @@ class Engine:
         return f"{self.clock().isoformat()}T{time_of_day}_{secrets.token_hex(2)}"
 
     def turn(self, user, action: Action) -> TurnResult:
+        before = self.snapshot(user).card
         if action.retry is not None:
-            return self._result(user, self._retry(user, action.retry))
+            return self._result(user, before, self._retry(user, action.retry))
         if action.choice is not None:
-            return self._result(user, self._choose(user, action))
+            return self._result(user, before, self._choose(user, action))
         if action.image is not None:
             seq = self.stamp()
             image_key = self.files.put_image(user.account, seq, action.image, action.media_type)
@@ -229,16 +232,39 @@ class Engine:
                     message["at"],
                 ),
             )
-            return self._result(user, replies, image_key)
+            return self._result(user, before, replies, image_key)
         message = self._append(user, "user", action.text)
-        return self._result(user, self._handle(user, message, lambda: self._text(user, action)))
+        replies = self._handle(user, message, lambda: self._text(user, action))
+        return self._result(user, before, replies)
 
-    def _result(self, user, replies: list[Reply], image_key=None) -> TurnResult:
-        """The turn's replies and the snapshot after it, the card it shows rebuilt first."""
+    def _result(self, user, before, replies: list[Reply], image_key=None) -> TurnResult:
+        """The turn's replies and the snapshot after it, the card it shows rebuilt first. before
+        is the card shown when the turn began."""
         reported = self._send_reports(user)
         self._say(user, [*replies, *reported])
         replies = [*replies, *reported, *self._renew_shown(user)]
-        return TurnResult(replies, self.snapshot(user), image_key)
+        snapshot = self.snapshot(user)
+        replies.extend(self._show_next(user, before, snapshot.card, replies))
+        return TurnResult(replies, snapshot, image_key)
+
+    def _show_next(self, user, before, after, replies: list[Reply]) -> list[Reply]:
+        """Shows the card the queue moved on to at the end of the chat, when the turn ended the
+        card that was shown and the next one was shown before, higher in the thread, so the card
+        the next message answers is always the latest one. A card the turn's replies show is not
+        repeated. A shown card that still waits did not end: an older photo whose read finished
+        during the turn only moved ahead of it, which several photos sent at once do."""
+        if before is None or after is None or after["pending"] == before["pending"]:
+            return []
+        pending = self.store.pending(user.email)
+        if any(
+            i["seq"] == before["pending"] and i["status"] in (AWAITING, STANDBY) for i in pending
+        ):
+            return []
+        if any(r.card is not None and r.card["pending"] == after["pending"] for r in replies):
+            return []
+        shown = [card_reply(after)]
+        self._say(user, shown)
+        return shown
 
     def _say(self, user, replies: list[Reply]):
         for reply in replies:
@@ -651,9 +677,10 @@ class Engine:
             i for i in queue if i["status"] == STANDBY
         ]
         if not shown:
-            return Snapshot(None, len(queue), missing)
+            return Snapshot(None, [i["seq"] for i in queue], missing)
         first = shown[0]
-        return Snapshot(self.flow(first).card(first), len(queue) - 1, missing)
+        behind = [i["seq"] for i in queue if i["seq"] != first["seq"]]
+        return Snapshot(self.flow(first).card(first), behind, missing)
 
     def load(self, user, day=None) -> tuple[list[dict], Snapshot]:
         """The messages of day, today when None, with the snapshot, its card rebuilt first. An

@@ -47,6 +47,7 @@ Building blocks:
 - with_apartment / dated_rows: resolving a typed apartment name; card rows with parsed dates
 """
 
+import copy
 from dataclasses import dataclass
 
 from common import account, corrections, texts
@@ -138,7 +139,9 @@ class Reply:
 @dataclass
 class Snapshot:
     card: dict | None
-    waiting: int
+    # The seqs of the queued items behind the card, in queue order; every queued item when no
+    # card shows.
+    queued: list[str]
     tariffs_missing: bool
 
 
@@ -164,7 +167,9 @@ def make_card(
 ) -> dict:
     """labels names the options whose label depends on the item (a date); the rest take their
     fixed label. default is the option the browser highlights as the expected answer, confirm
-    when the card offers it and none is given."""
+    when the card offers it and none is given. photo is the stored photo a meter photo's card
+    answers, so several photos sent at once each show beside their own reply; None on any
+    other card."""
     title, lines = text
     if default is None and "confirm" in options:
         default = "confirm"
@@ -181,6 +186,7 @@ def make_card(
         "lines": lines,
         "options": [{"id": option, "label": labels[option]} for option in options],
         "default": default,
+        "photo": item["data"]["image_key"] if item["kind"] in READING_KINDS else None,
     }
 
 
@@ -355,7 +361,8 @@ def apply_edits(engine, user, item, operations) -> list[Reply]:
     item as it was and shows the card again: with the field's question when the value is missing
     or invalid, and the card then holds that field as asked, else with what the card takes. Edits
     apply in the order of the form's fields, so a message means one thing whatever order the model
-    lists its operations in."""
+    lists its operations in. An edit that leaves the item as it was says so and shows the card
+    again."""
     flow = engine.flow(item)
     card = flow.card(item)
     form = flow.form(item)
@@ -373,8 +380,11 @@ def apply_edits(engine, user, item, operations) -> list[Reply]:
             current = texts.field_value(error.field.kind, form[error.field.name])
             return [Reply(error.field.question.format(current=current)), card_reply(card)]
     fields = list(form)
+    before = copy.deepcopy(item["data"])
     for name, value in sorted(edits, key=lambda edit: fields.index(edit[0])):
         flow.edit(engine, user, item, name, value)
+    if item["data"] == before:
+        return [Reply(texts.nothing_changed()), card_reply(card)]
     return flow.after_edit(engine, user, item)
 
 

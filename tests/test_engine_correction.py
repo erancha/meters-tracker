@@ -249,7 +249,7 @@ def test_correction_shows_ahead_of_a_waiting_card_then_that_card_returns(env, dd
     assert waiting["kind"] == "reading"
     result = _say(kit, edit("value", "943", _target(LATEST)))
     assert result.snapshot.card["kind"] == "correction"
-    assert result.snapshot.waiting == 1
+    assert len(result.snapshot.queued) == 1
     result = kit.choose("confirm")
     assert result.snapshot.card == waiting
     assert kit.readings(SERIAL)[-1]["value"] == 943
@@ -290,7 +290,7 @@ def test_a_new_correction_replaces_the_waiting_one_and_only_it_is_written(env, d
     assert result.replies[0].text == texts.correction_replaced()
     second = result.snapshot.card
     assert "845" in _text(second) and "843" not in _text(second)
-    assert result.snapshot.waiting == 0
+    assert len(result.snapshot.queued) == 0
     assert [i["kind"] for i in kit.store.pending(USER.email)] == ["correction"]
     with pytest.raises(AlreadyHandled):
         kit.choose_on(first, "confirm")

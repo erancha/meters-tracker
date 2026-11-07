@@ -12,7 +12,7 @@ const cfg: AppConfig = {
 
 const live: Tokens = { id_token: "token", expires_at: Date.now() + 3_600_000 };
 const expired: Tokens = { id_token: "token", expires_at: 0 };
-const snapshot = { card: null, waiting: 0 };
+const snapshot = { card: null, queued: [] };
 
 const stubFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -62,7 +62,7 @@ describe("createApi", () => {
 
   it("carries the snapshot of a 409 body on the ApiError", async () => {
     const stale = { card: { kind: "confirm", pending: "p", version: 2, title: "t", lines: [],
-                            options: [], default: null }, waiting: 1 };
+                            options: [], default: null }, queued: ["q0"] };
     stubFetch(new Response(JSON.stringify({ error: "already_handled", snapshot: stale }),
                            { status: 409 }));
 

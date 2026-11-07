@@ -270,7 +270,7 @@ def test_typed_tariffs_after_a_close_price_the_closed_period(env, ddb):
     result = kit.say("חשמל 0.5 מים 10")
     card = result.snapshot.card
     assert card["kind"] == "tariffs"
-    assert "בתוקף מ־31/10/2026 (תאריך סגירת התקופה)" in card_text(card)
+    assert "בתוקף מ־31/10/2026 (תאריך קריאת הסגירה)" in card_text(card)
     result = kit.choose("confirm")
     place, period = "הגפן 7 / עורף · ", "התקופה מ־01/09/2026: "
     assert result.replies[-1].text == texts.report_sent("הגפן 7", "עורף", date(2026, 9, 1), ACCOUNT)
@@ -366,7 +366,7 @@ def test_a_meter_photo_after_the_request_gets_a_working_card(env, ddb):
     _close(kit)
     result = kit.send_photo(electricity(top=392700, bottom=392702))
     assert result.snapshot.card["kind"] == "reading"
-    assert result.snapshot.waiting == 1
+    assert len(result.snapshot.queued) == 1
     assert kit.choose("confirm").snapshot.card["kind"] == "propose_reclose"
     result = kit.choose("keep_open")
     assert "392,700" in result.replies[0].text
@@ -397,7 +397,7 @@ def test_the_card_says_why_it_is_back_dated_to_the_close(env, ddb):
     _closable(kit)
     _close(kit)
     kit.say("חשמל 0.5 מים 10")
-    assert "בתוקף מ־31/10/2026 (תאריך סגירת התקופה)" in card_text(kit.card())
+    assert "בתוקף מ־31/10/2026 (תאריך קריאת הסגירה)" in card_text(kit.card())
     kit.say("מהיום")
     text = card_text(kit.card())
     assert "בתוקף מ־02/11/2026" in text and "סגירת התקופה" not in text
@@ -431,7 +431,7 @@ def test_a_close_date_corrected_while_tariffs_are_asked_moves_their_effective_da
     _closing_dates_moved(kit)
     kit.model.queue(_both_prices())
     card = kit.say("חשמל 0.5 מים 10").snapshot.card
-    assert "בתוקף מ־28/10/2026 (תאריך סגירת התקופה)" in card_text(card)
+    assert "בתוקף מ־28/10/2026 (תאריך קריאת הסגירה)" in card_text(card)
     result = kit.choose("confirm")
     assert [t["effective_date"] for t in kit.tariffs()] == ["2026-10-28"]
     assert result.snapshot.tariffs_missing is False
@@ -468,7 +468,7 @@ def test_a_statement_on_a_moved_close_takes_the_corrected_date(env, ddb):
     _close(kit)
     _closing_dates_moved(kit)
     card = kit.send_statement().snapshot.card
-    assert "בתוקף מ־28/10/2026 (תאריך סגירת התקופה)" in card_text(card)
+    assert "בתוקף מ־28/10/2026 (תאריך קריאת הסגירה)" in card_text(card)
 
 
 def test_a_statement_replaces_a_waiting_tariffs_card(env, ddb):
@@ -477,7 +477,7 @@ def test_a_statement_replaces_a_waiting_tariffs_card(env, ddb):
     result = kit.send_statement()
     assert result.snapshot.card["title"] == "תעריפים מחשבון קודם"
     assert [i["kind"] for i in kit.store.pending(USER.email)] == ["tariffs"]
-    assert result.snapshot.waiting == 0
+    assert len(result.snapshot.queued) == 0
 
 
 def test_an_unknown_photo_with_a_serial_is_not_read_as_a_statement(env, ddb):
@@ -497,9 +497,9 @@ def test_a_statement_answers_the_waiting_request(env, ddb):
     _close(kit)
     result = kit.send_statement()
     assert result.snapshot.card["title"] == "תעריפים מחשבון קודם"
-    assert "בתוקף מ־31/10/2026 (תאריך סגירת התקופה)" in card_text(result.snapshot.card)
+    assert "בתוקף מ־31/10/2026 (תאריך קריאת הסגירה)" in card_text(result.snapshot.card)
     assert [i["kind"] for i in kit.store.pending(USER.email)] == ["tariffs"]
-    assert result.snapshot.waiting == 0
+    assert len(result.snapshot.queued) == 0
 
 
 def test_cancel_drops_the_waiting_request(env, ddb):

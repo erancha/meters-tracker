@@ -1,9 +1,13 @@
 /**
  * The scrolling thread: history messages in order. A message with a card shows only the card
- * (its text repeats the card); the snapshot's card gets its buttons on the latest history
- * message carrying it, or at the end when none does. Choice messages are folded into their
- * cards. A photo shows as a thumbnail that opens the full-screen lightbox. A user message shows
- * its date and time, its latest retry's time, and a retry button while it has failed.
+ * (its text repeats the card); the snapshot's card gets its buttons and the live mark on the
+ * latest history message carrying it, or at the end when none does, and the latest card of each
+ * item queued behind it is marked as queued. A live or queued card shows a thumbnail of the photo
+ * it answers when it names one, so each waiting photo is shown once beside its card; answered
+ * cards show none, which keeps a long flow from repeating its photo on every step. Choice
+ * messages are folded into their cards. A photo shows as a thumbnail that opens the full-screen
+ * lightbox. A user message shows its date and time, its latest retry's time, and a retry button
+ * while it has failed.
  *
  * The thread keeps its end in view: whenever the list changes size (a bubble or the thinking
  * line appears, a photo decodes, the window reflows) the page scrolls to its bottom. The
@@ -22,6 +26,10 @@ import { CardView } from "./CardView";
 import { Thumbnail } from "./Thumbnail";
 
 const FOCUS_MS = 1500;
+
+/** Where a card stands in the queue: the one the next message answers, one behind it, or done. */
+type Place = "live" | "queued" | null;
+const TAGS = { live: texts.liveCard, queued: texts.queuedCard };
 
 export function MessageList({
   api, messages, snapshot, onChoose, choosing, thinking, onOpen, onRetry, focus,
@@ -47,8 +55,10 @@ export function MessageList({
   const isLive = (c: Card | null) =>
     live !== null && c !== null && c.pending === live.pending && c.version === live.version;
   const liveIndex = entries.map((e) => isLive(e.message.card)).lastIndexOf(true);
-  // With no card shown, every waiting item is a photo the model is still reading.
-  const working = thinking || (live === null && snapshot.waiting > 0);
+  const queuedIndexes = new Set(snapshot.queued.map((seq) =>
+    entries.map((e) => e.message.card?.pending === seq).lastIndexOf(true)));
+  // With no card shown, every queued item is a photo the model is still reading.
+  const working = thinking || (live === null && snapshot.queued.length > 0);
   useEffect(() => {
     history.scrollRestoration = "manual";
     const follow = new ResizeObserver(() => {
@@ -73,11 +83,25 @@ export function MessageList({
   const isPhoto = (m: LocalMessage) => m.image_key !== null || m.localUrl !== undefined;
   const bubble = (m: LocalMessage) =>
     `msg ${m.role === "user" ? "user" : "bot"}${isPhoto(m) ? " photo" : ""}`;
+  const place = (i: number): Place =>
+    i === liveIndex ? "live" : queuedIndexes.has(i) ? "queued" : null;
+  // A waiting card's mark and the photo it answers, above the card itself.
+  const cardHead = (c: Card, at: Place) => at !== null && (
+    <div className="card-head">
+      {c.photo !== undefined && c.photo !== null && (
+        <div className="card-photo">
+          <Thumbnail imageKey={c.photo} api={api} onOpen={onOpen} />
+        </div>
+      )}
+      <p className="card-tag">{TAGS[at]}</p>
+    </div>
+  );
 
   return (
     <ul className="msgs" ref={list}>
       {entries.map(({ message: m, answer }, i) => (
-        <li key={i} className={`${bubble(m)}${m.at === focused ? " focused" : ""}`} data-at={m.at}>
+        <li key={i} className={`${bubble(m)} ${place(i) ?? ""}${m.at === focused ? " focused" : ""}`}
+            data-at={m.at}>
           {isPhoto(m) && (
             <div className="shots">
               {m.localUrl !== undefined
@@ -88,8 +112,11 @@ export function MessageList({
             </div>
           )}
           {m.card !== null
-            ? <CardView card={m.card} answer={answer} disabled={choosing}
-                        onChoose={i === liveIndex ? (o) => onChoose(m.card!, o) : undefined} />
+            ? <>
+                {cardHead(m.card, place(i))}
+                <CardView card={m.card} answer={answer} disabled={choosing}
+                          onChoose={i === liveIndex ? (o) => onChoose(m.card!, o) : undefined} />
+              </>
             : m.text !== null && <p className="text">{m.text}</p>}
           {m.role === "user" && (
             <p className="msg-time">
@@ -108,12 +135,10 @@ export function MessageList({
         </li>
       ))}
       {live !== null && liveIndex === -1 && (
-        <li className="msg bot">
+        <li className="msg bot live">
+          {cardHead(live, "live")}
           <CardView card={live} onChoose={(o) => onChoose(live, o)} disabled={choosing} />
         </li>
-      )}
-      {live !== null && snapshot.waiting > 0 && (
-        <li className="msg bot"><p className="muted">{texts.waiting(snapshot.waiting)}</p></li>
       )}
       {working && (
         <li className="msg bot thinking" role="status">

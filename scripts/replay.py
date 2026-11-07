@@ -119,7 +119,7 @@ def _show(step, answer, key):
         buttons = " | ".join(o["label"] for o in card["options"])
         lines = " / ".join(card["lines"])
         print(f"[card] {card['kind']} | {card['title']} | {lines} | buttons: {buttons}")
-    print(f"waiting: {answer['snapshot']['waiting']}")
+    print(f"queued: {len(answer['snapshot']['queued'])}")
 
 
 def _expect(step, answer, kind, key="replies") -> dict | None:

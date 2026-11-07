@@ -483,6 +483,50 @@ def test_the_apartment_question_offers_the_label_written_beside_the_meter(env, d
     assert names == {"קדמית", "כניסה מזרח"}
 
 
+def test_the_label_button_names_a_new_apartment_even_close_to_an_existing_one(env, ddb):
+    kit = Kit([edit("property", "לאונר 18")])
+    kit.apartment(name="ראשונה מזרח", property_name="לאונר 18")
+    kit.send_photo(water(serial="W-9", label="ראשונה מערב"))
+    kit.say("לאונר 18")
+    card = kit.choose("name_label").snapshot.card
+    assert card["kind"] == "period"
+    assert "לאונר 18 / ראשונה מערב" in card["title"]
+
+
+def test_naming_the_apartment_the_card_holds_changes_nothing_and_says_so(env, ddb):
+    kit = Kit(
+        [
+            edit("property", "לאונר 18"),
+            edit("apartment", "קדמית"),
+            edit("apartment", "קדמית"),
+        ]
+    )
+    kit.send_photo(water(serial="W-9"))
+    kit.say("לאונר 18")
+    asked = kit.say("קדמית").snapshot.card
+    result = kit.say("קדמית")
+    assert [r.text for r in result.replies if r.card is None] == [texts.nothing_changed()]
+    assert result.snapshot.card["kind"] == "period"
+    assert result.snapshot.card["version"] == asked["version"]
+
+
+def test_naming_the_apartment_on_the_summary_keeps_the_answered_period(env, ddb):
+    kit = Kit(
+        [
+            edit("property", "לאונר 18"),
+            edit("apartment", "קדמית"),
+            edit("apartment", "קדמית"),
+        ]
+    )
+    kit.send_photo(water(serial="W-9"))
+    kit.say("לאונר 18")
+    kit.say("קדמית")
+    assert kit.choose("start_today").snapshot.card["kind"] == "link"
+    result = kit.say("קדמית")
+    assert result.replies[0].text == texts.nothing_changed()
+    assert result.snapshot.card["kind"] == "link"
+
+
 def test_a_label_naming_an_existing_apartment_adds_no_button(env, ddb):
     kit = Kit([edit("property", "לאונר 18")])
     kit.apartment(name="קדמית", property_name="לאונר 18")

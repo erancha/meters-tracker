@@ -73,7 +73,7 @@ graph LR
   the function as `LAMBDA_TIMEOUT_SECONDS`. Each model attempt gives up after 25 seconds, with
   one retry. A photo still marked as being read once the limit has passed belonged to a killed
   invocation, so the next snapshot turns it into an unreadable card asking for a retake, and the
-  next photo replaces it.
+  next photo sent after that card replaces it.
 - **SES** — the api Lambda sends the period report through it (see Period report under
   [Cross-cutting mechanisms](#cross-cutting-mechanisms)), from the verified `SES_SENDER`. The
   policy allows every identity because the SES sandbox also checks the recipient's address.
@@ -111,13 +111,15 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
   which brings the message with its failed mark and retry button; a text or photo whose request
   never reached the server stays in the page with a resend while the page is open. Any other
   failure shows a notice and refetches. Several photos can be in flight together. While the
-  snapshot shows no card, counts waiting items and no turn is in flight, `GET /chat` is polled
+  snapshot shows no card, lists queued items and no turn is in flight, `GET /chat` is polled
   every 5 seconds, so a card saved after the gateway gave up still arrives. With a card shown the
-  waiting count includes cards queued behind it, so polling stops.
+  queued items include cards behind it, which change only after an answer, so polling stops.
 - **Cards** (`CardView.tsx`) — the buttons come from the snapshot card's options, a choice
   posts the card's `pending`, `version` and the option, and `foldChoices.ts` shows a recorded
   choice in place on the card its `choice` names instead of as a bubble of its own; typed text
-  never folds.
+  never folds. `MessageList.tsx` marks the snapshot's card as live and the latest card of each
+  seq the snapshot lists as queued, and shows the `photo` of those two kinds of card as a
+  thumbnail.
 - **Photos** (`images.ts`) — the camera button takes a photo or picks existing ones; each is
   scaled to 1600 px on its longer edge and re-encoded as JPEG, which keeps it under the API's
   4 MiB limit. A thumbnail or the full-screen viewer fetches a link from `GET /files/{key+}`.
@@ -163,11 +165,16 @@ for a meter's photo and shows no card, and `standby` while a request for tariffs
 blocking the queue: its card shows only when no card awaits, and typed text with nothing awaiting
 reaches it only when it is prices, a cancel or a question; any other text is classified as a request
 as usual. The **snapshot** is the first awaiting item's card, a question then a correction ahead
-of the rest, else the oldest standby item's, plus how many queued items stand behind it; the
-client renders it and never orders the queue itself. Code decides every step and renders every
-reply from `src/common/texts.py`; the model only reads photos and classifies text, and every data
-write waits behind a confirmation card ([ADR 0005](adr/0005-code-led-conversation.md)). Billing
-periods belong to the apartment, so its water and electricity meters open and close together
+of the rest, else the oldest standby item's, plus the seqs of the queued items behind it; the client
+renders it and never orders the queue itself. A turn that ends the shown card and moves the queue to
+a card shown earlier records that card again as the turn's last reply; a shown card that an older
+photo's finished read only moved behind is not ended, so no card repeats and the card the next
+message answers is always the latest in the thread. A meter photo's card carries `photo`, the stored
+key of the photo it answers, so several photos sent at once each show beside their own reply. Code
+decides every step and renders every reply from `src/common/texts.py`; the model only reads photos
+and classifies text, and every data write waits behind a confirmation card
+([ADR 0005](adr/0005-code-led-conversation.md)). Billing periods belong to the apartment, so its
+water and electricity meters open and close together
 ([ADR 0003](adr/0003-period-belongs-to-apartment.md)).
 The flows and the rules they enforce are in [Domain rules](domain-rules.md).
 

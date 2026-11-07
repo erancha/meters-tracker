@@ -39,7 +39,8 @@ reason, which names the deployment's admin address to ask for access.
 - While a message or photo is on its way, or a photo is still being read and no card is shown,
   the end of the thread shows "חושב" with moving dots. Then the chat checks for news every five
   seconds, so the card of a photo that took long to read appears without a reload.
-- While a card is shown, a line at the end counts the questions queued behind it.
+- The count of waiting items appears in the panel beside the chat, or in the strip under the
+  header on a phone, not in the chat itself.
 
 ## Cards
 
@@ -65,12 +66,19 @@ reason, which names the deployment's admin address to ask for access.
 - The close card offers only confirm. "The apartment is empty", typed, closes without a next
   period. A close chosen on a reading's card that waited for another meter's photo closes once
   that photo is confirmed, with no card.
-- Only the card the server is waiting on has working buttons. An answered card shows the
-  answer in place, as a done mark for the primary option or the marked chip for another.
+- Only the card the server is waiting on has working buttons. It has an accent border and the
+  tag `ממתין לתשובה`, so the next message's target is plain without counting. The latest card of
+  each item queued behind it is dashed and faded, tagged `בתור`, with no buttons. An answered card
+  shows the answer in place, as a done mark for the primary option or the marked chip for another.
+- A waiting card about a meter photo, the live one or a queued one, shows a small thumbnail of
+  that photo beside its tag, which opens the full-screen viewer. Several photos sent at once each
+  get a reply that shows its own photo, including a reply whose serial could not be read. An
+  answered card shows none, so a photo appears once, on its latest waiting card.
 - A pressed option shows on its card at once, with no bubble of its own. While that answer is
   on its way, the waiting card's buttons are disabled; photo uploads do not disable them.
-- When several photos wait for confirmation, only the oldest card has working buttons. After
-  an answer, the next card may sit above the latest replies.
+- When several photos wait for confirmation, only the oldest card has working buttons. When an
+  answer finishes one card and the queue moves on to a card shown earlier, that card is shown
+  again at the end of the chat, and its copy above loses its buttons.
 
 ## Corrections
 

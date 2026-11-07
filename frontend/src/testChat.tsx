@@ -27,8 +27,10 @@ export const answer = (c: Card, label: string): Message => ({
   ...message("user", label), choice: { pending: c.pending, version: c.version },
 });
 
-export const snapshot = (c: Card | null, waiting = 0, tariffsMissing = false): Snapshot => ({
-  card: c, waiting, tariffs_missing: tariffsMissing,
+export const snapshot = (
+  c: Card | null, queued: string[] = [], tariffsMissing = false,
+): Snapshot => ({
+  card: c, queued, tariffs_missing: tariffsMissing,
 });
 
 /** The server's chat; a test that expects the post-turn refetch to differ sets getChat itself. */
@@ -64,3 +66,6 @@ export function installResizeObserver(): { grow: () => void } {
   });
   return { grow: () => callbacks.forEach((cb) => cb([], {} as ResizeObserver)) };
 }
+
+/** The pending seqs of n queued items. */
+export const queued = (n: number): string[] => Array.from({ length: n }, (_, i) => `q${i}`);

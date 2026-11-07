@@ -80,7 +80,7 @@ def test_the_walk_reaches_a_charge_and_cancels_the_statement(kit, tmp_path, caps
     out = capsys.readouterr().out
     assert "[card] tariffs_ask" in out
     assert "1,332 קוט״ש, חיוב 856.74 ₪" in out
-    assert out.rstrip().endswith("waiting: 0")
+    assert out.rstrip().endswith("queued: 0")
 
 
 def test_a_card_of_another_kind_stops_the_walk(kit, tmp_path):

@@ -47,14 +47,16 @@ charge, with the exact values the code uses. The arithmetic lives in
 
 ## A meter photo
 
-Each photo is its own turn. The model returns the meter type, the serial with whether any of
-its digits is uncertain, every counter value it sees with its position on the display (`top` and
-`bottom` on a two-number electricity display, `single` on a water counter), whether any digit is
-unreadable, and the text handwritten beside the meter as written, or none when it cannot be
-read; owners write the apartment's name there, and on an electricity meter that label is the
-serial the photo goes by, so a photo of one with no label is an unreadable serial. A note sent
-with the photo that names a date sets the reading date; otherwise the reading is dated the day
-the photo was sent, which a retry on a later day keeps.
+Each photo is its own turn. The model returns the meter type, the serial with whether any of its
+digits is uncertain, every counter value it sees with its position on the display (`top` and
+`bottom` on a two-number electricity display, in whole kWh without the tenths digit the display
+ends in, `single` on a water counter), whether any digit is unreadable, and the text handwritten
+beside the meter as written, read in the direction it is written (often sideways), or none when it
+cannot be read; owners write the apartment's name there, and on an electricity meter that label is
+the serial the photo goes by, so a photo of one with no label is unreadable, and its card asks for
+the label to be typed or photographed. A note sent with the photo that names a date sets the
+reading date; otherwise the reading is dated the day the photo was sent, which a retry on a later
+day keeps.
 
 - **Statement.** A photo with no known meter type and no serial is read again as a previous
   statement; a statement becomes a tariffs card (see [Tariffs](#tariffs)), dated like a reading.
@@ -65,7 +67,8 @@ the photo was sent, which a retry on a later day keeps.
   proposed on the reading card, and on a new meter's summary, with a line naming the doubt; a
   typed value settles it. A value, read or typed, that equals the meter's own serial is no
   reading: the reply says so and the card asks for the reading. A new photo replaces an earlier
-  unreadable card that had no serial or had the same serial.
+  unreadable card that had no serial or had the same serial, when it was sent after that card was
+  shown: photos sent together are separate meters, never retakes of each other.
 - **Retired meter.** A photo of a retired meter is refused, naming the live meter that replaced
   it, when its apartment has one of its type.
 - **Two-number display.** With no saved choice, the card offers both numbers as its only
@@ -94,16 +97,16 @@ the photo was sent, which a retry on a later day keeps.
   line. The questions offer the existing names as buttons; the apartment question also offers
   the handwritten label as a new apartment's name, highlighted, unless it already names one of
   the property's apartments. A typed name that is not an existing one but is a prefix of one, or
-  within two single-letter edits of one, asks whether that name was meant; a name chosen as new
-  is not asked about again. A reading dated after the last day of the period it would open is
-  refused on the summary, which asks for its date. A reading dated inside a closed period,
-  before its close, stands for the meter on the next period until a later reading of the meter
-  inside the closed period arrives; that reading's save flags the meter's readings from the
-  period dates as the close would have, so the closed period gets the meter's opening and
-  closing readings and is marked for its report. The final card shows everything that will be
-  created; on confirmation the property, apartment and period are created as needed, the meter
-  is saved, and its reading becomes the period's opening reading. A live meter of the same type
-  in that apartment is retired, dated the new reading's date; each keeps its own consumption.
+  within two single-letter edits of one, asks whether that name was meant; a name chosen as new, by
+  that question or by the label's button, is not asked about. A reading dated after the last day of
+  the period it would open is refused on the summary, which asks for its date. A reading dated
+  inside a closed period, before its close, stands for the meter on the next period until a later
+  reading of the meter inside the closed period arrives; that reading's save flags the meter's
+  readings from the period dates as the close would have, so the closed period gets the meter's
+  opening and closing readings and is marked for its report. The final card shows everything that
+  will be created; on confirmation the property, apartment and period are created as needed, the
+  meter is saved, and its reading becomes the period's opening reading. A live meter of the same
+  type in that apartment is retired, dated the new reading's date; each keeps its own consumption.
   When another photo of the same serial was linked while this one waited, it shows next as an
   ordinary reading card for that meter.
 - **Known serial.** The card proposes the reading; the user confirms, picks the other number,
@@ -178,6 +181,9 @@ edit may change any field of the card at any step, and the card the flow then ar
   that field as asked: the next bare input fills it, not the default field, until the card is shown
   anew or moves to another step. Any other edit the card cannot take is answered with what the
   card takes (its buttons, a typed correction of any detail on it, or a cancel).
+- **Edits that change nothing.** An edit that sets each field to the value it already holds,
+  such as naming the apartment the card already names, says so and shows the card again as it
+  was; the questions already answered stay answered.
 
 ## Corrections of saved records
 
@@ -414,7 +420,7 @@ the effective date.
   when the date changes. With none in force the type is saved unpriced (null).
 - **Asking.** A close whose closing readings have no price in force is followed by a
   card that asks for tariffs, with no buttons, effective from the earliest such closing date;
-  the tariffs card then names that date as the period's closing date until a typed date
+  the tariffs card then names that date as a closing reading's date until a typed date
   replaces it. The request never blocks other cards: it shows only when no other card awaits,
   and typed text reaches it only when no other card awaits and the text is prices or a date
   (moving it to the tariffs card), a cancel (dropping it) or a question; other typed requests pass

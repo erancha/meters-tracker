@@ -15,9 +15,9 @@ Steps: unreadable -> reading -> one of duplicate, lower_reading, jump, swap, pro
 open_period, propose_close -> saved. A reading is never saved twice for one meter and date. A
 back-dated reading never displaces a confirmed closing reading without the user's choice. A
 two-number display's choice becomes the meter's only when a reading is saved. A failed read
-leaves no pending row, and a retake replaces the unreadable card it answers, carrying its
-photos as the ones the model failed on. A re-close marks its period for a report that names the
-report it replaces, dated by the period's closing date before the move.
+leaves no pending row, and a retake, a photo sent after the unreadable card was shown, replaces
+that card, carrying its photos as the ones the model failed on. A re-close marks its period for a
+report that names the report it replaces, dated by the period's closing date before the move.
 
 A photo the app dropped (cancelled, not a meter, a retired serial, a statement's) is reopened by a
 typed correction: read again from its stored copy, as the kind the owner gives, its typed fields
@@ -402,8 +402,22 @@ def ask_retake(engine, user, item) -> list[Reply]:
         handwritten_label=None,
     )
     _set_read(item, nothing_read, engine.clock().isoformat())
-    item["data"]["unreadable"] = [texts.UNREADABLE_PHOTO]
+    return _ask_unreadable(engine, user, item, texts.UNREADABLE_PHOTO)
+
+
+def _ask_unreadable(engine, user, item, missing: str) -> list[Reply]:
+    """Shows the unreadable card naming what could not be read, stamped with when it was shown:
+    only a photo sent after that moment can be the retake it asks for."""
+    item["data"].update(unreadable=[missing], unreadable_at=engine.stamp())
     return ask(engine, user, item, "unreadable", card)
+
+
+def _unreadable_identity(data) -> str:
+    """What the photo lacks to tell its meter apart: an electricity meter's handwritten label,
+    else the printed serial."""
+    return (
+        texts.UNREADABLE_LABEL if data["meter_type"] == "electricity" else texts.UNREADABLE_SERIAL
+    )
 
 
 def _no_serial(data) -> bool:
@@ -411,17 +425,17 @@ def _no_serial(data) -> bool:
 
 
 def _absorb_superseded(engine, user, item):
-    """A new photo is the retake an unreadable card asked for when that card has no serial or
-    the same one, so the old card leaves the queue and its photos join the new one's failed
-    photos, oldest first. The new item is stored with the joined photos before the old cards
-    are deleted, so a crash in between leaves the joined photos on a card rather than losing
-    them."""
+    """A new photo is the retake an unreadable card asked for when it was sent after the card was
+    shown and that card has no serial or the same one, so the old card leaves the queue and its
+    photos join the new one's failed photos, oldest first. The new item is stored with the joined
+    photos before the old cards are deleted, so a crash in between leaves the joined photos on a
+    card rather than losing them."""
     absorbed = [
         other
         for other in engine.store.pending(user.email)
         if other["kind"] == KIND
         and other["step"] == "unreadable"
-        and other["seq"] != item["seq"]
+        and other["data"]["unreadable_at"] < item["seq"]
         and (_no_serial(other["data"]) or other["data"]["serial"] == item["data"]["serial"])
     ]
     if not absorbed:
@@ -464,24 +478,21 @@ def route(engine, user, item) -> list[Reply]:
     if unknown_type and not data["as_meter"]:
         return drop(engine, user, item, [Reply(texts.not_a_meter())])
     if _no_serial(data):
-        data["unreadable"] = [texts.UNREADABLE_SERIAL]
-        return ask(engine, user, item, "unreadable", card)
+        return _ask_unreadable(engine, user, item, _unreadable_identity(data))
     if meter is not None and meter["retired_at"] is not None:
         return drop(engine, user, item, [Reply(_retired_reply(engine, user, meter))])
     if unknown_type:
-        data["unreadable"] = [texts.UNREADABLE_TYPE]
-        return ask(engine, user, item, "unreadable", card)
+        return _ask_unreadable(engine, user, item, texts.UNREADABLE_TYPE)
     if data["value"] is None and not propose(
         data, None if meter is None else meter["display_choice"]
     ):
-        data["unreadable"] = [texts.UNREADABLE_VALUE]
-        return ask(engine, user, item, "unreadable", card)
+        return _ask_unreadable(engine, user, item, texts.UNREADABLE_VALUE)
     if meter is None:
         return link_meter.start(engine, user, item)
     if str(data["value"]) == meter["serial"]:
-        data.update(value=None, unreadable=[texts.UNREADABLE_VALUE])
+        data["value"] = None
         reply = Reply(texts.value_is_serial(meter["serial"]))
-        return [reply, *ask(engine, user, item, "unreadable", card)]
+        return [reply, *_ask_unreadable(engine, user, item, texts.UNREADABLE_VALUE)]
     _name_meter(engine, user, data, meter)
     return ask(engine, user, item, "reading", card)
 
@@ -519,8 +530,11 @@ def answer(engine, user, item, action) -> list[Reply]:
     if step == "duplicate" and key == "confirm":
         return _replace(engine, user, item)
     if step == "lower_reading" and key == "misread":
-        data.update(value=None, unreadable=[texts.UNREADABLE_VALUE])
-        return [Reply(texts.misread()), *ask(engine, user, item, "unreadable", card)]
+        data["value"] = None
+        return [
+            Reply(texts.misread()),
+            *_ask_unreadable(engine, user, item, texts.UNREADABLE_VALUE),
+        ]
     if step == "lower_reading" and key == "replaced":
         return drop(engine, user, item, [Reply(texts.replaced_has_new_serial())])
     if step == "lower_reading" and key == "reset":

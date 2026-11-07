@@ -1,16 +1,19 @@
 import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { Api } from "../api";
 import type { TurnResult } from "../types";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "../api";
-import { answer, card, fakeApi, installResizeObserver, message, snapshot, wrapper } from "../testChat";
+import {
+  answer, card, fakeApi, installResizeObserver, message, queued, snapshot, wrapper,
+} from "../testChat";
 import { jerusalemDay } from "../messageTime";
 import { texts } from "../texts";
 import { Chat } from "./Chat";
 
-function setup(chat: Parameters<typeof fakeApi>[0]) {
+function setup(chat: Parameters<typeof fakeApi>[0], fileUrl?: string) {
   const api = fakeApi(chat);
+  if (fileUrl !== undefined) (api.fileUrl as Mock).mockResolvedValue(fileUrl);
   const w = wrapper();
   const onOpen = vi.fn();
   render(<Chat api={api} day={jerusalemDay()} onOpen={onOpen} />, { wrapper: w.Wrapper });
@@ -115,10 +118,9 @@ describe("Chat", () => {
   });
 
   it("shows the thinking line while a photo is still being read, with no card shown", async () => {
-    setup({ messages: [], snapshot: snapshot(null, 1) });
+    setup({ messages: [], snapshot: snapshot(null, queued(1)) });
 
     expect(await screen.findByText(texts.thinking)).toBeInTheDocument();
-    expect(screen.queryByText(texts.waiting(1))).not.toBeInTheDocument();
   });
 
   it("keeps line breaks of a multi-line text", async () => {
@@ -130,7 +132,7 @@ describe("Chat", () => {
   });
 
   it("shows the history in order, the roles styled apart, then the snapshot card", async () => {
-    setup({ messages: history, snapshot: snapshot(card(), 2) });
+    setup({ messages: history, snapshot: snapshot(card(), queued(2)) });
 
     const user = await screen.findByText("שלום");
     const bot = screen.getByText("היי, מה נעשה?");
@@ -139,7 +141,46 @@ describe("Chat", () => {
     const title = screen.getByText("קריאה חדשה");
     expect(bot.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "אישור" })).toBeInTheDocument();
-    expect(screen.getByText(texts.waiting(2))).toBeInTheDocument();
+    expect(title.closest("li")).toHaveClass("live");
+    expect(screen.getByText(texts.liveCard)).toBeInTheDocument();
+  });
+
+  it("marks the card the next message answers apart from the cards queued behind it", async () => {
+    const live = card({ pending: "a", title: "כרטיס פעיל" });
+    const behind = card({ pending: "b", title: "כרטיס בתור" });
+    const done = card({ pending: "c", title: "כרטיס שטופל" });
+    setup({
+      messages: [cardMessage(done), cardMessage(behind), cardMessage(live)],
+      snapshot: snapshot(live, ["b"]),
+    });
+
+    const shown = (await screen.findByText("כרטיס פעיל")).closest("li")!;
+    const queuedCard = screen.getByText("כרטיס בתור").closest("li")!;
+    expect(shown).toHaveClass("live");
+    expect(within(shown).getByText(texts.liveCard)).toBeInTheDocument();
+    expect(queuedCard).toHaveClass("queued");
+    expect(within(queuedCard).getByText(texts.queuedCard)).toBeInTheDocument();
+    expect(within(queuedCard).queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText("כרטיס שטופל").closest("li")).not.toHaveClass("live", "queued");
+  });
+
+  it("shows the photo on waiting cards only, once per waiting photo", async () => {
+    const step1 = card({ title: "שלב ראשון", photo: "acct/images/p1.jpg" });
+    const step2 = card({ title: "שלב שני", version: 2, photo: "acct/images/p1.jpg" });
+    const behind = card({ pending: "p3", title: "תמונה בתור", photo: "acct/images/p3.jpg" });
+    const { api } = setup({
+      messages: [cardMessage(step1), cardMessage(behind), cardMessage(step2)],
+      snapshot: snapshot(step2, ["p3"]),
+    }, "https://files/photo.jpg");
+
+    const live = (await screen.findByText("שלב שני")).closest("li")!;
+    expect(await within(live).findByRole("img", { name: texts.photo })).toBeInTheDocument();
+    const queuedCard = screen.getByText("תמונה בתור").closest("li")!;
+    expect(await within(queuedCard).findByRole("img", { name: texts.photo })).toBeInTheDocument();
+    const answered = screen.getByText("שלב ראשון").closest("li")!;
+    expect(within(answered).queryByRole("img")).not.toBeInTheDocument();
+    expect(api.fileUrl).toHaveBeenCalledWith("acct/images/p1.jpg");
+    expect(api.fileUrl).toHaveBeenCalledWith("acct/images/p3.jpg");
   });
 
   it("posts the shown card's choice, appends the replies and replaces the card", async () => {
@@ -327,7 +368,7 @@ describe("Chat", () => {
     (api.postTurn as Mock).mockImplementation(async () => {
       const c = cards[n++];
       return {
-        replies: [{ text: null, card: c, image_key: null }], snapshot: snapshot(c, 3 - n),
+        replies: [{ text: null, card: c, image_key: null }], snapshot: snapshot(c, queued(3 - n)),
         image_key: `k${n}`,
       };
     });

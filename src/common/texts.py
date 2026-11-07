@@ -96,6 +96,8 @@ def not_a_meter() -> str:
 
 
 UNREADABLE_SERIAL = "המספר הסידורי"
+# An electricity meter is told apart by the name handwritten beside it.
+UNREADABLE_LABEL = "השם שכתוב ליד המונה"
 UNREADABLE_VALUE = "הקריאה"
 UNREADABLE_PHOTO = "התמונה"
 UNREADABLE_TYPE = "סוג המונה"
@@ -105,6 +107,8 @@ def unreadable(fields: list[str]):
     title = "לא הצלחתי לקרוא בוודאות: " + ", ".join(fields)
     if UNREADABLE_TYPE in fields:
         return title, ["אפשר לכתוב אם זה מונה מים או מונה חשמל."]
+    if UNREADABLE_LABEL in fields:
+        return title, ["אפשר לכתוב את השם שכתוב ליד המונה, או לצלם שוב כך שהשם ייראה בתמונה."]
     if UNREADABLE_SERIAL in fields or UNREADABLE_PHOTO in fields:
         return title, ["אפשר לצלם שוב, קרוב וישר מול המונה."]
     return title, ["אפשר לצלם שוב, קרוב וישר מול המונה, או לכתוב את הקריאה."]
@@ -439,7 +443,7 @@ def tariffs_card(
         lines.append(
             "המחירים בחשבון אינם כוללים מע״מ, ולכן לא יישמרו. אפשר להקליד את התעריפים כולל מע״מ."
         )
-    reason = " (תאריך סגירת התקופה)" if from_close else ""
+    reason = " (תאריך קריאת הסגירה)" if from_close else ""
     lines.append(f"בתוקף מ־{fmt(effective)}{reason}")
     title = "תעריפים מחשבון קודם" if from_statement else "תעריפים"
     return title, lines
@@ -1128,6 +1132,10 @@ def how_to_reply(how_to) -> str:
 
 def which_record(labels: list[str]) -> str:
     return f"לאיזו מהן הכוונה? {'; '.join(labels)}. אפשר לכתוב שוב ולציין אחת מהן."
+
+
+def nothing_changed() -> str:
+    return "זה כבר מה שרשום בכרטיס, ולכן לא שיניתי דבר."
 
 
 def card_help(labels: list[str]) -> str:

@@ -14,6 +14,9 @@ export interface Card {
   options: CardOption[];
   /** The option id shown as the expected answer, or null on a card with none. */
   default: string | null;
+  /** The stored photo a meter photo's card answers; null on any other card, and absent on a
+   * card stored without one. */
+  photo?: string | null;
 }
 
 /** The card a choice answered: its pending item and the version it showed. */
@@ -53,10 +56,11 @@ export interface Reply {
   image_key: string | null;
 }
 
-/** What the browser renders: the card awaiting an answer, and how many other queued items wait. */
+/** What the browser renders: the card awaiting an answer, and the items queued behind it. */
 export interface Snapshot {
   card: Card | null;
-  waiting: number;
+  /** The pending seqs of the queued items behind the card; every queued item when none shows. */
+  queued: string[];
   /** A request for tariffs is open, even when another card is shown ahead of it. */
   tariffs_missing: boolean;
 }

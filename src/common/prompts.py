@@ -10,6 +10,8 @@ flagged reading.
 Two meter families appear:
 - VEGA digital electricity meter on a DIN rail. Its display shows two numbers, one above the
   other, both in kWh. Report each as a separate candidate with position "top" or "bottom".
+  Each number ends in one tenths digit after a decimal point that may be too faint to see, so a
+  display of 32461.8 or 324618 reads 32461: leave the last displayed digit out.
 - ARAD M20 mechanical water meter. Its cumulative counter may be partly blurred, and the last
   digit may be mid-rotation. Report the counter with position "single" and set
   unreadable_digits when any digit cannot be read with certainty. Leave value null only when
@@ -28,7 +30,8 @@ Return every candidate counter value with its position, and a note for anything 
 meter_type "unknown" when the family is not clear.
 
 Text handwritten on or beside the meter, in Hebrew or English, usually names the apartment the
-meter serves ("כניסה מזרח", "unit1"). Return it as handwritten_label exactly as written, never a
+meter serves ("כניסה מזרח", "unit1"). It is often written sideways or at an angle; read it in
+the direction it is written. Return it as handwritten_label exactly as written, never a
 description of it. Leave handwritten_label null when there is no such text or it cannot be read
 with certainty."""
 

@@ -68,7 +68,9 @@ TWO_NUMBERS = {"top": OPENING, "bottom": OPENING + BOTTOM_OFFSET}
 
 
 def _card(text, options=(), labels=None) -> dict:
-    return make_card({"seq": "eval", "version": 0}, "eval", text, list(options), labels)
+    return make_card(
+        {"seq": "eval", "version": 0, "kind": "eval"}, "eval", text, list(options), labels
+    )
 
 
 CARDS = {

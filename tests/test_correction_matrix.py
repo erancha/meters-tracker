@@ -1678,7 +1678,9 @@ EXPECTED_WITH_CARD = {
 
 # Key: (card field, waiting card, answer); value: the kind of the card shown after the message,
 # then the texts of its reply. A card takes the fields its form holds; any other is answered with
-# what the card takes, and with no card waiting a bare value is asked about.
+# what the card takes, and with no card waiting a bare value is asked about. A value the card
+# already holds (the photo's water type, the property an apartment question names) changes
+# nothing, and the reply says so.
 EXPECTED_CARDS: dict[tuple[str, str, str], str] = {
     ("apartment", "behind", "invalid"): "reading:field_value",
     ("apartment", "behind", "missing"): "reading:field_value",
@@ -1853,7 +1855,7 @@ EXPECTED_CARDS: dict[tuple[str, str, str], str] = {
     ("electricity_price", "unreadable", "valid"): "unreadable:card_help",
     ("meter_type", "behind", "invalid"): "reading:field_value",
     ("meter_type", "behind", "missing"): "reading:field_value",
-    ("meter_type", "behind", "valid"): "reading:meter_name",
+    ("meter_type", "behind", "valid"): "reading:nothing_changed",
     ("meter_type", "close", "invalid"): "close:card_help",
     ("meter_type", "close", "missing"): "close:card_help",
     ("meter_type", "close", "valid"): "close:card_help",
@@ -1862,7 +1864,7 @@ EXPECTED_CARDS: dict[tuple[str, str, str], str] = {
     ("meter_type", "correction", "valid"): "correction:card_help",
     ("meter_type", "link", "invalid"): "property:field_value",
     ("meter_type", "link", "missing"): "property:field_value",
-    ("meter_type", "link", "valid"): "property:meter_name",
+    ("meter_type", "link", "valid"): "property:nothing_changed",
     ("meter_type", "other_person", "invalid"): "none:bare_input",
     ("meter_type", "other_person", "missing"): "none:options_reply",
     ("meter_type", "other_person", "valid"): "none:bare_input",
@@ -1883,7 +1885,7 @@ EXPECTED_CARDS: dict[tuple[str, str, str], str] = {
     ("meter_type", "tariffs_ask", "valid"): "tariffs_ask:card_help",
     ("meter_type", "unreadable", "invalid"): "unreadable:field_value",
     ("meter_type", "unreadable", "missing"): "unreadable:field_value",
-    ("meter_type", "unreadable", "valid"): "unreadable:none",
+    ("meter_type", "unreadable", "valid"): "unreadable:nothing_changed",
     ("months", "behind", "invalid"): "reading:field_value",
     ("months", "behind", "missing"): "reading:field_value",
     ("months", "behind", "valid"): "reading:meter_name",
@@ -2111,10 +2113,10 @@ EXPECTED_CARDS: dict[tuple[str, str, str], str] = {
     ("electricity_price", "property_near", "valid"): "property_near:card_help",
     ("meter_type", "apartment_near", "invalid"): "apartment_near:field_value",
     ("meter_type", "apartment_near", "missing"): "apartment_near:field_value",
-    ("meter_type", "apartment_near", "valid"): "apartment_near:none",
+    ("meter_type", "apartment_near", "valid"): "apartment_near:nothing_changed",
     ("meter_type", "property_near", "invalid"): "property_near:field_value",
     ("meter_type", "property_near", "missing"): "property_near:field_value",
-    ("meter_type", "property_near", "valid"): "property_near:none",
+    ("meter_type", "property_near", "valid"): "property_near:nothing_changed",
     ("months", "apartment_near", "invalid"): "apartment_near:field_value",
     ("months", "apartment_near", "missing"): "apartment_near:field_value",
     ("months", "apartment_near", "valid"): "apartment_near:none",
@@ -2129,7 +2131,7 @@ EXPECTED_CARDS: dict[tuple[str, str, str], str] = {
     ("period_start", "property_near", "valid"): "property_near:none",
     ("property", "apartment_near", "invalid"): "apartment_near:field_value",
     ("property", "apartment_near", "missing"): "apartment_near:field_value",
-    ("property", "apartment_near", "valid"): "apartment_near:none",
+    ("property", "apartment_near", "valid"): "apartment_near:nothing_changed",
     ("property", "property_near", "invalid"): "property_near:field_value",
     ("property", "property_near", "missing"): "property_near:field_value",
     ("property", "property_near", "valid"): "apartment:none",
