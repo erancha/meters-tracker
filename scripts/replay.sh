@@ -2,10 +2,10 @@
 # Replay the owner's story against a deployed stack with its real model, as a smoke test of the
 # backend after a deploy.
 #
-#   ./scripts/replay.sh [env] <email> --open <photo> --close <photo> [--statement <photo>] [--yes]
+#   ./scripts/replay.sh <email> --open <photo> --close <photo> [--statement <photo>] [--yes]
 #
-# env: optional suffix (e.g. dev) that targets the isolated stack meters-tracker-dev, as in
-# deploy.sh. Without it the replay targets the PRODUCTION stack meters-tracker.
+# The stack is the one the git branch selects, as in deploy.sh: meters-tracker-fb on any branch
+# but main. On main the replay targets the PRODUCTION stack meters-tracker.
 # email: the account the replay acts as. EVERYTHING it owns in the stack is deleted first, as
 # reset-account.sh --yes does.
 # --open <photo>: a two-number electricity meter whose serial no meter in the account has.
@@ -23,13 +23,13 @@
 # Each photo read and each typed message is a billed model call: five for a run, and three more
 # with --statement (the statement photo is read as a meter, then as a statement). The photos
 # are real meter photos, which the owner keeps in Google Drive, not in the repo.
-# Requires scripts/aws-config.sh.
+# Requires scripts/lib/aws-config.sh.
 #
-#   ./scripts/replay.sh dev owner@gmail.com --open ~/m/open.jpg --close ~/m/close.jpg --yes
+#   ./scripts/replay.sh owner@gmail.com --open ~/m/open.jpg --close ~/m/close.jpg --yes
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=common.sh
-source "$ROOT/scripts/common.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/app-env.sh
+source "$SCRIPT_DIR/lib/app-env.sh"
 
 OPTIONS=() POSITIONAL=()
 while [ $# -gt 0 ]; do
@@ -37,19 +37,14 @@ while [ $# -gt 0 ]; do
     -h|--help) print_help; exit 0 ;;
     --yes) OPTIONS+=("$1"); shift ;;
     --open|--close|--statement)
-      [ $# -ge 2 ] || { print_help >&2; exit 2; }
+      [ $# -ge 2 ] || usage_error "$1 needs a value"
       OPTIONS+=("$1" "$2"); shift 2 ;;
-    -*) print_help >&2; exit 2 ;;
+    -*) usage_error "Unknown option: $1" ;;
     *) POSITIONAL+=("$1"); shift ;;
   esac
 done
-case ${#POSITIONAL[@]} in
-  1) ENV_ARGS=() ;;
-  2) ENV_ARGS=("${POSITIONAL[0]}") ;;
-  *) print_help >&2; exit 2 ;;
-esac
-EMAIL="${POSITIONAL[-1]}"
-parse_env_suffix_arg "${ENV_ARGS[@]}"
-require_aws_config
+[ ${#POSITIONAL[@]} -eq 1 ] || usage_error "Expected one email address"
+EMAIL="${POSITIONAL[0]}"
+connect_stack
 require_venv
-exec "$ROOT/.venv/bin/python" "$ROOT/scripts/replay.py" "$APP" "$EMAIL" "${OPTIONS[@]}"
+exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/replay.py" "$STACK_NAME" "$EMAIL" "${OPTIONS[@]}"

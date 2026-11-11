@@ -8,6 +8,7 @@ import yaml
 from conftest import KEYED_BY_PK_AND_SK, KEYED_BY_PK_ONLY
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+STACK_PARAMS = (SCRIPTS / "lib" / "stack-params.sh").read_text()
 
 
 class _TemplateLoader(yaml.SafeLoader):
@@ -113,25 +114,48 @@ def test_api_function_may_send_reports_from_the_deployed_sender(app):
     assert send["Resource"].endswith(":identity/*")
 
 
-def test_set_model_key_script_takes_the_providers_the_template_accepts(app):
+def test_set_model_key_option_takes_the_providers_the_template_accepts(app):
     pattern = app["Parameters"]["LlmModel"]["AllowedPattern"]
     providers = re.fullmatch(r"\^\((.+)\):\.\+\$", pattern).group(1)
-    assert f"{providers})" in (SCRIPTS / "set-model-key.sh").read_text()
+    assert f"{providers})" in (SCRIPTS / "lib" / "aws-helper-app.sh").read_text()
 
 
 def test_deploy_passes_the_key_parameter_of_the_model_provider():
-    deploy = (SCRIPTS / "deploy.sh").read_text()
-    assert 'KEY_PARAM=$(model_key_param "$PROVIDER")' in deploy
-    assert 'LlmKeyParam="$KEY_PARAM"' in deploy
+    assert 'LLM_PROVIDER="${LLM_MODEL%%:*}"' in STACK_PARAMS
+    assert 'LLM_KEY_PARAM="$(model_key_param "$LLM_PROVIDER")"' in STACK_PARAMS
+    assert '"LlmKeyParam=$LLM_KEY_PARAM"' in STACK_PARAMS
 
 
-def test_params_example_names_a_model_the_template_accepts(app):
+def test_stack_params_name_models_the_template_accepts(app):
     pattern = app["Parameters"]["LlmModel"]["AllowedPattern"]
-    example = (SCRIPTS / "params.example.sh").read_text()
-    values = re.findall(r'^(?:# )?export LLM_MODEL="([^"]+)"', example, re.MULTILINE)
+    values = re.findall(r'^(?:# )?LLM_MODEL="([^"]+)"', STACK_PARAMS, re.MULTILINE)
     assert len(values) == 2
     assert all(re.fullmatch(pattern, value) for value in values)
-    assert "deploy.sh" in example and 'LlmModel="$LLM_MODEL"' in (SCRIPTS / "deploy.sh").read_text()
+    assert '"LlmModel=$LLM_MODEL"' in STACK_PARAMS
+    assert "stack-params.sh" in (SCRIPTS / "deploy.sh").read_text()
+
+
+@pytest.mark.parametrize(
+    ("template", "parameters"),
+    [
+        ("template.yaml", "app_stack_parameters"),
+        ("template-cognito.yaml", "cognito_stack_parameters"),
+    ],
+)
+def test_each_function_logs_to_a_group_its_stack_declares(template, parameters):
+    loaded = _load(template)
+    resources = loaded["Resources"]
+    functions = [n for n, r in resources.items() if r["Type"] == "AWS::Serverless::Function"]
+    assert functions
+    for name in functions:
+        group = resources[f"{name}LogGroup"]
+        assert group["Type"] == "AWS::Logs::LogGroup"
+        assert group["Properties"]["LogGroupName"] == f"/aws/lambda/${{AWS::StackName}}/{name}"
+        assert group["Properties"]["RetentionInDays"] == "LogRetentionDays"
+        assert resources[name]["Properties"]["LoggingConfig"]["LogGroup"] == f"{name}LogGroup"
+    assert loaded["Parameters"]["LogRetentionDays"]["Type"] == "Number"
+    body = STACK_PARAMS.split(f"{parameters}() {{")[1].split("\n}")[0]
+    assert '"LogRetentionDays=$LOG_RETENTION_DAYS"' in body
 
 
 def test_api_routes(app):
@@ -186,6 +210,7 @@ def test_deploy_requires_the_admin_and_passes_it_to_the_api(app):
     variables = app["Resources"]["ApiFunction"]["Properties"]["Environment"]["Variables"]
     assert variables["ADMIN_EMAIL"] == "AdminEmail"
     assert "Default" not in app["Parameters"]["AdminEmail"]
-    assert 'AdminEmail="$ADMIN_EMAIL"' in (SCRIPTS / "deploy.sh").read_text()
-    assert "ADMIN_EMAIL" in (SCRIPTS / "common.sh").read_text()
-    assert 'export ADMIN_EMAIL="' in (SCRIPTS / "params.example.sh").read_text()
+    body = STACK_PARAMS.split("app_stack_parameters() {")[1].split("\n}")[0]
+    assert '"AdminEmail=$ADMIN_EMAIL"' in body
+    assert "require_settings params.sh" in STACK_PARAMS and " ADMIN_EMAIL " in STACK_PARAMS
+    assert 'export ADMIN_EMAIL="' in (SCRIPTS / "lib" / "params.example.sh").read_text()

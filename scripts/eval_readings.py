@@ -124,7 +124,7 @@ def _positive(text: str) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="eval-readings.sh", usage="%(prog)s [env] [--limit N]")
+    parser = argparse.ArgumentParser(prog="eval-readings.sh", usage="%(prog)s [--limit N]")
     parser.add_argument("stack")
     parser.add_argument("--limit", type=_positive)
     args = parser.parse_args()

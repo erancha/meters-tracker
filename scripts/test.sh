@@ -7,6 +7,9 @@
 #   ./scripts/test.sh --matrix-records         the quick matrix: its record slices, one per state
 #   ./scripts/test.sh [pytest-arguments]       pytest with these arguments alone
 #
+# Arguments that do not start with -h, --help or a matrix option go to pytest, by design, so
+# pytest is the one to reject an argument it does not take.
+#
 # Creates .venv on the first run and installs requirements-dev.txt into it. Each matrix slice is
 # a pytest run of its own, as many at once as the machine has processors (nproc), so its memory
 # is returned when it ends; every slice runs, then those that failed are named with their output.
@@ -19,9 +22,9 @@
 #
 # It never calls the real model. The checks that do are run by hand only: docs/development.md.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=common.sh
-source "$ROOT/scripts/common.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/app-env.sh
+source "$SCRIPT_DIR/lib/app-env.sh"
 
 case "${1:-}" in -h|--help) print_help; exit 0 ;; esac
 trap 'echo "test.sh: elapsed $((SECONDS / 60))m $((SECONDS % 60))s" >&2' EXIT
@@ -60,8 +63,10 @@ run_matrix() {
   fi
 }
 
-cd "$ROOT"
-for script in scripts/*.sh; do bash -n "$script"; done
+cd "$APP_FOLDER"
+for script in scripts/*.sh scripts/lib/*.sh .githooks/pre-commit; do
+  bash -n "$script"
+done
 require_venv
 # The slice names, as the matrix module defines them: all of them, or the quick ones.
 slices() {
@@ -81,7 +86,7 @@ case "${1:-}" in
     fi
     exit ;;
   --matrix-records)
-    [[ $# -eq 1 ]] || { print_help >&2; exit 2; }
+    [[ $# -eq 1 ]] || usage_error "--matrix-records takes no argument"
     names=$(slices QUICK_SLICES)
     # shellcheck disable=SC2086
     run_matrix $names

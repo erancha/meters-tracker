@@ -19,22 +19,22 @@ Parameters:
     Type: String
     AllowedPattern: '^(anthropic|openai):.+$'
     Description: The model the API calls, as provider:model (anthropic:claude-opus-5-5 or an
-      openai model); passed from scripts/params.sh by scripts/deploy.sh
+      openai model); passed from scripts/lib/stack-params.sh by scripts/deploy.sh
   LlmKeyParam:
     Type: String
     Description: SSM SecureString parameter holding the API key of the provider LlmModel names;
-      written by scripts/set-model-key.sh, passed by scripts/deploy.sh and read by the API on
-      each turn
+      written by scripts/aws-helper.sh --set-model-key, passed by scripts/deploy.sh and read by
+      the API on each turn
 
   SesSender:
     Type: String
     Description: Verified SES identity used as the From address of the emailed reports; passed
-      from scripts/params.sh by scripts/deploy.sh
+      from scripts/lib/params.sh by scripts/deploy.sh
 
   AdminEmail:
     Type: String
     Description: The deployment's admin address, flagged on its chat so the browser locks its
-      composer; passed from scripts/params.sh by scripts/deploy.sh
+      composer; passed from scripts/lib/params.sh by scripts/deploy.sh
 
   LogRetentionDays:
     Type: Number

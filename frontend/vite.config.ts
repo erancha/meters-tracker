@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 // Serves the app config from its source-of-truth location during local dev, mirroring production
-// where sync-frontend.sh publishes it at the site origin root.
+// where deploy.sh --frontend publishes it at the site origin root.
 function serveAppConfig(): Plugin {
   return {
     name: "serve-app-config",

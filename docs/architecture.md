@@ -34,7 +34,7 @@ graph LR
   `"true"`.
 - **presignup Lambda** (`src/handlers/presignup.py`) — runs while Cognito creates an account and
   refuses an address that does not fully match `ALLOWED_EMAILS`, the regex the operator keeps in
-  `scripts/params.sh` and each deploy passes through the `AllowedEmails` stack parameter
+  `scripts/lib/params.sh` and each deploy passes through the `AllowedEmails` stack parameter
   ([ADR 0010](adr/0010-sign-up-by-allowed-list.md)). For an address it admits, it asks SES to
   mail the address its verification request unless SES already reports it verified or pending,
   so mail can reach it while the SES account is sandboxed. A failure there is logged and never
@@ -80,12 +80,13 @@ graph LR
 - **DynamoDB tables** — nine, described under [Storage](#storage).
 - **Files bucket** — the private S3 bucket holding uploaded meter photos.
 - **SSM parameters** `/meters-tracker/llm/<provider>/api-key` — one SecureString per model
-  provider, written by `scripts/set-model-key.sh`. `scripts/deploy.sh` passes the api Lambda the
-  parameter of the provider `LLM_MODEL` names, and its role can read only that one. The Lambda
-  reads it the first time a request needs the model, so `GET /chat` never reads it and replacing
-  the key needs no deploy. Changing provider leaves the other provider's key stored.
+  provider, written by `scripts/aws-helper.sh --set-model-key`. `scripts/deploy.sh` passes the
+  api Lambda the parameter of the provider `LLM_MODEL` names, and its role can read only that
+  one. The Lambda reads it the first time a request needs the model, so `GET /chat` never reads
+  it and replacing the key needs no deploy. Changing provider leaves the other provider's key
+  stored.
 - **Frontend bucket and CloudFront distribution** — host the browser app, published by
-  `scripts/sync-frontend.sh`: the Vite bundle, `config.js`, `app.json` and the demo page
+  `scripts/deploy.sh --frontend`: the Vite bundle, `config.js`, `app.json` and the demo page
   `demo.html`. The app is described under [The browser app](#the-browser-app).
 
 ## The browser app
@@ -102,11 +103,11 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
 - **Chat state** (`useChat.ts`, over TanStack Query) — loads `GET /chat` for the shown day, one
   query per day, and keeps the latest snapshot it received. Today's history stays loaded while an
   earlier day is shown: the server records every turn under today, so from the first turn sent on
-  an earlier day the thread appends today's messages that came after it. A typed turn, a card choice or a photo is a `POST /turn`: the user's message
-  is shown at once, the server's replies are appended and its snapshot replaces the shown one, then
-  a refetch of `GET /chat` replaces the local entries with the server's history. A sent photo's
-  stored key, from the reply, takes the page's own copy as its link, so it shows with no download. A
-  stale choice (409) only replaces the snapshot. A turn lost to the network or a gateway timeout
+  an earlier day the thread appends today's messages that came after it. A typed turn, a card
+  choice or a photo is a `POST /turn`: the user's message is shown at once, the server's replies
+  are appended and its snapshot replaces the shown one, then a refetch of `GET /chat` replaces
+  the local entries with the server's history. A sent photo's stored key, from the reply, takes
+  the page's own copy as its link, so it shows with no download. A stale choice (409) only replaces the snapshot. A turn lost to the network or a gateway timeout
   only refetches, since the server may have handled it. A 503 `message_failed` only refetches too,
   which brings the message with its failed mark and retry button; a text or photo whose request
   never reached the server stays in the page with a resend while the page is open. Any other

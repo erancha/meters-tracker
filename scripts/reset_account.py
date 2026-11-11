@@ -118,9 +118,7 @@ def reset(stack: str, address: str, confirmed: bool) -> bool:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        prog="reset-account.sh", usage="%(prog)s [env] <email> [--yes]"
-    )
+    parser = argparse.ArgumentParser(prog="reset-account.sh", usage="%(prog)s <email> [--yes]")
     parser.add_argument("stack")
     parser.add_argument("email")
     parser.add_argument("--yes", action="store_true")

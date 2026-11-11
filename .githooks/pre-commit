@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Refuses a commit that stages a secrets file (SECRETS_FILES of scripts/lib/app-env.sh) or any
+# value one of them holds. Enabled by core.hooksPath=.githooks, which source_secrets_file of
+# scripts/lib/app-env.sh sets whenever a script loads any secrets file through it.
+set -euo pipefail
+
+SCRIPT_DIR="$(git rev-parse --show-toplevel)/scripts"
+# shellcheck source=../scripts/lib/app-env.sh
+source "$SCRIPT_DIR/lib/app-env.sh"
+
+(( ${#SECRETS_FILES[@]} > 0 )) || die "lib/app-env.sh lists no secrets files to check"
+for file in "${SECRETS_FILES[@]}"; do
+    # A checkout without the file holds none of its secrets.
+    [[ -f "$file" ]] || continue
+    assert_secrets_untracked "$file" index
+done

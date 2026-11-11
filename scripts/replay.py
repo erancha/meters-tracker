@@ -177,9 +177,7 @@ def _photo(text) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="replay.sh",
-        usage=(
-            "%(prog)s [env] <email> --open <photo> --close <photo> [--statement <photo>] [--yes]"
-        ),
+        usage=("%(prog)s <email> --open <photo> --close <photo> [--statement <photo>] [--yes]"),
     )
     parser.add_argument("stack")
     parser.add_argument("email")
@@ -198,7 +196,7 @@ def main() -> None:
         print(f"Replay stopped: {error}", file=sys.stderr)
         sys.exit(1)
     except (BotoCoreError, ClientError) as error:
-        fix = "run scripts/init-env.sh or check scripts/aws-config.sh"
+        fix = "run scripts/init-env.sh or check scripts/lib/aws-config.sh"
         print(f"AWS call failed: {error}; {fix}", file=sys.stderr)
         sys.exit(2)
 

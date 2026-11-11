@@ -236,7 +236,7 @@ def model_from_env() -> Model:
     """build_model over LLM_MODEL and LLM_API_KEY; a missing variable raises ValueError naming
     the fix."""
     if "LLM_MODEL" not in os.environ:
-        raise ValueError("LLM_MODEL is not set; export it first; see scripts/params.example.sh")
+        raise ValueError("LLM_MODEL is not set; export it first; see scripts/lib/stack-params.sh")
     if "LLM_API_KEY" not in os.environ:
         raise ValueError(
             "LLM_API_KEY is not set; export the API key of the provider LLM_MODEL names"

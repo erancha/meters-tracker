@@ -7,7 +7,7 @@ import { useState } from "react";
 import { texts } from "../texts";
 import { Icon } from "./Icon";
 
-// The animated walkthrough, published beside the app by sync-frontend.sh.
+// The animated walkthrough, published beside the app by deploy.sh --frontend.
 const DEMO_PATH = "demo.html";
 const SOURCE_URL = "https://github.com/erancha/meters-tracker";
 

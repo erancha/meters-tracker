@@ -28,8 +28,9 @@ fake in `tests/conftest.py` records the SES calls, and `tests/fake_model.py` ret
 photo readings and intents. `tests/engine_kit.py` builds an engine over the moto store with a
 clock the test sets, and seeds properties, apartments, periods, meters and readings.
 `tests/test_template.py` checks the CloudFormation templates against the tables and settings
-the code expects, and `tests/test_scripts.py` runs the stack lookups of `scripts/common.sh`
-against a fake `aws` command.
+the code expects. `tests/test_scripts.py` runs the stack lookups and settings loaders of
+`scripts/lib/app-env.sh`, `init-env.sh`, `aws-helper.sh` whole and the frontend step of
+`deploy.sh` against a fake `aws` command in a temporary git checkout.
 
 `tests/test_correction_matrix.py` is the correction matrix, generated from the field table
 (`FIELDS` in `src/common/fields.py`) and the table of records a correction may delete (`DELETES`
@@ -83,14 +84,14 @@ after a deploy. Each script's header documents it in full.
   is sent as the engine sends it, the card listed beside the waiting cards and dropped photos,
   with a lookup of the account's records. It needs no AWS settings and no recorded data. A
   message the deployed app misunderstood becomes a new case.
-- [`eval-readings.sh`](../scripts/eval-readings.sh) `[env] [--limit N]` — scores a model on the
+- [`eval-readings.sh`](../scripts/eval-readings.sh) `[--limit N]` — scores a model on the
   photos the deployed model failed on (the failed-photos record of
   [Domain rules](domain-rules.md)), against the serial and value the owner confirmed. It scans
   every account's readings in the stack, with the owner's own AWS credentials, so it needs
   real use of the deployed app first: until readings carry failed photos it has nothing to
   score. A failed photo with no serial is scored against the next photo's reading, which may be
   of another meter, so its "serial NO" is not always the model's error.
-- [`replay.sh`](../scripts/replay.sh) `[env] <email> --open … --close … [--statement …] --yes`
+- [`replay.sh`](../scripts/replay.sh) `<email> --open … --close … [--statement …] --yes`
   — walks the owner's story through a deployed api Lambda with the real model, as a smoke test
   after a deploy: it resets the account first (as `reset-account.sh --yes` does), then
   invokes the Lambda with the JWT claims the sign-in would give the address. Five billed calls,
@@ -103,21 +104,26 @@ result, its time and its cost at the listed prices; it is the quick check of a s
 
 1. Install the AWS CLI. The scripts add `~/.local/bin` to `PATH` themselves, since a
    non-interactive shell does not have it.
-2. Run [`scripts/init-env.sh`](../scripts/init-env.sh). It copies `aws-config.example.sh` and
-   `params.example.sh` to their gitignored siblings, readable only by their owner, and refuses
-   to overwrite either without `--force`. Fill in the AWS access key pair and region in
-   `scripts/aws-config.sh`, and the Google OAuth client id and secret, the model
-   (`LLM_MODEL`, as `provider:model`), the verified SES sender (`SES_SENDER`), the admin
-   (`ADMIN_EMAIL`) and the allowed list (`ALLOWED_EMAILS`) in `scripts/params.sh`. The allowed
-   list is a regex every new address must fully match to sign up; add an address to it, the
-   admin and each delegate included, and deploy before that address signs in for the first
-   time.
-3. Run [`scripts/set-model-key.sh <provider>`](../scripts/set-model-key.sh) once to store the
-   key of the provider `LLM_MODEL` names, then [`scripts/deploy.sh`](../scripts/deploy.sh), which
-   stops with that command when the key is missing.
+2. Run [`scripts/init-env.sh`](../scripts/init-env.sh). It copies `aws-config.example.sh`,
+   `secrets.example.sh` and `params.example.sh` in `scripts/lib/` to their gitignored siblings,
+   readable only by their owner, and refuses to overwrite any of them without `--force`. Fill in
+   the AWS access key pair and region in `scripts/lib/aws-config.sh`, the Google OAuth client id
+   and secret in `scripts/lib/secrets.sh`, and the verified SES sender (`SES_SENDER`), the admin
+   (`ADMIN_EMAIL`) and the allowed list (`ALLOWED_EMAILS`) in `scripts/lib/params.sh`, which
+   holds the private settings that are not secrets. The model (`LLM_MODEL`, as
+   `provider:model`) is set in the committed `scripts/lib/stack-params.sh`. The allowed list is
+   a regex every new address must fully match to sign up; add an address to it, the admin and
+   each delegate included, and deploy before that address signs in for the first time.
+3. Run [`scripts/aws-helper.sh --set-model-key <provider>`](../scripts/lib/aws-helper-app.sh)
+   once to store the key of the provider `LLM_MODEL` names, then
+   [`scripts/deploy.sh --frontend`](../scripts/deploy.sh), which stops with that command when the
+   key is missing.
 
 A bare `aws` command in your own shell has no credentials until it sources
-`scripts/aws-config.sh`; the scripts source it for you.
+`scripts/lib/aws-config.sh`; the scripts source it for you. A script that loads
+`aws-config.sh` or `secrets.sh` first stops if git tracks the file or a tracked file holds one
+of its values, and sets `core.hooksPath` to `.githooks`, whose `pre-commit` hook makes the same
+check on every commit's staged changes.
 
 ## Frontend development
 
@@ -135,30 +141,27 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
 
 ## Scripts
 
-- [`deploy.sh [env]`](../scripts/deploy.sh) — builds the Lambda package and deploys the Cognito
-  and app stacks, writes `frontend/public/config.js`, then runs `sync-frontend.sh`. The package
-  is byte-identical for an unchanged source (`zip_lambda.py` beside it), so CloudFormation leaves
-  the functions alone on such a run. The callback URL and CORS origin need the CloudFront URL,
-  which exists only after the first deploy, so a run deploys both stacks again when that URL
-  changed. An `env` suffix such as `dev` deploys an isolated stack pair beside the default one.
-  It refuses to create the app stack while tables or a files bucket of an earlier stack of the
-  same name remain ([ADR 0006](adr/0006-retain-data-on-delete.md)).
-- [`sync-frontend.sh [env]`](../scripts/sync-frontend.sh) — builds the frontend and publishes it
-  to the frontend bucket with `app.json` and `docs/demo/demo.html`, then invalidates the
-  CloudFront cache. Run by `deploy.sh`; run it alone after a frontend-only change. It refuses to
-  publish a `config.js` that targets another stack's API.
-- [`delete-stack.sh [env]`](../scripts/delete-stack.sh) — empties the frontend bucket and
-  deletes both stacks, leaving the tables and the files bucket in place. Its header explains how
-  to import them into a new stack or remove them for good.
-- [`set-model-key.sh`](../scripts/set-model-key.sh) — reads a model provider's API key without
-  echoing it (or from stdin) and overwrites `/meters-tracker/llm/<provider>/api-key` in SSM. The
-  key never appears in process arguments. Each provider keeps its own parameter, so switching
-  `LLM_MODEL` needs only a deploy. The parameters are shared by every stack pair in the account,
-  and the Lambda reads its key at run time, so a new key needs no deploy.
-- [`aws-helper.sh`](../scripts/aws-helper.sh) — finds and tails the deployed functions'
-  CloudWatch logs by alias (`api`, `presignup`) or `<stack>:<logical-id>`, in the stack pair a
-  bare `env` suffix names, as for `deploy.sh`. A failed lookup stops with one message naming the
-  stack and the fix.
+No script takes an environment argument. The git branch selects the stack pair every script
+works on: `main` selects `meters-tracker` and `meters-tracker-cognito`, any other branch the
+isolated pair `meters-tracker-fb` and `meters-tracker-fb-cognito`.
+
+- [`deploy.sh`](../scripts/deploy.sh) — builds the Lambda package, deploys the Cognito and app
+  stacks and writes `frontend/public/config.js`. The package is byte-identical for an unchanged
+  source (`zip_lambda.py` beside it), so CloudFormation leaves the functions alone on such a
+  run. The callback URL and CORS origin need the CloudFront URL, which exists only after the
+  first deploy, so a run deploys both stacks again when that URL changed. It refuses to create
+  the app stack while tables or a files bucket of an earlier stack of the same name remain
+  ([ADR 0006](adr/0006-retain-data-on-delete.md)). The stack parameters come from
+  `lib/stack-params.sh` and the gitignored `lib/secrets.sh` and `lib/params.sh`.
+  `--frontend` then builds the frontend and publishes it to the frontend bucket with `app.json`
+  and `docs/demo/demo.html`, and invalidates the CloudFront cache; `--frontend-only` does only
+  that, after a frontend-only change. The frontend step refuses to publish a `config.js` that
+  targets another stack's API.
+- [`aws-helper.sh`](../scripts/aws-helper.sh) — operates the deployed stack pair, the same
+  file in every AWS repo; this repo's own options are in
+  [`lib/aws-helper-app.sh`](../scripts/lib/aws-helper-app.sh), and `--help` prints both headers.
+  `--functions` lists the deployed functions of both stacks and `--logs <function>` tails one,
+  named by its logical id or a unique part of it (`api`, `presignup`).
   `./scripts/aws-helper.sh --errors --since 1d`, the warnings and errors of every function in
   both stacks, is the quickest health check;
   `--costs --since 1d` sums the model spend ([Logs](#logs)). `--ses-status` lists each address
@@ -166,16 +169,25 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
   sandbox; `--ses-verify <email>...` mails each address a new verification link, for a user whose
   report could not be sent; `--ses-unverify <email>...` deletes each address's SES identity, to
   see a report fail on purpose, and refuses `SES_SENDER`.
+  `--set-model-key <provider>` reads a model provider's API key without echoing it (or from
+  stdin) and overwrites `/meters-tracker/llm/<provider>/api-key` in SSM. The key never appears
+  in process arguments. Each provider keeps its own parameter, so switching `LLM_MODEL` needs
+  only a deploy. The parameters are shared by every stack pair in the account, and the Lambda
+  reads its key at run time, so a new key needs no deploy.
+  `--delete-stack --empty` empties the frontend bucket and deletes both stacks, leaving the
+  tables and the files bucket with its objects in place; without `--empty` it stops while the
+  frontend bucket holds objects. The header of `lib/aws-helper-app.sh` explains how to import
+  the retained resources into a new stack or remove them for good.
 - [`test.sh`](../scripts/test.sh) — the quality gate, above.
-- [`init-env.sh`](../scripts/init-env.sh) — creates the two settings files, above.
+- [`init-env.sh`](../scripts/init-env.sh) — creates the three settings files, above.
 - [`read-meter.sh <image>`](../scripts/read-meter.sh) — sends one photo through the real model
   with the app's prompt and prints the parsed reading as JSON; the model comes from `LLM_MODEL`
   and the provider's key from `LLM_API_KEY` in the environment. Use it to try a prompt change
   or another model on a real photo; the suite exercises each provider's implementation against
   a stubbed client only, so a real call is a manual check. The logic is in `read_meter.py`
   beside it.
-- [`reset-account.sh [env] <email> [--yes]`](../scripts/reset-account.sh) — deletes everything
-  the account owns in the named stack: the rows keyed by its address, or by its address and a
+- [`reset-account.sh <email> [--yes]`](../scripts/reset-account.sh) — deletes everything
+  the account owns in the branch's stack: the rows keyed by its address, or by its address and a
   `#`, in every app table, and every version of its photos under `<email>/` in the files bucket.
   Without `--yes` it prints the count per table and of photo versions and deletes nothing. Use
   it to replay a story from an empty account. A delegate's own rows (its access row, pending
@@ -183,18 +195,20 @@ Cognito stack allows, and serves `config/app.json` at `/app.json`. The deployed 
   to the emptied account. The logic is in `reset_account.py` beside it;
   `app_stack.py` resolves a stack's tables, bucket and api function for the scripts that work
   on a deployed stack.
-- [`backup-restore.sh [env] backup | restore <folder> | --cron`](../scripts/backup-restore.sh)
+- [`backup-restore.sh backup | restore <folder> | --cron`](../scripts/backup-restore.sh)
   — copies a stack's data to a local folder and back. A backup holds every row of the nine
   tables as typed JSON lines and the current version of every file in the bucket, with each
   file's content type. It goes to `backups/<timestamp>/`, gitignored, or to
-  `backups/<env>/<timestamp>/` for an env stack, or under `--base-dir`, falling back to
-  `backups/` when that folder cannot be written to. A restore makes the stack hold exactly the
-  backup's rows and files once you type the stack's name; the bucket keeps the versions it
-  replaces. `--cron` adds a midnight crontab entry per stack that logs to `backups/cron.log`.
-  The logic is in `backup_restore.py` beside it.
+  `backups/fb/<timestamp>/` for the `meters-tracker-fb` stack, or under `--base-dir`, falling
+  back to `backups/` when that folder cannot be written to. A restore makes the stack hold
+  exactly the backup's rows and files once you type the stack's name; the bucket keeps the
+  versions it replaces. `--cron` adds a midnight crontab entry for the branch's stack that logs
+  to `backups/cron.log`; the entry names that stack, so it backs it up whatever branch is
+  checked out when it runs. The logic is in `backup_restore.py` beside it.
 
-`scripts/common.sh` holds the helpers the shell scripts source: the `--help` printer, the
-settings-file checks, the `env` suffix parsing and the stack lookups.
+`scripts/lib/app-env.sh` holds the helpers the shell scripts source: the `--help` printer and the
+usage error (the help on stderr, exit status 2), the settings-file loaders, the branch's stack
+selection and the stack lookups.
 
 ## Configuration changes
 

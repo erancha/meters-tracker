@@ -186,4 +186,4 @@ def test_main_refuses_a_limit_that_is_not_a_positive_whole_number(monkeypatch, c
     with pytest.raises(SystemExit) as stopped:
         main()
     assert stopped.value.code == 2
-    assert "usage: eval-readings.sh [env] [--limit N]" in capsys.readouterr().err
+    assert "usage: eval-readings.sh [--limit N]" in capsys.readouterr().err

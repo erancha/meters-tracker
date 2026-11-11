@@ -163,7 +163,7 @@ def test_main_stops_with_one_line_on_an_aws_error(monkeypatch, capsys, tmp_path)
     with pytest.raises(SystemExit) as stopped:
         _main(monkeypatch, tmp_path, "--yes", run=no_credentials)
     assert stopped.value.code == 2
-    fix = "run scripts/init-env.sh or check scripts/aws-config.sh"
+    fix = "run scripts/init-env.sh or check scripts/lib/aws-config.sh"
     assert capsys.readouterr().err.splitlines() == [
         f"AWS call failed: Unable to locate credentials; {fix}"
     ]

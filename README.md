@@ -88,19 +88,21 @@ table, how the conversation engine queues confirmations, and what is not built y
 ## Getting started
 
 Run the tests with `./scripts/test.sh`; it creates the virtualenv on its first run. To deploy,
-run `./scripts/init-env.sh`, fill in the two settings files it creates, then run
-`./scripts/set-model-key.sh <provider>` and `./scripts/deploy.sh`; the deploy ends by publishing
-the browser app and prints its address.
+run `./scripts/init-env.sh`, fill in the three settings files it creates, then run
+`./scripts/aws-helper.sh --set-model-key <provider>` and `./scripts/deploy.sh --frontend`; the
+deploy ends by publishing the browser app and prints its address. The git branch selects the
+stack pair: `main` deploys `meters-tracker`, any other branch `meters-tracker-fb`.
 [Development](docs/development.md) has the details.
 
 ## Scripts
 
 - `init-env.sh` — creates the gitignored AWS and deploy settings files from their examples
-- `deploy.sh` — builds the Lambda package, deploys both stacks and publishes the frontend
-- `sync-frontend.sh` — builds the frontend and publishes it with the app config and the demo page
-- `delete-stack.sh` — deletes both stacks, keeping the tables and the photos
-- `set-model-key.sh` — stores a model provider's API key in SSM
-- `aws-helper.sh` — finds and tails the deployed functions' logs
+- `deploy.sh` — builds the Lambda package and deploys both stacks; `--frontend` also builds the
+  frontend and publishes it with the app config and the demo page, `--frontend-only` does only
+  that
+- `aws-helper.sh` — every AWS operation on the deployed stacks: the functions' logs, the model
+  spend, SES verification, `--set-model-key` to store a model provider's API key in SSM,
+  `--delete-stack` to delete both stacks, keeping the tables and the photos
 - `test.sh` — shell syntax check, lint, format check and the backend test suite
 - `read-meter.sh` — reads one photo through the model and prints the result
 - `reset-account.sh` — deletes everything one account owns in a deployed stack

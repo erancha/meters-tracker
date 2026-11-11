@@ -17,7 +17,7 @@
 # is sent as the engine sends it: the card with its fields and button labels, then a records
 # block listing the card, from the named account the case lists, or from the apartment names a
 # request (no card, or a standby card) lists.
-# The model comes from LLM_MODEL (provider:model, as in scripts/params.example.sh) and the
+# The model comes from LLM_MODEL (provider:model, as in scripts/lib/stack-params.sh) and the
 # provider's key from LLM_API_KEY, both in the environment. It needs no AWS settings and no
 # recorded data. Each case is one billed classification call, about a hundred in all.
 # Prints one PASS or FAIL line per case as it is classified, with what the model returned
@@ -28,18 +28,18 @@
 #   ./scripts/eval-intents.sh
 #   ./scripts/eval-intents.sh --intent resend_reports,unknown,not_offered,how_to,explain
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=common.sh
-source "$ROOT/scripts/common.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/app-env.sh
+source "$SCRIPT_DIR/lib/app-env.sh"
 
 INTENTS=()
 case "${1:-}" in
   -h|--help) print_help; exit 0 ;;
-  --intent) [ $# -eq 2 ] || { print_help >&2; exit 2; }; INTENTS=("$2") ;;
+  --intent) [ $# -eq 2 ] || usage_error "--intent takes one list of intents"; INTENTS=("$2") ;;
   "") ;;
-  *) print_help >&2; exit 2 ;;
+  *) usage_error "Unknown argument: $1" ;;
 esac
 
 require_venv
-exec "$ROOT/.venv/bin/python" "$ROOT/scripts/eval_intents.py" "$ROOT/tests/intents.json" \
+exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/eval_intents.py" "$APP_FOLDER/tests/intents.json" \
   "${INTENTS[@]}"
