@@ -40,7 +40,9 @@ deployed by CloudFormation. Layout and parts: docs/architecture.md.
   `meters-tracker-fb-cognito`; an exported `STACK_NAME` wins.
 - `.githooks/pre-commit` refuses a commit that stages `aws-config.sh` or `secrets.sh` of
   `scripts/lib/` or a value one holds; the scripts enable it (`core.hooksPath`) the first time
-  they load one. The values of `params.sh` are not searched for: the app publishes some.
+  they load one. Of `params.sh` it refuses the email addresses, the allow-list's included, and
+  no other value; `PUBLISHED_SETTINGS` of `lib/app-env.sh` names a setting whose address may
+  appear in git, and none does.
 - The aws CLI lives in `~/.local/bin`, which a non-interactive shell lacks. A bare `aws` call
   failing with NoCredentials means the shell did not source `scripts/lib/aws-config.sh`.
 - Create the settings files of `scripts/lib/` with `init-env.sh`, never by copying by hand: it

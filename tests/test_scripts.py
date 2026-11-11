@@ -330,11 +330,13 @@ def test_load_params_refuses_a_file_git_would_track(checkout):
     assert "params.sh" in result.stderr and "gitignored" in result.stderr
 
 
-def test_the_secrets_check_leaves_the_private_settings_alone(checkout):
+def test_load_params_refuses_an_address_of_the_private_settings_in_git(checkout):
     (checkout.root / "notes.txt").write_text("mail comes from sender@stub.test\n")
     subprocess.run(["git", "-C", checkout.root, "add", "notes.txt"], check=True)
     result = checkout.source(STACK_PARAMS)
-    assert (result.returncode, result.stdout) == (0, "reached\n")
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "SES_SENDER" in result.stderr and "notes.txt" in result.stderr
 
 
 def test_stack_params_refuse_a_placeholder_left_from_the_example(checkout):

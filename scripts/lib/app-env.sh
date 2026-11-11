@@ -12,6 +12,8 @@
 # - load_aws_config / load_secrets: source the gitignored lib/aws-config.sh / lib/secrets.sh,
 #   refusing a file git would track or a secret value that appears in a tracked file
 # - assert_secrets_untracked: that check, also run on staged changes by .githooks/pre-commit
+# - assert_addresses_untracked: the same for the email addresses of a private settings file
+#   (PRIVATE_FILES), except the ones PUBLISHED_SETTINGS names
 # - get_app_name / get_region / resolve_stack: the stack pair this checkout deploys to, and
 #   STACK_NAMES, the stacks aws-helper.sh operates on
 # - SAM_CLI_TELEMETRY: off for every sam command a script runs
@@ -103,39 +105,94 @@ PUBLIC_SETTINGS=(AWS_DEFAULT_REGION)
 # The gitignored files that hold secrets.
 SECRETS_FILES=("$SCRIPT_DIR/lib/aws-config.sh" "$SCRIPT_DIR/lib/secrets.sh")
 
+# Gitignored files of private settings that are no secret (addresses, limits, URLs): their other
+# values may appear in git, but an email address they hold may not, unless PUBLISHED_SETTINGS names
+# the setting that holds it.
+PRIVATE_FILES=("$SCRIPT_DIR/lib/params.sh")
+# Settings of a private file whose address the app shows its users, so a copy in a tracked file is
+# no leak.
+PUBLISHED_SETTINGS=()
+
+# Fatal unless git ignores <file>.
+assert_gitignored() {
+    git -C "$APP_FOLDER" check-ignore -q "$1" ||
+        die "$1 is tracked or not gitignored; it must stay out of git"
+}
+
+# The names of the settings <file> sets (KEY=value, with or without export).
+setting_names() { grep -oP '^(?:export )?\K\w+(?==)' "$1"; }
+
+# Fatal when <value> appears in git's files: <scope> "worktree" scans the tracked files as they are
+# on disk, "index" the staged snapshot a commit records. <label> names the value in the message,
+# which never holds the value itself; further arguments are git grep options.
+refuse_copy_in_git() {
+    local scope="$1" label="$2" value="$3" options=(-F "${@:4}") status=0
+    [[ "$scope" == index ]] && options+=(--cached)
+    git -C "$APP_FOLDER" grep "${options[@]}" -q -e "$value" || status=$?
+    case "$status" in
+        0) die "$label appears in git ($scope):" \
+               "$(git -C "$APP_FOLDER" grep "${options[@]}" -l -e "$value" | tr '\n' ' ')" ;;
+        1) ;;
+        *) die "git grep failed while scanning for $label" ;;
+    esac
+}
+
 # Fatal when git tracks or would track <file>, or when the value of a non-public setting it sets
-# (KEY=value, with or without export) appears in git's files. <scope> "worktree" scans the tracked
-# files as they are on disk, "index" the staged snapshot a commit records.
+# appears in git's files. <scope> as for refuse_copy_in_git.
 assert_secrets_untracked() {
-    local file="$1" scope="$2" grep_scope=() name status
-    [[ "$scope" == index ]] && grep_scope=(--cached)
-    git -C "$APP_FOLDER" check-ignore -q "$file" ||
-        die "$file is tracked or not gitignored; it must stay out of git"
+    local file="$1" scope="$2" name
+    assert_gitignored "$file"
     (
         # shellcheck source=/dev/null
         source "$file"
-        for name in $(grep -oP '^(?:export )?\K\w+(?==)' "$file"); do
+        for name in $(setting_names "$file"); do
             [[ " ${PUBLIC_SETTINGS[*]} " == *" $name "* ]] && continue
             [[ -n "${!name}" ]] || die "$name is empty in $file"
-            status=0
-            git -C "$APP_FOLDER" grep "${grep_scope[@]}" -q -F -e "${!name}" || status=$?
-            case "$status" in
-                0) die "The value of $name (from $file) appears in git ($scope):" \
-                       "$(git -C "$APP_FOLDER" grep "${grep_scope[@]}" -l -F -e "${!name}" |
-                          tr '\n' ' ')" ;;
-                1) ;;
-                *) die "git grep failed while scanning for $name" ;;
-            esac
+            refuse_copy_in_git "$scope" "The value of $name (from $file)" "${!name}"
         done
     ) || exit 1
 }
 
-# Sources lib/<file> after assert_secrets_untracked, and points git at the repo's hooks so the
-# pre-commit hook applies the same check to every commit made from a checkout that holds secrets.
-source_secrets_file() {
-    local file="$SCRIPT_DIR/lib/$1"
+# Fatal when git tracks or would track <file>, or when an email address one of its settings holds
+# appears in git's files, ignoring case, unless it is the value of a setting PUBLISHED_SETTINGS
+# names. Backslashes are dropped first, so an address inside a regex (name\.x@host\.com) counts;
+# an "@" that is not part of a full address is fatal, since the address it stands for could not
+# be checked. <scope> as for refuse_copy_in_git.
+assert_addresses_untracked() {
+    local file="$1" scope="$2"
+    assert_gitignored "$file"
+    (
+        local name value found addresses address published=" "
+        local pattern='[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+'
+        # shellcheck source=/dev/null
+        source "$file"
+        for name in "${PUBLISHED_SETTINGS[@]}"; do
+            published+="${!name,,} "
+        done
+        for name in $(setting_names "$file"); do
+            value="${!name}"
+            value="${value//\\/}"
+            found="$(grep -oE "$pattern" <<<"$value")" || [[ $? -eq 1 ]] ||
+                die "grep failed while reading the addresses of $name"
+            split_lines addresses "$found"
+            [[ "${#addresses[@]}" -eq "$(tr -cd @ <<<"$value" | wc -c)" ]] ||
+                die "$name in $file holds an \"@\" outside a full address; write each address" \
+                    "in full, e.g. a\\.b@host\\.com|c@host\\.com"
+            for address in "${addresses[@]}"; do
+                [[ "$published" == *" ${address,,} "* ]] && continue
+                refuse_copy_in_git "$scope" "An address of $name (from $file)" "$address" -i
+            done
+        done
+    ) || exit 1
+}
+
+# Sources lib/<file> after <check> (assert_secrets_untracked or assert_addresses_untracked), and
+# points git at the repo's hooks so the pre-commit hook applies the same check to every commit
+# made from a checkout that holds the file.
+source_checked_file() {
+    local file="$SCRIPT_DIR/lib/$1" check="$2"
     [[ -f "$file" ]] || die "Missing $file (copy lib/${1%.sh}.example.sh and fill it in)"
-    assert_secrets_untracked "$file" worktree
+    "$check" "$file" worktree
     # shellcheck source=/dev/null
     source "$file"
     if [[ "$(git -C "$APP_FOLDER" config --default "" core.hooksPath)" != .githooks ]]; then
@@ -144,6 +201,9 @@ source_secrets_file() {
         info "Enabled the repo's git hooks (core.hooksPath=.githooks)." >&2
     fi
 }
+
+source_secrets_file() { source_checked_file "$1" assert_secrets_untracked; }
+source_private_file() { source_checked_file "$1" assert_addresses_untracked; }
 
 # The deploying user's AWS credentials and region.
 load_aws_config() { source_secrets_file aws-config.sh; }
@@ -211,17 +271,9 @@ ensure_node_modules() {
 # The helpers below are this app's own; everything above is shared with the other AWS repos.
 
 # The deployment's private settings: the SES sender, the admin address and the sign-up allowed
-# list. The file stays out of git like a secrets file, but its values are not searched for in the
-# tracked files: the app publishes some of them by design (the sender address is on every mail,
-# the admin address on the refusal page).
-load_params() {
-    local file="$SCRIPT_DIR/lib/params.sh"
-    [[ -f "$file" ]] || die "Missing $file (copy lib/params.example.sh and fill it in)"
-    git -C "$APP_FOLDER" check-ignore -q "$file" ||
-        die "$file is tracked or not gitignored; it must stay out of git"
-    # shellcheck source=/dev/null
-    source "$file"
-}
+# list. The app shows the sender on every mail and the admin address on the refusal page, but
+# no address of it is in git.
+load_params() { source_private_file params.sh; }
 
 # Stops unless each named variable is set, naming the settings file under lib/ that exports it.
 require_settings() {  # settings-file variable...

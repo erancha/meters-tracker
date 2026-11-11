@@ -113,7 +113,9 @@ result, its time and its cost at the listed prices; it is the quick check of a s
    holds the private settings that are not secrets. The model (`LLM_MODEL`, as
    `provider:model`) is set in the committed `scripts/lib/stack-params.sh`. The allowed list is
    a regex every new address must fully match to sign up; add an address to it, the admin and
-   each delegate included, and deploy before that address signs in for the first time.
+   each delegate included, and deploy before that address signs in for the first time. Write
+   each address in full (`a\.b@host\.com|c@host\.com`), since the scripts check every address
+   of the file and stop at an `@` outside one.
 3. Run [`scripts/aws-helper.sh --set-model-key <provider>`](../scripts/lib/aws-helper-app.sh)
    once to store the key of the provider `LLM_MODEL` names, then
    [`scripts/deploy.sh --frontend`](../scripts/deploy.sh), which stops with that command when the
@@ -123,7 +125,8 @@ A bare `aws` command in your own shell has no credentials until it sources
 `scripts/lib/aws-config.sh`; the scripts source it for you. A script that loads
 `aws-config.sh` or `secrets.sh` first stops if git tracks the file or a tracked file holds one
 of its values, and sets `core.hooksPath` to `.githooks`, whose `pre-commit` hook makes the same
-check on every commit's staged changes.
+check on every commit's staged changes. Loading `params.sh` makes the same check for its email
+addresses only, so the sign-up list and the admin's address never reach git.
 
 ## Frontend development
 
