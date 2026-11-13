@@ -2,36 +2,52 @@
 
 This document details the architecture the [README](../README.md) summarizes: every part the
 stacks deploy, what the parts share, where the data lives and how the code is laid out. The
-period, reading and charge rules have their own page, [Domain rules](domain-rules.md).
+period, reading and charge rules have their own page, [Domain rules](domain-rules.md), and the
+shapes the code repeats theirs, [Design patterns](design-patterns.md).
+
+**Contents:** [One body of code, several entry points](#one-body-of-code-several-entry-points) ·
+[The entry points](#the-entry-points) · [The browser app](#the-browser-app) ·
+[The conversation engine](#the-conversation-engine) ·
+[Configuration both runtimes read](#configuration-both-runtimes-read) ·
+[Cross-cutting mechanisms](#cross-cutting-mechanisms) · [Storage](#storage) ·
+[Codebase structure](#codebase-structure)
 
 Nothing in this app runs between requests. Each request wakes a Python function, which reads and
 writes a few DynamoDB tables, may ask the model to read a photo or classify a message, and then
 stops. The rationale is [ADR 0001](adr/0001-serverless-on-aws.md).
 
+## One body of code, several entry points
+
+The Python side is a single shared core (`src/common/`) with thin entry points in front of it
+(`src/handlers/`): `api.py` behind the HTTP API and `presignup.py` behind the Cognito pool.
+`deploy.sh` installs `requirements.txt` for Linux arm64 into `build/lambda`, copies `src/` and
+`config/app.json` beside it, and both stacks deploy a zip of that directory, byte-identical for an
+unchanged source so such a deploy changes no function. Both functions run Python 3.13 on arm64.
+
 ```mermaid
 graph LR
     C((Browser app)) -->|Google sign-in| COG[Cognito user pool]
     COG --> PRE[presignup Lambda]
-    PRE --> SES[SES<br/>address verification]
-    C -->|JWT| API[HTTP API<br/>GET /chat · POST /turn · GET /files/key]
+    PRE --> SES["SES<br/>address verification"]
+    C -->|JWT| API["HTTP API<br/>GET /chat · POST /turn · GET /files/key"]
     API --> L[api Lambda]
-    L --> DB[(DynamoDB<br/>nine tables)]
-    L --> S3[(S3 files bucket<br/>meter photos)]
-    L --> SSM[SSM parameter<br/>model API key]
-    L --> CL[Claude API<br/>read photo · classify text]
-    L --> SES2[SES<br/>period report with PDF]
+    L --> DB[("DynamoDB<br/>tables")]
+    L --> S3[("S3 files bucket<br/>meter photos")]
+    L --> SSM["SSM parameter<br/>model API key"]
+    L --> CL["Model API, Claude or OpenAI<br/>read photo · classify text"]
+    L --> SES2["SES<br/>period report with PDF"]
     CF[CloudFront] --> FB[(S3 frontend bucket)]
     C --> CF
 ```
 
-## The parts
+## The entry points
 
 - **Cognito user pool** (`scripts/template-cognito.yaml`, its own stack) — Google is the only
   identity provider, and the hosted sign-in page issues the JWT the API checks. The pool refuses
   its own sign-up, and its app client allows no password flow, so no one can register an
   address under a password and reach that address's account. Google's `email_verified` is
   mapped into the token, and the api Lambda answers 403 `email_unverified` unless it is
-  `"true"`.
+  `"true"`. [Sign-in](sign-in.md) follows the whole sign-in and its Google setup.
 - **presignup Lambda** (`src/handlers/presignup.py`) — runs while Cognito creates an account and
   refuses an address that does not fully match `ALLOWED_EMAILS`, the regex the operator keeps in
   `scripts/lib/params.sh` and each deploy passes through the `AllowedEmails` stack parameter
@@ -41,7 +57,7 @@ graph LR
   refuses the sign-up; an account the operator creates directly in the pool passes untouched.
 - **HTTP API** — checks the Cognito JWT on every route, with CORS for `http://localhost:8000`
   and the CloudFront URL.
-- **api Lambda** (`src/handlers/api.py`) — the three routes, each resolving the JWT's email to
+- **api Lambda** (`src/handlers/api.py`) — the routes, each resolving the JWT's email to
   an account first (see Sign-in under [Cross-cutting mechanisms](#cross-cutting-mechanisms)):
   - `GET /chat` — the signed-in address's messages of one day, at most the latest 200, oldest
     first, and the snapshot (below). The optional `day` query (`YYYY-MM-DD`) names the day, today
@@ -77,7 +93,7 @@ graph LR
 - **SES** — the api Lambda sends the period report through it (see Period report under
   [Cross-cutting mechanisms](#cross-cutting-mechanisms)), from the verified `SES_SENDER`. The
   policy allows every identity because the SES sandbox also checks the recipient's address.
-- **DynamoDB tables** — nine, described under [Storage](#storage).
+- **DynamoDB tables** — described under [Storage](#storage).
 - **Files bucket** — the private S3 bucket holding uploaded meter photos.
 - **SSM parameters** `/meters-tracker/llm/<provider>/api-key` — one SecureString per model
   provider, written by `scripts/aws-helper.sh --set-model-key`. `scripts/deploy.sh` passes the
@@ -92,9 +108,10 @@ graph LR
 ## The browser app
 
 `frontend/` is a React and TypeScript single-page app in Hebrew (`<html lang="he" dir="rtl">`)
-that renders what the api Lambda returns and decides nothing about the conversation. Its look
+that renders what the api Lambda returns and decides nothing about the conversation
+([ADR 0011](adr/0011-browser-app-renders-the-server-snapshot.md)). Its look
 follows the app inside the phone of `docs/demo/demo.html`; every user-visible string is in
-`frontend/src/texts.ts`. What a user sees on each surface is in [Features](features.md).
+`frontend/src/texts.ts`. What a user sees on each surface is in [Feature overview](features.md).
 
 - **Sign-in** (`auth.ts`) — the Cognito hosted page with the authorization-code flow and PKCE,
   Google as the only provider. No secret exists in the browser; the redirect address is the
@@ -102,19 +119,20 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
   allows. The ID token authorizes each API call.
 - **Chat state** (`useChat.ts`, over TanStack Query) — loads `GET /chat` for the shown day, one
   query per day, and keeps the latest snapshot it received. Today's history stays loaded while an
-  earlier day is shown: the server records every turn under today, so from the first turn sent on
-  an earlier day the thread appends today's messages that came after it. A typed turn, a card
-  choice or a photo is a `POST /turn`: the user's message is shown at once, the server's replies
-  are appended and its snapshot replaces the shown one, then a refetch of `GET /chat` replaces
-  the local entries with the server's history. A sent photo's stored key, from the reply, takes
-  the page's own copy as its link, so it shows with no download. A stale choice (409) only replaces the snapshot. A turn lost to the network or a gateway timeout
-  only refetches, since the server may have handled it. A 503 `message_failed` only refetches too,
-  which brings the message with its failed mark and retry button; a text or photo whose request
-  never reached the server stays in the page with a resend while the page is open. Any other
-  failure shows a notice and refetches. Several photos can be in flight together. While the
-  snapshot shows no card, lists queued items and no turn is in flight, `GET /chat` is polled
-  every 5 seconds, so a card saved after the gateway gave up still arrives. With a card shown the
-  queued items include cards behind it, which change only after an answer, so polling stops.
+  earlier day is shown: the server records every turn under today, so from the first turn sent on an
+  earlier day the thread appends today's messages that came after it. A typed turn, a card choice or
+  a photo is a `POST /turn`: the user's message is shown at once, the server's replies are appended
+  and its snapshot replaces the shown one, then a refetch of `GET /chat` replaces the local entries
+  with the server's history. A sent photo's stored key, from the reply, takes the page's own copy as
+  its link, so it shows with no download. A stale choice (409) only replaces the snapshot. A turn
+  lost to the network or a gateway timeout only refetches, since the server may have handled it. A
+  503 `message_failed` only refetches too, which brings the message with its failed mark and retry
+  button; a text or photo whose request never reached the server stays in the page with a resend
+  while the page is open. Any other failure shows a notice and refetches. Several photos can be in
+  flight together. While the snapshot shows no card, lists queued items and no turn is in flight,
+  `GET /chat` is polled every 5 seconds, so a card saved after the gateway gave up still arrives.
+  With a card shown the queued items include cards behind it, which change only after an answer, so
+  polling stops.
 - **Cards** (`CardView.tsx`) — the buttons come from the snapshot card's options, a choice
   posts the card's `pending`, `version` and the option, and `foldChoices.ts` shows a recorded
   choice in place on the card its `choice` names instead of as a bubble of its own; typed text
@@ -134,9 +152,8 @@ follows the app inside the phone of `docs/demo/demo.html`; every user-visible st
   between the panel and the chat sets the panel's width (`PanelResizer.tsx`), kept in the browser's
   local storage, and the stylesheet stops the page at a maximum width. One full-screen photo
   viewer, owned by `App.tsx`, serves the thread.
-- **Runtime configuration** — `config.js` carries the stack's endpoints and is generated by
-  `deploy.sh`; `app.json` is `config/app.json`, which the bucket serves at its root and the Vite
-  dev server serves from the file.
+- **Runtime configuration** — `config.js` and `app.json`, both read from the site's own origin,
+  described under [Configuration both runtimes read](#configuration-both-runtimes-read).
 
 ## The conversation engine
 
@@ -199,23 +216,26 @@ The Lambda answers each lookup from the account it loaded for the turn (`account
 classification takes at most `MAX_LOOKUPS` (3) lookups, and the request after the last turns the
 tool off, so the model still answers ([Domain rules](domain-rules.md#typed-edits-on-a-card)).
 The prompts are in `src/common/prompts.py`. A refusal raises instead of returning a guess. Only
-the owner runs the classifier against the real model, with `scripts/eval-intents.sh` over the
+the owner runs the classifier against the real model, with `scripts/tools/eval-intents.sh` over the
 recorded messages in
 `tests/intents.json`; the test suite uses a fake model ([Development](development.md)).
 
+## Configuration both runtimes read
+
+`config/app.json` holds the tunable values (listed in [Domain rules](domain-rules.md#values)).
+The Lambda package carries a copy, found through the `APP_CONFIG_PATH` environment variable, so an
+edit needs `deploy.sh`; the frontend bucket serves the same file at its root as `app.json`, and
+the Vite dev server serves it from the source file. Each table's name reaches the code as
+`<NAME>_TABLE` (`READINGS_TABLE` and so on), the bucket as `FILES_BUCKET`, the model as
+`LLM_MODEL`, the key parameter as `LLM_KEY_PARAM`, the api time limit as `LAMBDA_TIMEOUT_SECONDS`,
+the mail sender as `SES_SENDER`, the admin address as `ADMIN_EMAIL`.
+
+The browser also reads `config.js`, the stack's endpoints and the admin's address, written by
+`scripts/lib/app-config.sh`, which `deploy.sh` runs after every backend deploy and before every
+frontend publish. The bundle is therefore the same for every stack.
+
 ## Cross-cutting mechanisms
 
-- **One package for both Lambdas.** `deploy.sh` installs `requirements.txt` for Linux arm64
-  into `build/lambda`, copies `src/` and `config/app.json` beside it, and both stacks deploy
-  a zip of that directory, byte-identical for an unchanged source so such a deploy changes no
-  function. Both functions run Python 3.13 on arm64.
-- **Configuration.** `config/app.json` holds the tunable values (listed in
-  [Domain rules](domain-rules.md#values)). The Lambda package carries a copy, found through the
-  `APP_CONFIG_PATH` environment variable, so an edit needs `deploy.sh`. Each table's name
-  reaches the code as `<NAME>_TABLE` (`READINGS_TABLE` and so on), the bucket as
-  `FILES_BUCKET`, the model as `LLM_MODEL`, the key parameter as `LLM_KEY_PARAM`, the api
-  time limit as `LAMBDA_TIMEOUT_SECONDS`, the mail sender as `SES_SENDER`, the admin address as
-  `ADMIN_EMAIL`.
 - **Sign-in and accounts.** `src/common/access.py` maps the JWT's email, lowercased, through
   the `access` table: a row names its account; an address with no row becomes the owner of its
   own account, keyed by that address, with a conditional write so two first requests agree.
@@ -252,10 +272,10 @@ recorded messages in
 Nine DynamoDB tables, billed per request, each holding one kind of record under a string
 partition key `pk` and sort key `sk` (`access` has no sort key). The account id is the owner's
 lowercase email. No request of the app crosses accounts or scans a table. Scripts run by the
-owner with their own credentials scan: `scripts/reset-account.sh` finds every row one account
-owns in each table, `scripts/backup-restore.sh` copies every table and the files bucket to a
+owner with their own credentials scan: `scripts/tools/reset-account.sh` finds every row one account
+owns in each table, `scripts/tools/backup-restore.sh` copies every table and the files bucket to a
 local folder and back, and a real-model check reads the readings that carry failed photos
-([Tests](development.md#tests)).
+([Tests](development.md#backend-tests)).
 
 - `access` — pk address, no sk: `email`, `account`, `role` (`owner` or `delegate`).
 - `properties` — pk account, sk id: `name`.
@@ -281,11 +301,9 @@ local folder and back, and a real-model check reads the readings that carry fail
   `apartment` and `property`, updated each time the photo's flow shows a card or ends.
 
 Photos are stored at `<account>/images/<seq>.jpg` (or `.png`) in the files bucket; the account
-prefix is what `GET /files/{key+}` checks. `src/common/store.py` converts numbers to and from
-DynamoDB's decimals in one place and reads every query across all its pages, except the
-message history, which asks for its latest 200 messages in one query. Every read, on
-every table, is strongly consistent: a flow reads back within one turn what it has just written,
-such as the reading a summary reports or the flags a re-close moved.
+prefix is what `GET /files/{key+}` checks. Every table is read and written through
+`src/common/store.py` alone, with strongly consistent reads
+([Data access behind one gateway](design-patterns.md#data-access-behind-one-gateway)).
 
 The tables and the files bucket survive a stack delete: tables are retained, deletion-protected
 and point-in-time recoverable; the bucket is retained and versioned, and a noncurrent version
@@ -305,7 +323,8 @@ expires after 30 days. `deploy.sh` refuses to create the app stack while such le
   `dates.py`, `log.py`, `ses_identity.py`, `webapi.py`.
 - `tests/` — pytest against moto's AWS fakes and a fake model; `engine_kit.py` seeds data and
   fixes the clock for the engine tests, and `test_owner_story.py` walks the owner's whole story.
-  `intents.json` holds the recorded messages of a real-model check ([Tests](development.md#tests)).
+  `intents.json` holds the recorded messages of a real-model check
+  ([Tests](development.md#backend-tests)).
 - `frontend/` — the browser app: `src/` holds the API client, sign-in, chat state and
   `components/`, each with its Vitest tests beside it; `public/config.js` is generated and
   gitignored, `config.example.js` documents its keys.

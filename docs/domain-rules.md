@@ -6,6 +6,15 @@ charge, with the exact values the code uses. The arithmetic lives in
 `src/common/periods.py`, which does no I/O; the lifecycles live in the flows under
 `src/common/flows/`.
 
+**Contents:** [Terms](#terms) · [Values](#values) · [A meter photo](#a-meter-photo) ·
+[Typed edits on a card](#typed-edits-on-a-card) ·
+[Corrections of saved records](#corrections-of-saved-records) ·
+[Replies that ask back](#replies-that-ask-back) ·
+[Checks before a reading is saved](#checks-before-a-reading-is-saved) ·
+[Period lifecycle](#period-lifecycle) · [Consumption and charge](#consumption-and-charge) ·
+[Period report](#period-report) · [Tariffs](#tariffs) · [Delegates](#delegates) ·
+[Model call cost](#model-call-cost)
+
 ## Terms
 
 - An **account** is one building owner's data: properties, apartments, meters, readings,
@@ -121,11 +130,11 @@ day keeps.
   two-number display is not a failure. A failed card with a serial hands its photos to the next
   photo of that serial. A failed card with no serial (unreadable, or stalled before the model
   answered) cannot name its meter, so it hands them to the next photo whatever its meter; the check
-  that scores another model on a reading's failed photos ([Tests](development.md#tests)) may then
-  mark such a photo "serial NO" for every model. The reading row keeps the failed photos' keys, in
-  the order they were sent, and the `LLM_MODEL` value of the model that failed on them. A replacing
-  duplicate reading whose new photo was read right removes the keys and the model from the replaced
-  row.
+  that scores another model on a reading's failed photos ([Tests](development.md#backend-tests))
+  may then mark such a photo "serial NO" for every model. The reading row keeps the failed photos'
+  keys, in the order they were sent, and the `LLM_MODEL` value of the model that failed on them. A
+  replacing duplicate reading whose new photo was read right removes the keys and the model from
+  the replaced row.
 
 ## Typed edits on a card
 
