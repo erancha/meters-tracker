@@ -1,5 +1,8 @@
 # meters-tracker
 
+[![In production](https://img.shields.io/badge/%F0%9F%8C%90-In%20production-brightgreen.svg)](https://dn6u06azerauv.cloudfront.net)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE)
+
 A Hebrew chat for a building owner who bills each apartment for the water and electricity it
 uses. The owner sends a photo of a meter; the app reads the serial and the counter, proposes the
 reading, and saves it once the owner confirms. It keeps each meter's history and each apartment's
