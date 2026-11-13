@@ -2,9 +2,9 @@
 # Back up a deployed stack's data to a local folder, restore it from one, or schedule a nightly
 # backup.
 #
-#   ./scripts/backup-restore.sh backup [<folder> | --base-dir <dir>]
-#   ./scripts/backup-restore.sh restore <folder>
-#   ./scripts/backup-restore.sh --cron [<dir>] [--force]
+#   ./scripts/tools/backup-restore.sh backup [<folder> | --base-dir <dir>]
+#   ./scripts/tools/backup-restore.sh restore <folder>
+#   ./scripts/tools/backup-restore.sh --cron [<dir>] [--force]
 #
 # The stack is the one the git branch selects, as in deploy.sh: meters-tracker on main,
 # meters-tracker-fb on any other branch.
@@ -24,17 +24,17 @@
 # A backup folder holds tables/<name>.jsonl.gz, files.tar.gz, files.json (each file's content
 # type) and metadata.json; backups/ is gitignored. Requires scripts/lib/aws-config.sh.
 #
-#   ./scripts/backup-restore.sh backup
-#   ./scripts/backup-restore.sh backup --base-dir /mnt/f/backups/meters-tracker
-#   ./scripts/backup-restore.sh restore backups/20261105-000000
-#   ./scripts/backup-restore.sh --cron /mnt/f/backups/meters-tracker
+#   ./scripts/tools/backup-restore.sh backup
+#   ./scripts/tools/backup-restore.sh backup --base-dir /mnt/f/backups/meters-tracker
+#   ./scripts/tools/backup-restore.sh restore backups/20261105-000000
+#   ./scripts/tools/backup-restore.sh --cron /mnt/f/backups/meters-tracker
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/app-env.sh
 source "$SCRIPT_DIR/lib/app-env.sh"
 
 DEFAULT_BASE="$APP_FOLDER/backups"
-SCRIPT="$SCRIPT_DIR/backup-restore.sh"
+SCRIPT="$SCRIPT_DIR/tools/backup-restore.sh"
 
 # The base folder a timestamped backup goes under: the one asked for when it can be written to,
 # otherwise backups/, so a nightly run with its drive unmounted still leaves a backup.
@@ -125,5 +125,5 @@ esac
 
 connect_stack
 require_venv
-exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/backup_restore.py" "$COMMAND" "$STACK_NAME" \
+exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/tools/backup_restore.py" "$COMMAND" "$STACK_NAME" \
   "$FOLDER"

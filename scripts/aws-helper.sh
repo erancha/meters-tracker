@@ -23,8 +23,9 @@
 #                               the region, wherever the retention differs
 #   --delete-stack [--empty]    delete the branch's stack or stacks (asks for the name of the
 #                               branch's stack), then any log group of their functions that
-#                               outlives them; stops before deleting anything, naming the
-#                               buckets, when a bucket of theirs holds objects
+#                               outlives them and the deploy's upload bucket
+#                               <stack>-artifacts-<account>; stops before deleting anything,
+#                               naming the buckets, when a bucket of theirs holds objects
 #       --empty                 empty those buckets first; accepted before or after
 #                               --delete-stack
 #   --list-resources [--region <region>]
@@ -426,6 +427,15 @@ delete_stack() {
         echo "Deleting log group: $group"
         aws logs delete-log-group --region "$REGION" --log-group-name "$group"
     done
+    # A deploy that uploads its Lambda packages itself keeps them in <stack>-artifacts-<account>,
+    # which no stack owns, since a stack cannot hold the bucket its own template is uploaded to.
+    # It holds only uploads a later deploy makes again, so it goes without --empty.
+    bucket="$STACK_NAME-artifacts-$(aws sts get-caller-identity --query Account --output text)"
+    if aws s3api head-bucket --region "$REGION" --bucket "$bucket" &>/dev/null; then
+        echo "Deleting the deploy's upload bucket: s3://$bucket"
+        empty_bucket "$bucket"
+        aws s3api delete-bucket --region "$REGION" --bucket "$bucket"
+    fi
     ok "Deleted ${STACK_NAMES[*]}."
 }
 

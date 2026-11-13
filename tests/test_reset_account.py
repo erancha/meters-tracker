@@ -1,4 +1,4 @@
-"""The account reset behind scripts/reset-account.sh: the deletion plan over the mocked tables and
+"""The account reset behind scripts/tools/reset-account.sh: the deletion plan over the mocked tables and
 bucket, its printed counts, carrying it out, and the refusal without --yes."""
 
 import sys
@@ -12,6 +12,7 @@ from engine_kit import ACCOUNT, USER, Kit, electricity
 from common.store import TABLE_NAMES
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "tools"))
 import reset_account
 from reset_account import describe, execute, plan
 

@@ -28,7 +28,7 @@ def _published_settings():
 PUBLISHED = _published_settings()
 PARAMS = "".join(f"export {name}={name.lower()}@published.test\n" for name in PUBLISHED) + (
     "export ALLOWED_EMAILS='user\\.one@stub\\.test|two@stub\\.test'\n"
-    'export LIMITS=\'{"three@stub.test": 9}\'\n'
+    "export LIMITS='{\"three@stub.test\": 9}'\n"
     "export EVERYONE='.*'\n"
 )
 

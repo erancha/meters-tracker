@@ -1,5 +1,5 @@
 """The owner's story: the names, labels, serials, readings and prices that
-tests/test_owner_story.py, scripts/replay.py and scripts/eval_intents.py share. The readings,
+tests/test_owner_story.py, scripts/tools/replay.py and scripts/tools/eval_intents.py share. The readings,
 the water meter and the prices are the run verified in the browser on 29/10/2026; the
 electricity meter goes by the label written beside it, as every electricity meter does."""
 
@@ -16,7 +16,7 @@ LABEL_READ = "קדמת"
 # The answer to the property question that names the apartment too.
 PLACE = f"{PROPERTY}, {APARTMENT}"
 # A printed serial the model misreads and the one the owner corrects it to, in the card and
-# record contexts scripts/eval_intents.py builds for the classifier.
+# record contexts scripts/tools/eval_intents.py builds for the classifier.
 SERIAL_READ = "2721056"
 SERIAL = "2721058"
 WATER_SERIAL = "4410273"

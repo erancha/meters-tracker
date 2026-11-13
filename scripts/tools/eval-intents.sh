@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Classify the recorded chat messages with a real model and check each intent it returns.
 #
-#   ./scripts/eval-intents.sh [--intent <intent,...>]
+#   ./scripts/tools/eval-intents.sh [--intent <intent,...>]
 #
 # --intent <intent,...>  Run only the cases that expect one of these intents, comma-separated.
 #                        A prompt change can move any case, so this is a cheap check while a
@@ -25,10 +25,10 @@
 # (no credit, rejected key, unreachable provider) stops the run with one line naming it, exit 2.
 #
 #   export LLM_MODEL=anthropic:claude-opus-5-5 LLM_API_KEY=<key>
-#   ./scripts/eval-intents.sh
-#   ./scripts/eval-intents.sh --intent resend_reports,unknown,not_offered,how_to,explain
+#   ./scripts/tools/eval-intents.sh
+#   ./scripts/tools/eval-intents.sh --intent resend_reports,unknown,not_offered,how_to,explain
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/app-env.sh
 source "$SCRIPT_DIR/lib/app-env.sh"
 
@@ -41,5 +41,5 @@ case "${1:-}" in
 esac
 
 require_venv
-exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/eval_intents.py" "$APP_FOLDER/tests/intents.json" \
+exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/tools/eval_intents.py" "$APP_FOLDER/tests/intents.json" \
   "${INTENTS[@]}"

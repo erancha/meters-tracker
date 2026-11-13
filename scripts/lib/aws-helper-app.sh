@@ -20,6 +20,10 @@
 #   --ses-unverify <email>...   delete each address's SES identity, so the sandbox refuses mail to
 #                               it, e.g. to see a report fail; refuses SES_SENDER of
 #                               lib/params.sh, whose removal stops every mail
+#   --redirect-uri              print the address Google returns sign-in to, Cognito's
+#                               /oauth2/idpresponse on the branch's stack pair, from the account
+#                               and region alone, so the Google client can name it before any
+#                               deploy (docs/sign-in.md)
 #   --set-model-key <anthropic|openai>
 #                               store a model provider's API key in SSM, prompting for it without
 #                               echo (or reading it from stdin when piped)
@@ -104,7 +108,7 @@ model_costs() {
     resolve_function ApiFunction
     group="$(function_log_group "$FUNCTION_NAME")"
     aws logs tail "$group" --region "$REGION" --since "$since" --format short \
-        --filter-pattern model_call | python3 "$SCRIPT_DIR/aws_helper.py"
+        --filter-pattern model_call | python3 "$SCRIPT_DIR/lib/aws_helper.py"
     warn "The dollars use the prices in PRICE_PER_MILLION in src/common/model.py, last checked" \
         "on the date noted there; a provider price change is not seen until that table is" \
         "updated and deployed" >&2
@@ -183,6 +187,16 @@ set_model_key() {
     echo "SSM $parameter updated"
 }
 
+# The Cognito domain's address follows from the account, the region and the prefix, as the
+# UserPoolDomain of template-cognito.yaml builds it, so it is known before the stack exists.
+print_redirect_uri() {
+    local account_id domain
+    connect
+    account_id="$(aws sts get-caller-identity --query Account --output text)"
+    domain="$(cognito_domain_prefix)-$account_id.auth.$REGION.amazoncognito.com"
+    echo "https://$domain/oauth2/idpresponse"
+}
+
 app_option() {
     local option="$1"
     shift
@@ -199,6 +213,7 @@ app_option() {
         --ses-status) ses_status "$@" ;;
         --ses-verify) ses_verify "$@" ;;
         --ses-unverify) ses_unverify "$@" ;;
+        --redirect-uri) no_arguments --redirect-uri "$@"; print_redirect_uri ;;
         --set-model-key) set_model_key "$@" ;;
         *) return 1 ;;
     esac

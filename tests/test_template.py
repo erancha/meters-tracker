@@ -212,5 +212,5 @@ def test_deploy_requires_the_admin_and_passes_it_to_the_api(app):
     assert "Default" not in app["Parameters"]["AdminEmail"]
     body = STACK_PARAMS.split("app_stack_parameters() {")[1].split("\n}")[0]
     assert '"AdminEmail=$ADMIN_EMAIL"' in body
-    assert "require_settings params.sh" in STACK_PARAMS and " ADMIN_EMAIL " in STACK_PARAMS
+    assert re.search(r"^require_settings params\.sh .*\bADMIN_EMAIL\b", STACK_PARAMS, re.MULTILINE)
     assert 'export ADMIN_EMAIL="' in (SCRIPTS / "lib" / "params.example.sh").read_text()

@@ -1,4 +1,4 @@
-"""The smoke replay behind scripts/replay.sh, run against the api handler in process over moto and
+"""The smoke replay behind scripts/tools/replay.sh, run against the api handler in process over moto and
 the fake model: the whole walk, a card of an unexpected kind or an error status stopping it, and
 the period start it types, which puts every day in the close window."""
 
@@ -26,6 +26,7 @@ from common.periods import is_closing_candidate
 from handlers import api
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "tools"))
 import replay
 from owner_story import APARTMENT, BOTTOM_OFFSET, CLOSING, OPENING, PRICES, PROPERTY, SERIAL
 from replay import Api, Unexpected, start_for, walk

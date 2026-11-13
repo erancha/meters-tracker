@@ -1,4 +1,4 @@
-"""The intent evaluation behind scripts/eval-intents.sh, run with the fake model: loading and
+"""The intent evaluation behind scripts/tools/eval-intents.sh, run with the fake model: loading and
 validating the recorded cases, the card and records context each case is classified with,
 comparing only the listed fields, and the printed lines, totals and exit status."""
 
@@ -17,6 +17,7 @@ from common.flows import classify_context, message_context
 from common.model import IntentResult, RecordsQuery
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "tools"))
 import eval_intents
 from eval_intents import (
     CARD_SEQ,

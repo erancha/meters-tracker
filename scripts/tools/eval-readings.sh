@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Score a model on every photo the deployed model failed on, against the readings users saved.
 #
-#   ./scripts/eval-readings.sh [--limit N]
+#   ./scripts/tools/eval-readings.sh [--limit N]
 #
 # The stack is the one the git branch selects, as in deploy.sh: meters-tracker on main,
 # meters-tracker-fb on any other branch.
@@ -17,9 +17,9 @@
 # meter, so its "serial NO" is not always the model's error.
 #
 #   export LLM_MODEL=openai:gpt-6.1-sol LLM_API_KEY=<key>
-#   ./scripts/eval-readings.sh --limit 5
+#   ./scripts/tools/eval-readings.sh --limit 5
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/app-env.sh
 source "$SCRIPT_DIR/lib/app-env.sh"
 
@@ -35,4 +35,4 @@ while [ $# -gt 0 ]; do
 done
 connect_stack
 require_venv
-exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/eval_readings.py" "$STACK_NAME" "${LIMIT[@]}"
+exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/tools/eval_readings.py" "$STACK_NAME" "${LIMIT[@]}"

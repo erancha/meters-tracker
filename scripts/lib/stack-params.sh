@@ -12,16 +12,7 @@
 load_secrets
 require_settings secrets.sh GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
 load_params
-PRIVATE_SETTINGS=(SES_SENDER ADMIN_EMAIL ALLOWED_EMAILS)
-require_settings params.sh "${PRIVATE_SETTINGS[@]}"
-# The secrets check refuses a placeholder left in lib/secrets.sh, since the tracked example
-# holds it too; the values of lib/params.sh are not searched for, so its placeholders are refused
-# here.
-for name in "${PRIVATE_SETTINGS[@]}"; do
-    [[ "${!name}" != "<"*">" ]] ||
-        die "$name in scripts/lib/params.sh is still the placeholder of" \
-            "lib/params.example.sh; fill it in"
-done
+require_settings params.sh ALLOWED_EMAILS SES_SENDER ADMIN_EMAIL
 
 # The model that reads photos and classifies messages, as provider:model with an anthropic or
 # openai provider; it must take image input. The provider's API key is not a deploy parameter;
@@ -40,8 +31,7 @@ cognito_stack_parameters() {  # callback-urls (comma-separated)
         "GoogleClientId=$GOOGLE_CLIENT_ID"
         "GoogleClientSecret=$GOOGLE_CLIENT_SECRET"
         "CallbackUrls=$1"
-        # Cognito domains are global, so the prefix differs between the branch stack pairs.
-        "DomainPrefix=meters-trk$STACK_SUFFIX"
+        "DomainPrefix=$(cognito_domain_prefix)"
         "AllowedEmails=$ALLOWED_EMAILS"
         "AdminEmail=$ADMIN_EMAIL"
         "LogRetentionDays=$LOG_RETENTION_DAYS"

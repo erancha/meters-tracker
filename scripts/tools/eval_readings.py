@@ -1,5 +1,5 @@
 """Runs every photo the deployed model failed on through the model named by LLM_MODEL and scores
-it against the reading the user ended up saving. The logic behind scripts/eval-readings.sh, which
+it against the reading the user ended up saving. The logic behind scripts/tools/eval-readings.sh, which
 passes the app stack's name; the tables and the files bucket are resolved from that stack.
 
 - score: one result against the saved serial and value
@@ -19,7 +19,9 @@ from pathlib import Path
 
 import boto3
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# app_stack.py stays in scripts/, beside deploy.sh, which uses it too.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app_stack
 

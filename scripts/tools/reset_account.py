@@ -1,5 +1,5 @@
 """Deletes everything one account owns in a deployed app stack, so the owner's story can start
-again from an empty account. The logic behind scripts/reset-account.sh, which passes the app
+again from an empty account. The logic behind scripts/tools/reset-account.sh, which passes the app
 stack's name; the tables and the files bucket are resolved from that stack.
 
 An account's rows are keyed by its address: the pk is the address itself (access, properties,
@@ -23,7 +23,9 @@ from pathlib import Path
 import boto3
 from boto3.dynamodb.conditions import Attr
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# app_stack.py stays in scripts/, beside deploy.sh, which uses it too.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app_stack
 

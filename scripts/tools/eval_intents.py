@@ -1,5 +1,5 @@
 """Runs the recorded chat messages through the model named by LLM_MODEL and checks the intent it
-classifies each into. The logic behind scripts/eval-intents.sh, which passes the case file.
+classifies each into. The logic behind scripts/tools/eval-intents.sh, which passes the case file.
 
 A case is a message, the card it answers (by name, or null for a message with no card), the day
 it is typed on, the expected intent and the expected fields; only the fields a case lists are
@@ -36,7 +36,7 @@ from pathlib import Path
 from sys import maxsize
 from typing import get_args
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from owner_story import (
     APARTMENT,
@@ -343,7 +343,7 @@ RECORDS = {
         },
     )
 }
-_CONFIG = Path(__file__).resolve().parent.parent / "config" / "app.json"
+_CONFIG = Path(__file__).resolve().parents[2] / "config" / "app.json"
 # How many of a meter's latest readings a lookup lists, as the engine's does.
 RECENT_READINGS = json.loads(_CONFIG.read_text())["correction_recent_readings"]
 

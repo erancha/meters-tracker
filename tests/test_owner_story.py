@@ -33,6 +33,7 @@ from common.flows import card_text, classify_context, message_context
 from common.model import IntentResult
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "tools"))
 from owner_story import (
     APARTMENT,
     BOTTOM_OFFSET,

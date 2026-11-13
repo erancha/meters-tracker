@@ -14,11 +14,11 @@
 # - assert_secrets_untracked: that check, also run on staged changes by .githooks/pre-commit
 # - assert_addresses_untracked: the same for the email addresses of a private settings file
 #   (PRIVATE_FILES), except the ones PUBLISHED_SETTINGS names
-# - get_app_name / get_region / resolve_stack: the stack pair this checkout deploys to, and
+# - get_app_name / get_region / resolve_stack: the stack this checkout deploys to, and
 #   STACK_NAMES, the stacks aws-helper.sh operates on
 # - SAM_CLI_TELEMETRY: off for every sam command a script runs
-# - LOG_RETENTION_DAYS: how long the stacks' log groups keep their events
-# - stack_outputs / stack_output: CloudFormation outputs of the app stack
+# - LOG_RETENTION_DAYS: how long the stack's log groups keep their events
+# - stack_outputs / stack_output: CloudFormation outputs of that stack
 # - ensure_node_modules: npm ci in a package folder whose lockfile changed since its last install
 # - this app's own helpers, at the end: load_params for the gitignored lib/params.sh,
 #   connect_stack for its scripts, the Python virtualenv, the model key parameter, and lookups on
@@ -36,10 +36,10 @@ DEFAULT_APP_NAME='meters-tracker'
 # that stack itself), in the order they can be deleted.
 STACK_SUFFIXES=('' '-cognito')
 DEFAULT_REGION='eu-central-1'
-# Days every log group of the stacks keeps its events: lib/stack-params.sh passes it to the
-# templates' LogRetentionDays, and aws-helper.sh --log-retention sets it on existing groups.
+# Days every log group of the stack keeps its events: lib/stack-params.sh passes it to the
+# template's LogRetentionDays, and aws-helper.sh --log-retention sets it on existing groups.
 LOG_RETENTION_DAYS=14
-# The Vite app (repo-relative) and the config file deploy.sh writes for it.
+# The React app (repo-relative) and the config file lib/app-config.sh writes for it.
 FRONTEND_FOLDER='frontend'
 APP_CONFIG_FILE="$APP_FOLDER/$FRONTEND_FOLDER/public/config.js"
 # The AWS CLI lives in ~/.local/bin, which a non-interactive shell does not have on its PATH.
@@ -109,9 +109,9 @@ SECRETS_FILES=("$SCRIPT_DIR/lib/aws-config.sh" "$SCRIPT_DIR/lib/secrets.sh")
 # values may appear in git, but an email address they hold may not, unless PUBLISHED_SETTINGS names
 # the setting that holds it.
 PRIVATE_FILES=("$SCRIPT_DIR/lib/params.sh")
-# Settings of a private file whose address the app shows its users, so a copy in a tracked file is
-# no leak.
-PUBLISHED_SETTINGS=()
+# Settings of a private file whose address is public anyway, so a copy in a tracked file is no
+# leak: LICENSE_CONTACT is the address the README and NOTICE give for a commercial license.
+PUBLISHED_SETTINGS=(LICENSE_CONTACT)
 
 # Fatal unless git ignores <file>.
 assert_gitignored() {
@@ -167,6 +167,7 @@ assert_addresses_untracked() {
         # shellcheck source=/dev/null
         source "$file"
         for name in "${PUBLISHED_SETTINGS[@]}"; do
+            [[ -v "$name" ]] || die "PUBLISHED_SETTINGS names $name, which $file does not set"
             published+="${!name,,} "
         done
         for name in $(setting_names "$file"); do
@@ -191,7 +192,7 @@ assert_addresses_untracked() {
 # made from a checkout that holds the file.
 source_checked_file() {
     local file="$SCRIPT_DIR/lib/$1" check="$2"
-    [[ -f "$file" ]] || die "Missing $file (copy lib/${1%.sh}.example.sh and fill it in)"
+    [[ -f "$file" ]] || die "Missing $file; create it with ./scripts/init-env.sh and fill it in"
     "$check" "$file" worktree
     # shellcheck source=/dev/null
     source "$file"
@@ -206,7 +207,11 @@ source_secrets_file() { source_checked_file "$1" assert_secrets_untracked; }
 source_private_file() { source_checked_file "$1" assert_addresses_untracked; }
 
 # The deploying user's AWS credentials and region.
-load_aws_config() { source_secrets_file aws-config.sh; }
+load_aws_config() {
+    source_secrets_file aws-config.sh
+    [[ -n "${AWS_DEFAULT_REGION:-}" && "$AWS_DEFAULT_REGION" != "<"*">" ]] ||
+        die "Set AWS_DEFAULT_REGION in scripts/lib/aws-config.sh to the region to deploy to"
+}
 
 # The Google OAuth client the Cognito stack signs users in through.
 load_secrets() { source_secrets_file secrets.sh; }
@@ -275,13 +280,19 @@ ensure_node_modules() {
 # no address of it is in git.
 load_params() { source_private_file params.sh; }
 
-# Stops unless each named variable is set, naming the settings file under lib/ that exports it.
+# Prints the Cognito domain prefix of the branch's stack pair. Cognito domains are global, so the
+# prefix varies with the stack as the stack name does: meters-trk for meters-tracker, meters-trk-fb
+# for meters-tracker-fb. Needs resolve_stack.
+cognito_domain_prefix() { echo "meters-trk${STACK_NAME#"$(get_app_name)"}"; }
+
+# Stops unless each named variable holds a real value: set, not empty, and not the example's
+# placeholder. Names the settings file under lib/ that exports it.
 require_settings() {  # settings-file variable...
     local file="$1" name
     shift
     for name in "$@"; do
-        [[ -v "$name" ]] ||
-            die "$name is not set in scripts/lib/$file; add it (see lib/${file%.sh}.example.sh)"
+        [[ -n "${!name:-}" && "${!name}" != "<"*">" ]] ||
+            die "Set $name in scripts/lib/$file (see lib/${file%.sh}.example.sh)"
     done
 }
 

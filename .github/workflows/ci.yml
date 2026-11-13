@@ -11,10 +11,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          # Matches the python3.13 Lambda runtime in scripts/template.yaml, so CI proves what ships.
+          # Matches the python3.13 Lambda runtime in scripts/template.yaml — CI proves what ships.
           python-version: "3.13"
-      # scripts/test.sh is the entry point developers use locally, so CI and local verification
-      # cannot drift. It provisions its own virtualenv.
+      # scripts/test.sh is the same entry point developers use locally, so CI and local
+      # verification cannot drift. It provisions its own virtualenv and runs the pytest suite.
       - name: Backend tests
         run: bash scripts/test.sh
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Create the gitignored settings files scripts/lib/aws-config.sh, scripts/lib/secrets.sh and
-# scripts/lib/params.sh from their .example files.
+# Create the gitignored settings files under scripts/lib/ from their committed .example files:
+# each scripts/lib/<name>.example.sh the repo has becomes scripts/lib/<name>.sh.
 #
 #   ./scripts/init-env.sh [--force]
 #
 # Options:
-#   --force      Overwrite a file that already exists (default: refuse and stop)
+#   --force      Overwrite a settings file that already exists (default: refuse and stop)
 #   -h, --help   Show this usage
 #
-# Each copy is readable by its owner only. Afterwards fill in the AWS access key pair in
-# aws-config.sh and every value in secrets.sh and params.sh.
+# Each copy is readable by its owner only. Afterwards fill in every value of each copy; the
+# comments of its .example file document the keys.
 #
 #   ./scripts/init-env.sh
 set -euo pipefail
@@ -26,18 +26,17 @@ case "${1:-}" in
 esac
 [ $# -le 1 ] || usage_error "Takes at most --force"
 
-SETTINGS_FILES=("${SECRETS_FILES[@]}" "$SCRIPT_DIR/lib/params.sh")
-for file in "${SETTINGS_FILES[@]}"; do
+EXAMPLES=("$SCRIPT_DIR"/lib/*.example.sh)
+for example in "${EXAMPLES[@]}"; do
+  file="${example%.example.sh}.sh"
+  assert_gitignored "$file"
   if [ -e "$file" ] && [ -z "$FORCE" ]; then
-    echo "scripts/lib/$(basename "$file") exists; use --force to overwrite it" >&2
-    exit 1
+    die "scripts/lib/$(basename "$file") exists; use --force to overwrite it"
   fi
 done
-for file in "${SETTINGS_FILES[@]}"; do
-  cp "${file%.sh}.example.sh" "$file"
+for example in "${EXAMPLES[@]}"; do
+  file="${example%.example.sh}.sh"
+  cp "$example" "$file"
   chmod 600 "$file"
+  echo "Created scripts/lib/$(basename "$file"); fill in its values."
 done
-echo "Created the settings files. Fill in:"
-echo "  scripts/lib/aws-config.sh: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION"
-echo "  scripts/lib/secrets.sh: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET"
-echo "  scripts/lib/params.sh: SES_SENDER, ADMIN_EMAIL, ALLOWED_EMAILS"

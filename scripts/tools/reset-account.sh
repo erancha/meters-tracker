@@ -3,7 +3,7 @@
 # empty account: its rows in every app table, its pending items and messages, and every version
 # of its photos in the files bucket.
 #
-#   ./scripts/reset-account.sh <email> [--yes]
+#   ./scripts/tools/reset-account.sh <email> [--yes]
 #
 # The stack is the one the git branch selects, as in deploy.sh: meters-tracker on main,
 # meters-tracker-fb on any other branch.
@@ -15,10 +15,10 @@
 # A delegate's own access row and messages are keyed by the delegate's address, so they stay.
 # Requires scripts/lib/aws-config.sh.
 #
-#   ./scripts/reset-account.sh owner@gmail.com
-#   ./scripts/reset-account.sh owner@gmail.com --yes
+#   ./scripts/tools/reset-account.sh owner@gmail.com
+#   ./scripts/tools/reset-account.sh owner@gmail.com --yes
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/app-env.sh
 source "$SCRIPT_DIR/lib/app-env.sh"
 
@@ -35,5 +35,5 @@ done
 EMAIL="${POSITIONAL[0]}"
 connect_stack
 require_venv
-exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/reset_account.py" "$STACK_NAME" "$EMAIL" \
+exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/tools/reset_account.py" "$STACK_NAME" "$EMAIL" \
   "${YES[@]}"

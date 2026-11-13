@@ -77,6 +77,9 @@ case "$1 $2" in
     exit 0 ;;
   "logs describe-log-groups") echo '[]'; exit 0 ;;
   "cloudformation delete-stack" | "cloudformation wait") exit 0 ;;
+  "sts get-caller-identity") echo 123456789012; exit 0 ;;
+  "s3api head-bucket") [ -n "${ARTIFACTS_BUCKET_EXISTS:-}" ] || exit 254; exit 0 ;;
+  "s3api delete-bucket") exit 0 ;;
   "lambda list-layers") echo '["shared"]'; exit 0 ;;
   "lambda list-layer-versions")
     for version in 2 3; do
@@ -114,6 +117,7 @@ STUB_PARAMS = (
     "export SES_SENDER=sender@stub.test\n"
     "export ADMIN_EMAIL=admin@stub.test\n"
     "export ALLOWED_EMAILS=stub-allowed-regex\n"
+    "export LICENSE_CONTACT=license@stub.test\n"
 )
 
 
@@ -214,7 +218,8 @@ class Checkout:
         (root / ".gitignore").write_text((REPO / ".gitignore").read_text())
         hook = REPO / ".githooks" / "pre-commit"
         (root / ".githooks" / "pre-commit").write_text(hook.read_text())
-        for source in [*SCRIPTS.glob("*.sh"), *SCRIPTS.glob("*.py"), *SCRIPTS.glob("lib/*.sh")]:
+        scripts = [*SCRIPTS.glob("*.sh"), *SCRIPTS.glob("*.py")]
+        for source in [*scripts, *SCRIPTS.glob("lib/*.sh"), *SCRIPTS.glob("lib/*.py")]:
             if source.name not in SETTINGS_FILES:
                 target = root / source.relative_to(REPO)
                 target.write_text(source.read_text())
@@ -252,6 +257,7 @@ class Checkout:
         stdin=None,
         holds_objects=False,
         used_layer_versions="3",
+        artifacts_bucket=False,
     ):
         env = {
             "HOME": str(self.root),
@@ -262,6 +268,7 @@ class Checkout:
             "FAKE_STDERR": stderr,
             "FAKE_STATUS": str(status),
             "BUCKET_HOLDS_OBJECTS": "1" if holds_objects else "",
+            "ARTIFACTS_BUCKET_EXISTS": "1" if artifacts_bucket else "",
             "LAYER_ARN": "arn:aws:lambda:eu-central-1:123456789012:layer:shared",
             "USED_LAYER_VERSIONS": used_layer_versions,
         }
@@ -396,7 +403,7 @@ def test_init_env_creates_the_settings_files_from_their_examples(checkout):
 
 # Argument lists each script refuses before it reads any settings or calls AWS or the model.
 REFUSED_ARGS = {
-    "backup-restore.sh": [
+    "tools/backup-restore.sh": [
         [],
         ["dev"],
         ["dev", "backup"],
@@ -407,10 +414,11 @@ REFUSED_ARGS = {
     ],
     "aws-helper.sh": [[], ["--logs"], ["--logs", "api", "dev", "extra"], ["--xray", "dev"]],
     "deploy.sh": [["dev"], ["--bogus"]],
-    "reset-account.sh": [[], ["dev", "a@x.com"], ["--force", "a@x.com"]],
-    "eval-intents.sh": [["extra"], ["--limit", "3"]],
-    "eval-readings.sh": [["dev"], ["--limit"]],
-    "replay.sh": [[], ["dev", "a@x.com"], ["a@x.com", "--open"], ["--bogus", "a@x.com"]],
+    "lib/app-config.sh": [["dev"]],
+    "tools/reset-account.sh": [[], ["dev", "a@x.com"], ["--force", "a@x.com"]],
+    "tools/eval-intents.sh": [["extra"], ["--limit", "3"]],
+    "tools/eval-readings.sh": [["dev"], ["--limit"]],
+    "tools/replay.sh": [[], ["dev", "a@x.com"], ["a@x.com", "--open"], ["--bogus", "a@x.com"]],
 }
 
 
@@ -671,6 +679,32 @@ def test_delete_stack_deletes_stacks_whose_buckets_are_empty(checkout):
     assert len(_calls(checkout, "cloudformation delete-stack")) == 2
 
 
+@pytest.mark.parametrize(
+    ("fixture", "stack"), [("checkout", "meters-tracker"), ("branch_checkout", "meters-tracker-fb")]
+)
+def test_delete_stack_deletes_the_deploys_artifacts_bucket_after_the_stacks(
+    request, fixture, stack
+):
+    checkout = request.getfixturevalue(fixture)
+    result = checkout.helper("--delete-stack", stdin=f"{stack}\n", artifacts_bucket=True)
+    assert result.returncode == 0, result.stderr
+    calls = checkout.aws_calls()
+    bucket = f"{stack}-artifacts-123456789012"
+    removed = [
+        i
+        for i, call in enumerate(calls)
+        if call.startswith("s3api delete-bucket") and f"--bucket {bucket}" in call
+    ]
+    deleted = [i for i, call in enumerate(calls) if call.startswith("cloudformation delete-stack")]
+    assert len(removed) == 1 and deleted[-1] < removed[0]
+
+
+def test_delete_stack_skips_an_artifacts_bucket_that_does_not_exist(checkout):
+    result = checkout.helper("--delete-stack", stdin="meters-tracker\n")
+    assert result.returncode == 0, result.stderr
+    assert _calls(checkout, "s3api delete-bucket") == []
+
+
 def test_delete_stack_touches_nothing_unless_the_stack_is_named(checkout):
     result = checkout.helper("--delete-stack", "--empty", stdin="other\n", holds_objects=True)
     assert result.returncode == 1
@@ -739,18 +773,47 @@ def test_enabling_the_git_hooks_is_reported_outside_the_captured_output(checkout
     assert "core.hooksPath" in result.stderr
 
 
-def test_frontend_deploy_refuses_a_missing_config(checkout):
-    result = checkout.run("deploy.sh", "--frontend-only", stdout="https://api-1")
-    assert result.returncode == 1
-    assert "config.js is missing" in result.stderr and "./scripts/deploy.sh" in result.stderr
-    assert not any(call.startswith("s3 ") for call in checkout.aws_calls())
+# Records each call and keeps the config.js the build would bundle, as $AWS_CALLS.config.
+FAKE_NPM = """#!/usr/bin/env bash
+echo "npm $*" >> "$AWS_CALLS"
+cp public/config.js "$AWS_CALLS.config"
+"""
 
 
-def test_frontend_deploy_refuses_a_config_of_another_stack(checkout):
+def test_frontend_deploy_writes_the_config_of_this_stack_before_the_build(checkout):
     public = checkout.root / "frontend" / "public"
     public.mkdir(parents=True)
     (public / "config.js").write_text('window.CONFIG = { apiUrl: "https://api-2" };\n')
+    npm = checkout.root / "bin" / "npm"
+    npm.write_text(FAKE_NPM)
+    npm.chmod(0o755)
     result = checkout.run("deploy.sh", "--frontend-only", stdout="https://api-1")
+    assert result.returncode == 0, result.stderr
+    built = Path(f"{checkout.calls}.config").read_text()
+    assert 'apiUrl: "https://api-1"' in built and "api-2" not in built
+    assert 'adminEmail: "admin@stub.test"' in built
+    assert any(call.startswith("s3 sync") for call in checkout.aws_calls())
+
+
+def test_app_config_stops_on_a_missing_stack_output(checkout):
+    result = checkout.run("lib/app-config.sh")
     assert result.returncode == 1
-    assert "does not target meters-tracker's API (https://api-1)" in result.stderr
-    assert not any(call.startswith("s3 ") for call in checkout.aws_calls())
+    assert "has no output HostedUiDomain" in result.stderr
+    assert not (checkout.root / "frontend" / "public" / "config.js").exists()
+
+
+@pytest.mark.parametrize(
+    ("fixture", "prefix"), [("checkout", "meters-trk"), ("branch_checkout", "meters-trk-fb")]
+)
+def test_helper_prints_the_redirect_uri_of_the_branch_pair_before_any_deploy(
+    request, fixture, prefix
+):
+    result = request.getfixturevalue(fixture).helper("--redirect-uri", stdout="123456789012\n")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == (
+        f"https://{prefix}-123456789012.auth.eu-central-1.amazoncognito.com/oauth2/idpresponse\n"
+    )
+
+
+def test_helper_refuses_an_argument_to_redirect_uri(checkout):
+    assert checkout.helper("--redirect-uri", "x").returncode == 2

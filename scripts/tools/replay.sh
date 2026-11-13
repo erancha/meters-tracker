@@ -2,7 +2,7 @@
 # Replay the owner's story against a deployed stack with its real model, as a smoke test of the
 # backend after a deploy.
 #
-#   ./scripts/replay.sh <email> --open <photo> --close <photo> [--statement <photo>] [--yes]
+#   ./scripts/tools/replay.sh <email> --open <photo> --close <photo> [--statement <photo>] [--yes]
 #
 # The stack is the one the git branch selects, as in deploy.sh: meters-tracker-fb on any branch
 # but main. On main the replay targets the PRODUCTION stack meters-tracker.
@@ -25,9 +25,9 @@
 # are real meter photos, which the owner keeps in Google Drive, not in the repo.
 # Requires scripts/lib/aws-config.sh.
 #
-#   ./scripts/replay.sh owner@gmail.com --open ~/m/open.jpg --close ~/m/close.jpg --yes
+#   ./scripts/tools/replay.sh owner@gmail.com --open ~/m/open.jpg --close ~/m/close.jpg --yes
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/app-env.sh
 source "$SCRIPT_DIR/lib/app-env.sh"
 
@@ -47,4 +47,4 @@ done
 EMAIL="${POSITIONAL[0]}"
 connect_stack
 require_venv
-exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/replay.py" "$STACK_NAME" "$EMAIL" "${OPTIONS[@]}"
+exec "$APP_FOLDER/.venv/bin/python" "$SCRIPT_DIR/tools/replay.py" "$STACK_NAME" "$EMAIL" "${OPTIONS[@]}"

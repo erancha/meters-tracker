@@ -1,4 +1,4 @@
-"""The backup and restore behind scripts/backup-restore.sh: a backup of the mocked tables and
+"""The backup and restore behind scripts/tools/backup-restore.sh: a backup of the mocked tables and
 bucket, a restore that brings the stack back to exactly the backup, and the refusals that keep a
 backup from overwriting files or a restore from running unconfirmed or from a partial folder."""
 
@@ -14,6 +14,7 @@ from engine_kit import ACCOUNT, USER, Kit, electricity
 from common.store import TABLE_NAMES
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "tools"))
 import backup_restore
 from backup_restore import Stack, backup, restore
 

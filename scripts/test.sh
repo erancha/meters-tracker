@@ -64,7 +64,7 @@ run_matrix() {
 }
 
 cd "$APP_FOLDER"
-for script in scripts/*.sh scripts/lib/*.sh .githooks/pre-commit; do
+for script in scripts/*.sh scripts/lib/*.sh scripts/tools/*.sh .githooks/pre-commit; do
   bash -n "$script"
 done
 require_venv
@@ -92,8 +92,8 @@ case "${1:-}" in
     run_matrix $names
     exit ;;
 esac
-.venv/bin/ruff check src/ tests/ scripts/*.py
-.venv/bin/ruff format --check src/ tests/ scripts/*.py
+.venv/bin/ruff check src/ tests/ scripts/
+.venv/bin/ruff format --check src/ tests/ scripts/
 if [[ $# -gt 0 ]]; then
   .venv/bin/pytest "$@"
   exit

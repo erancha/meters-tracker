@@ -1,5 +1,5 @@
 """Copies a deployed app stack's data to a local folder and back. The logic behind
-scripts/backup-restore.sh, which passes the app stack's name and the backup folder; the tables and
+scripts/tools/backup-restore.sh, which passes the app stack's name and the backup folder; the tables and
 the files bucket are resolved from that stack.
 
 A backup folder holds:
@@ -31,7 +31,9 @@ from pathlib import Path
 import boto3
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# app_stack.py stays in scripts/, beside deploy.sh, which uses it too.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app_stack
 

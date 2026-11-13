@@ -17,6 +17,7 @@ from common.model import ModelRefused
 from common.store import Store
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "tools"))
 from eval_readings import evaluate, main, photo_line, report, score
 
 

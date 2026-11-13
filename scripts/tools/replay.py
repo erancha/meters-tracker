@@ -1,5 +1,5 @@
 """Replays the owner's story against a deployed api Lambda with its real model: the logic behind
-scripts/replay.sh, which passes the app stack's name, the account's address and the photos.
+scripts/tools/replay.sh, which passes the app stack's name, the account's address and the photos.
 
 The account is reset first, only with --yes (without it the replay prints what the reset would
 delete and stops), then the Lambda is invoked directly with the JWT claims the API
@@ -29,8 +29,10 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+# app_stack.py stays in scripts/, beside deploy.sh, which uses it too.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app_stack
 from owner_story import CANCEL, PLACE, TYPED_PRICES

@@ -26,11 +26,11 @@ Parameters:
     Type: Number
     Default: 14
     Description: Days every log group of the stack keeps its events; passed from
-      scripts/lib/stack-params.sh by scripts/deploy.sh
+      LOG_RETENTION_DAYS of scripts/lib/app-env.sh
 
 Resources:
-  # Declared so the stack owns the function's log group: it expires its events and is deleted
-  # with the stack.
+  # The function writes to a log group the stack declares for it, so the stack sets the
+  # group's retention and deletes it.
   PreSignupFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:

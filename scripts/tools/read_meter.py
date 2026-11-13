@@ -1,5 +1,5 @@
 """Reads one meter photo through the real model and prints the MeterReadingResult as JSON. The
-logic behind scripts/read-meter.sh, which runs it inside .venv; the model comes from LLM_MODEL
+logic behind scripts/tools/read-meter.sh, which runs it inside .venv; the model comes from LLM_MODEL
 and the provider's key from LLM_API_KEY."""
 
 import json
@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from common.files import EXTENSIONS
 from common.model import call_cost, model_from_env
