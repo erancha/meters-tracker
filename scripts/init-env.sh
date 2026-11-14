@@ -5,7 +5,8 @@
 #   ./scripts/init-env.sh [--force]
 #
 # Options:
-#   --force      Overwrite a settings file that already exists (default: refuse and stop)
+#   --force      Overwrite the settings files that already exist (default: keep each one and
+#                create only the missing ones)
 #   -h, --help   Show this usage
 #
 # Each copy is readable by its owner only. Afterwards fill in every value of each copy; the
@@ -28,14 +29,14 @@ esac
 
 EXAMPLES=("$SCRIPT_DIR"/lib/*.example.sh)
 for example in "${EXAMPLES[@]}"; do
-  file="${example%.example.sh}.sh"
-  assert_gitignored "$file"
-  if [ -e "$file" ] && [ -z "$FORCE" ]; then
-    die "scripts/lib/$(basename "$file") exists; use --force to overwrite it"
-  fi
+  assert_gitignored "${example%.example.sh}.sh"
 done
 for example in "${EXAMPLES[@]}"; do
   file="${example%.example.sh}.sh"
+  if [ -e "$file" ] && [ -z "$FORCE" ]; then
+    echo "scripts/lib/$(basename "$file") already exists; left as it is (--force overwrites it)."
+    continue
+  fi
   cp "$example" "$file"
   chmod 600 "$file"
   echo "Created scripts/lib/$(basename "$file"); fill in its values."
