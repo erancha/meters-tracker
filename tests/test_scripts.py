@@ -397,8 +397,22 @@ def test_init_env_creates_the_settings_files_from_their_examples(checkout):
         example = checkout.lib / name.replace(".sh", ".example.sh")
         assert (checkout.lib / name).read_text() == example.read_text()
         assert (checkout.lib / name).stat().st_mode & 0o777 == 0o600
-    refused = checkout.run("init-env.sh")
-    assert refused.returncode == 1 and "--force" in refused.stderr
+
+
+def test_init_env_keeps_existing_settings_files_unless_forced(checkout):
+    kept, missing = SETTINGS_FILES[0], SETTINGS_FILES[-1]
+    (checkout.lib / kept).write_text("export FILLED_IN=1\n")
+    (checkout.lib / missing).unlink()
+    result = checkout.run("init-env.sh")
+    assert result.returncode == 0, result.stderr
+    assert f"{kept} already exists" in result.stdout
+    assert (checkout.lib / kept).read_text() == "export FILLED_IN=1\n"
+    example = checkout.lib / missing.replace(".sh", ".example.sh")
+    assert (checkout.lib / missing).read_text() == example.read_text()
+    forced = checkout.run("init-env.sh", "--force")
+    assert forced.returncode == 0, forced.stderr
+    example = checkout.lib / kept.replace(".sh", ".example.sh")
+    assert (checkout.lib / kept).read_text() == example.read_text()
 
 
 # Argument lists each script refuses before it reads any settings or calls AWS or the model.
