@@ -1,7 +1,7 @@
 /**
  * Signed-out screen: one card holding the app name, a condensed pitch, a "יותר" toggle that swaps
  * in the full summary, and the Google sign-in button; the demo, WhatsApp invite and source links
- * sit on the page below it.
+ * share one line on the page below it, the demo's hint in its tooltip.
  */
 import { useState } from "react";
 import { texts } from "../texts";
@@ -49,19 +49,13 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
           <span className="sign-in-mark" aria-hidden="true">G</span>{texts.signIn}
         </button>
       </div>
-      {/* The hint sits outside the anchor, so the link's accessible name stays the page's own. */}
-      <p className="landing-demo">
-        <a href={DEMO_PATH} target="_blank" rel="noreferrer">{texts.demo}</a>{" "}
-        <span className="landing-demo-hint">{texts.demoHint}</span>
-      </p>
-      <p className="landing-link">
+      <footer className="landing-links">
+        <a href={DEMO_PATH} target="_blank" rel="noreferrer" title={texts.demoHint}>{texts.demo}</a>
         <a href={`https://wa.me/?text=${invite}`} target="_blank" rel="noreferrer">
           {texts.invite}
         </a>
-      </p>
-      <p className="landing-link">
         <a href={SOURCE_URL} target="_blank" rel="noreferrer">{texts.source}</a>
-      </p>
+      </footer>
     </main>
   );
 }

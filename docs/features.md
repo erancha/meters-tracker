@@ -15,9 +15,10 @@ the app inside the phone of the [demo](demo/demo.html).
 
 A signed-out visitor sees one card: the app's name with the build's version and commit date under
 it, a three-paragraph pitch, a "more" toggle and the "sign in with Google" button. The toggle swaps
-the pitch for seven bullets condensing the README's overview, and back. Below the card, one link
-opens the animated demo in a new tab, a second opens WhatsApp with an invite to the app prefilled
-as a received recommendation, and a third opens the source repository on GitHub. A sign-in whose
+the pitch for seven bullets condensing the README's overview, and back. Below the card, one line of
+links opens the animated demo in a new tab, with a tooltip saying its speed can change and that it
+reads best on a computer; WhatsApp with an invite to the app prefilled as a received
+recommendation; and the source repository on GitHub. A sign-in whose
 final step fails, or a first sign-in by an address not on the deployment's allowed list, shows the
 Hebrew reason in place of the chat; a refusal's reason names the deployment's admin address to ask
 for access. Beside it, one button starts sign-in again with another Google account, and a second

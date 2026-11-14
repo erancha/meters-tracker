@@ -73,12 +73,12 @@ body:has(.landing), #root:has(.landing) { background: #fafafa; }
 /* A phone gets a full-width button, the easiest target; across a wider measure the same button
    would read as a banner, so it falls back to its content width on the start edge. */
 @media (min-width: 48rem) { #root .landing button { align-self: flex-start; } }
-/* The landing's column is a flex box, so the footer lines' margins add up rather than collapse. */
-#root .landing-demo { margin-block: 2.5rem 1em; }
-#root .landing-brief .landing-demo { margin-top: auto; padding-top: 2.5rem; }
-#root .landing-link { margin: 0.5rem 0 1em; }
-/* A note about the page the link leads to, not a second link, so it reads as chrome beside it. */
-#root .landing-demo-hint { color: #5f5f5f; font-size: 0.85rem; }
+/* The three links share one centered line under the card, wrapping on a narrow phone. */
+#root .landing-links {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem;
+  margin-block: 2.5rem 1em;
+}
+#root .landing-brief .landing-links { margin-top: auto; padding-top: 2.5rem; }
 
 /* chat */
 #root .chat { flex: 1; display: flex; flex-direction: column; }

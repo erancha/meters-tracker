@@ -39,12 +39,11 @@ describe("Landing", () => {
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
 
-  it("links to the demo in both modes, with its hint beside the link", async () => {
+  it("links to the demo in both modes", async () => {
     render(<Landing onSignIn={() => {}} />);
 
     const demo = () => screen.getByRole("link", { name: texts.demo });
     expect(demo()).toHaveAttribute("href", "demo.html");
-    expect(demo().parentElement).toHaveTextContent(texts.demoHint);
 
     await toggle(texts.more);
 
@@ -62,15 +61,20 @@ describe("Landing", () => {
     expect(version()).toBeInTheDocument();
   });
 
-  it("follows the demo link with the invite, then the source link, in both modes", async () => {
+  it("lines up the demo, invite and source links on one footer line in both modes", async () => {
     render(<Landing onSignIn={() => {}} />);
 
-    const links = () => screen.getAllByRole("link").map((link) => link.textContent);
-    expect(links()).toEqual([texts.demo, texts.invite, texts.source]);
+    const demo = () => screen.getByRole("link", { name: texts.demo });
+    const footerLinks = () => [...demo().closest(".landing-links")!.querySelectorAll("a")]
+      .map((link) => link.textContent);
+    expect(footerLinks()).toEqual([texts.demo, texts.invite, texts.source]);
+    // The hint is the demo link's tooltip, so the line holds only the three link names.
+    expect(demo()).toHaveAttribute("title", texts.demoHint);
+    expect(screen.queryByText(texts.demoHint)).not.toBeInTheDocument();
 
     await toggle(texts.more);
 
-    expect(links()).toEqual([texts.demo, texts.invite, texts.source]);
+    expect(footerLinks()).toEqual([texts.demo, texts.invite, texts.source]);
   });
 
   it("links to the source repository", () => {
