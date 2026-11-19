@@ -86,8 +86,9 @@ graph LR
     C --> CF
 ```
 
-**[Architecture](docs/architecture.md)** continues from here: the full diagram, each route and
-table, how the conversation engine queues confirmations, and how the code is laid out.
+**[Architecture](docs/architecture.md)** continues from here: the full diagram, each entry point,
+how the conversation engine queues confirmations, where the data lives and how the code is laid
+out.
 
 ## Getting started
 
@@ -128,6 +129,8 @@ backups) are in [scripts/tools/](scripts/tools/README.md).
 - [Design patterns](docs/design-patterns.md) — the shapes the code repeats and what each is for
 - [Domain rules](docs/domain-rules.md) — how readings are checked, how periods open and close,
   and how consumption and charge are computed
+- [Data model](docs/data-model.md) — each table's keys and attributes, the photos' layout and
+  what outlives a stack
 - [Development & deployment](docs/development.md) — setup, tests, the scripts and the gotchas
 - [Decision records](docs/adr/) — why the app is built this way, one decision per record
 

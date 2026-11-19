@@ -6,7 +6,8 @@ charge, with the exact values the code uses. The arithmetic lives in
 `src/common/periods.py`, which does no I/O; the lifecycles live in the flows under
 `src/common/flows/`.
 
-**Contents:** [Terms](#terms) · [Values](#values) · [A meter photo](#a-meter-photo) ·
+**Contents:** [Terms](#terms) · [Values](#values) ·
+[Requests and their answers](#requests-and-their-answers) · [A meter photo](#a-meter-photo) ·
 [Typed edits on a card](#typed-edits-on-a-card) ·
 [Corrections of saved records](#corrections-of-saved-records) ·
 [Replies that ask back](#replies-that-ask-back) ·
@@ -53,6 +54,44 @@ charge, with the exact values the code uses. The arithmetic lives in
 | 4 MiB, JPEG or PNG | `src/handlers/api.py` | Largest accepted photo, after base64 decoding |
 | 200 | `src/common/store.py` | Messages `GET /chat` returns |
 | Asia/Jerusalem | `src/common/dates.py` | The zone of every date and of "today" |
+
+## Requests and their answers
+
+The api Lambda (`src/handlers/api.py`) answers three routes, each after resolving the JWT's
+email to an account ([Sign-in](sign-in.md#accounts-and-roles)):
+
+- `GET /chat` — the signed-in address's messages of one day, at most the latest 200, oldest
+  first, and the snapshot
+  ([Every flow is a stored state machine](design-patterns.md#every-flow-is-a-stored-state-machine)).
+  The optional `day` query (`YYYY-MM-DD`) names the day, today by default; a malformed one is a
+  400 `invalid_request`. Today's response also carries `earlier_failed`, the photos of earlier
+  days still marked failed, read by a filtered query of the address's messages; it is empty for
+  an earlier day. A first load with no message at all adds a welcome; the first load of today
+  adds a greeting when an apartment's period is past its end.
+- `POST /turn` — one user action, exactly one of `{"text"}`, `{"image", "media_type", "note"?}`
+  with a base64 JPEG or PNG of at most 4 MiB, or `{"choice": {"pending", "version", "option"}}`
+  naming the card's pending item, its version and one of its options, or `{"retry"}` naming a
+  failed message by its stamp. It returns the replies, the new snapshot, and for a photo its
+  stored key (`image_key`), so the browser can show its own copy as the stored photo. A malformed
+  body is a 400 (`invalid_request`, `invalid_image`, `image_too_large`,
+  `unsupported_image_type`), checked before anything is stored. A choice whose card the item no
+  longer shows, or whose option that card lacks, is a 409 `already_handled` carrying the current
+  snapshot; so is the second of two requests answering one card at once. A text or photo is
+  stored before it is handled. When handling fails for any reason, the cause is logged as an
+  error, the message is marked `failed` and the answer is a 503 `message_failed`. A failed photo
+  leaves no pending item of its own. A retry handles the same message again from its stored copy
+  and records `retried_at`; a message not marked failed is a 409 `already_handled`, so two
+  retries of one failure run once.
+- `GET /files/{key+}` — a presigned GET URL, valid for `file_url_minutes`, for a photo whose
+  key starts with the caller's account; any other key is a 403.
+
+The function's time limit is 60 seconds, twice the HTTP API's 30-second limit on the browser's
+request, so a photo the model is still reading when the request is dropped is still saved as a
+pending card that the next `GET /chat` returns. The template defines the limit once and passes it to
+the function as `LAMBDA_TIMEOUT_SECONDS`. Each model attempt gives up after 25 seconds, with one
+retry. A photo still marked as being read once the limit has passed belonged to a killed invocation,
+so the next snapshot turns it into an unreadable card asking for a retake, and the next photo sent
+after that card replaces it.
 
 ## A meter photo
 
@@ -280,7 +319,8 @@ message giving another value for what the card shows ("לא, 845") is such a new
 ## Replies that ask back
 
 No reply only says it did not understand. Each comes from a fixed template in
-`src/common/texts.py`, chosen by the intent and the field table; the model never writes it.
+`src/common/texts.py`, chosen by `ask_back` (`src/common/flows/`) from the intent and the field
+table; the model never writes it.
 
 - **A missing or unfitting value** on a saved record or a dropped photo shows a question card
   naming the field's current value, with the field's how-to text. It comes first in the queue,
@@ -409,6 +449,16 @@ reports the closed period.
 - **Figures.** Each live meter shows its opening reading, its closing reading, its units, its
   price and its cost, all as in the section above.
 - **Total.** The sum of the costs.
+- **Sending.** A turn marks each period it may have completed, and after the turn's replies the
+  engine sends each marked report that `report.missing` finds due. `src/common/report.py` takes the
+  figures from `period_figures`, the code the chat's summary uses, and draws a one-page PDF with
+  fpdf2, shaping the Hebrew with HarfBuzz and the DejaVu Sans font under `src/common/fonts/`; it is
+  imported only when a report is drawn. `src/common/notify.py` sends it through SES as raw MIME,
+  base64 encoded, from the verified `SES_SENDER`, under the fixed subject of
+  [ADR 0004](adr/0004-fixed-email-subject.md); the api Lambda's SES policy allows every identity,
+  since the SES sandbox also checks the recipient's address. A failed send never fails the turn,
+  since the reading is already saved: it is logged and marked on the period row (`report_failed`,
+  with the report it replaces), and the send that goes out clears the mark.
 - **Re-close.** It sends the corrected report, which names the one to ignore by the period's
   closing date before the move, the date that report carried.
 

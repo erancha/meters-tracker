@@ -149,7 +149,10 @@ it. The Google OAuth client of `secrets.sh` must list among its authorized redir
 address `./scripts/aws-helper.sh --redirect-uri` prints for the branch
 ([Setting up Google](sign-in.md#setting-up-google)). The key of the model provider `LLM_MODEL`
 names is stored once with `./scripts/aws-helper.sh --set-model-key <provider>`; `deploy.sh` stops
-with that command while it is missing.
+with that command while it is missing. Each provider has its own SecureString,
+`/meters-tracker/llm/<provider>/api-key`: `deploy.sh` passes the api Lambda the parameter of the
+provider `LLM_MODEL` names, its role can read only that one, and a change of provider leaves the
+other provider's key stored.
 
 - [`deploy.sh`](../scripts/deploy.sh) — builds the Lambda package, deploys the Cognito and app
   stacks and writes `frontend/public/config.js` with `lib/app-config.sh`. The package is

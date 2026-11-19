@@ -1,11 +1,12 @@
 # Sign-in
 
-Owners and their delegates sign in to meters-tracker with a Google account, through a Cognito
-user pool that the `meters-tracker-cognito` stack deploys; there is no other way in. This page
-explains how sign-in works, how to set up the Google side for a new deployment and who may sign
-in, behind [Architecture](architecture.md#the-entry-points). How a signed-in address maps to an
-account is under Sign-in and accounts in
-[Architecture's cross-cutting mechanisms](architecture.md#cross-cutting-mechanisms).
+Owners and their delegates sign in to meters-tracker with a Google account, through a Cognito user
+pool that the `meters-tracker-cognito` stack deploys; there is no other way in. This page explains
+how sign-in works, how to set up the Google side for a new deployment, who may sign in and how a
+signed-in address maps to an account, behind [Architecture](architecture.md#the-entry-points).
+
+**Contents:** [How it works](#how-it-works) · [Setting up Google](#setting-up-google) ·
+[Who may sign in](#who-may-sign-in) · [Accounts and roles](#accounts-and-roles)
 
 ```mermaid
 sequenceDiagram
@@ -36,18 +37,21 @@ sequenceDiagram
 2. **Google answers Cognito, not the app.** Google returns the browser to Cognito's
    `/oauth2/idpresponse`, and Cognito redeems Google's code with the client secret the stack was
    deployed with. The secret never reaches the browser.
-3. **The first sign-in creates the account.** Before Cognito creates a user, it calls the
-   presignup Lambda, which refuses an address that does not match the allowed list (below). The
-   refusal names the admin address to ask for access; Cognito returns it to the app as an error
-   redirect, and the app shows it on the signed-out page.
+3. **The first sign-in creates the account.** Before Cognito creates a user, it calls the presignup
+   Lambda, which refuses an address that does not match the allowed list (below). The refusal names
+   the admin address to ask for access; Cognito returns it to the app as an error redirect, and the
+   app shows it on the signed-out page. For an address it admits, the Lambda asks SES to mail the
+   address its verification request unless SES already reports it verified or pending, so mail can
+   reach it while the SES account is sandboxed. A failure there is logged and never refuses the
+   sign-up; an account the operator creates directly in the pool passes untouched.
 4. **The app redeems Cognito's code for tokens.** Back on its own address with a one-time code,
    the app posts the code and the PKCE verifier to `/oauth2/token`, keeps the ID token in
    `sessionStorage` and drops the code from the address bar.
-5. **Every API request carries the ID token.** The HTTP API's JWT authorizer accepts a token
-   only when Cognito's pool issued it for this app's client. The api Lambda answers 403
-   `email_unverified` unless Google marked the address verified, then maps the token's `email`
-   to an account. The app keeps no refresh token: an expired token returns it to its signed-out
-   landing page.
+5. **Every API request carries the ID token.** The HTTP API's JWT authorizer accepts a token only
+   when Cognito's pool issued it for this app's client. The api Lambda answers 403
+   `email_unverified` unless Google marked the address verified (Google's `email_verified`, mapped
+   into the token), then maps the token's `email` to an account (below). The app keeps no refresh
+   token: an expired token returns it to its signed-out landing page.
 6. **Sign-out goes through Cognito.** It clears the stored token and opens
    `<cognitoDomain>/logout`, since Cognito's own session cookie would otherwise sign the same
    Google account straight back in.
@@ -95,6 +99,21 @@ Two lists apply, and an address must pass both.
 - **The allowed list.** `ALLOWED_EMAILS` in `scripts/lib/params.sh` is a regex a new account's
   address must match in full, ignoring case: join addresses with `|` and escape their dots
   (`a\.b@host\.com|c@host\.com`), or write `.*` to admit everyone. It must include the admin
-  (`ADMIN_EMAIL`) and every delegate an owner adds in the chat. The presignup Lambda reads it on
-  each new account, so it gates sign-up, not sign-in: an account already in the pool stays when
-  the regex changes. A change takes a backend deploy, before the new address first signs in.
+  (`ADMIN_EMAIL`) and every delegate an owner adds in the chat. Each deploy passes it through the
+  `AllowedEmails` stack parameter, and the presignup Lambda reads it on each new account, so it
+  gates sign-up, not sign-in: an account already in the pool stays when the regex changes. A
+  change takes a backend deploy, before the new address first signs in.
+
+## Accounts and roles
+
+Every route resolves the token's email, lowercased, to an account first, through the `access`
+table (`src/common/access.py`). A row names the address's account and role; an address with no
+row becomes the owner of its own account, keyed by that address, with a conditional write so two
+first requests agree. The data belongs to the account; the message history and the pending queue
+belong to the signed-in address ([ADR 0002](adr/0002-google-sign-in-and-delegation.md)).
+
+Beside the owner and delegate roles, the deployment names one admin address in the `AdminEmail`
+stack parameter (`ADMIN_EMAIL`). `access.is_admin` compares the signed-in address with it,
+ignoring case and independently of the `access` table, so the admin keeps its ordinary account.
+The chat response carries the flag, and the browser app locks the composer on it; the backend
+refuses nothing ([ADR 0009](adr/0009-admin-is-a-stack-parameter.md)).

@@ -2,9 +2,9 @@
 
 This document details, surface by surface, what a user of the browser app sees and does: the
 product the [README](../README.md) overview lists. How the app is built is in
-[Architecture](architecture.md#the-browser-app); the reading and period rules behind each reply
-are in [Domain rules](domain-rules.md). Every screen is in Hebrew, right to left, and follows
-the app inside the phone of the [demo](demo/demo.html).
+[Design patterns](design-patterns.md#the-browser-app-renders-the-servers-snapshot); the reading
+and period rules behind each reply are in [Domain rules](domain-rules.md). Every screen is in
+Hebrew, right to left, and follows the app inside the phone of the [demo](demo/demo.html).
 
 **Contents:** [Landing page](#landing-page) · [Chat](#chat) · [Cards](#cards) ·
 [Corrections](#corrections) · [Photos](#photos) · [Tariffs](#tariffs) · [Delegates](#delegates) ·

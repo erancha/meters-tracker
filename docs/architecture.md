@@ -6,10 +6,8 @@ period, reading and charge rules have their own page, [Domain rules](domain-rule
 shapes the code repeats theirs, [Design patterns](design-patterns.md).
 
 **Contents:** [One body of code, several entry points](#one-body-of-code-several-entry-points) ·
-[The entry points](#the-entry-points) · [The browser app](#the-browser-app) ·
-[The conversation engine](#the-conversation-engine) ·
-[Configuration both runtimes read](#configuration-both-runtimes-read) ·
-[Cross-cutting mechanisms](#cross-cutting-mechanisms) · [Storage](#storage) ·
+[The entry points](#the-entry-points) · [The conversation engine](#the-conversation-engine) ·
+[Configuration both runtimes read](#configuration-both-runtimes-read) · [Storage](#storage) ·
 [Codebase structure](#codebase-structure)
 
 Nothing in this app runs between requests. Each request wakes a Python function, which reads and
@@ -43,272 +41,79 @@ graph LR
 ## The entry points
 
 - **Cognito user pool** (`scripts/template-cognito.yaml`, its own stack) — Google is the only
-  identity provider, and the hosted sign-in page issues the JWT the API checks. The pool refuses
-  its own sign-up, and its app client allows no password flow, so no one can register an
-  address under a password and reach that address's account. Google's `email_verified` is
-  mapped into the token, and the api Lambda answers 403 `email_unverified` unless it is
-  `"true"`. [Sign-in](sign-in.md) follows the whole sign-in and its Google setup.
+  identity provider, and the hosted sign-in page issues the JWT the API checks; no address can
+  register under a password. [Sign-in](sign-in.md) follows the whole sign-in and its Google setup.
 - **presignup Lambda** (`src/handlers/presignup.py`) — runs while Cognito creates an account and
-  refuses an address that does not fully match `ALLOWED_EMAILS`, the regex the operator keeps in
-  `scripts/lib/params.sh` and each deploy passes through the `AllowedEmails` stack parameter
-  ([ADR 0010](adr/0010-sign-up-by-allowed-list.md)). For an address it admits, it asks SES to
-  mail the address its verification request unless SES already reports it verified or pending,
-  so mail can reach it while the SES account is sandboxed. A failure there is logged and never
-  refuses the sign-up; an account the operator creates directly in the pool passes untouched.
+  refuses an address that does not fully match `ALLOWED_EMAILS`
+  ([ADR 0010](adr/0010-sign-up-by-allowed-list.md)); for an address it admits, it asks SES to
+  verify the address so mail can reach it.
 - **HTTP API** — checks the Cognito JWT on every route, with CORS for `http://localhost:8000`
   and the CloudFront URL.
-- **api Lambda** (`src/handlers/api.py`) — the routes, each resolving the JWT's email to
-  an account first (see Sign-in under [Cross-cutting mechanisms](#cross-cutting-mechanisms)):
-  - `GET /chat` — the signed-in address's messages of one day, at most the latest 200, oldest
-    first, and the snapshot (below). The optional `day` query (`YYYY-MM-DD`) names the day, today
-    by default; a malformed one is a 400 `invalid_request`. Today's response also carries
-    `earlier_failed`, the photos of earlier days still marked failed, read by a filtered query of
-    the address's messages; it is empty for an earlier day. A first load with no message at all
-    adds a welcome; the first load of today adds a greeting when an apartment's period is past
-    its end.
-  - `POST /turn` — one user action, exactly one of `{"text"}`, `{"image", "media_type", "note"?}`
-    with a base64 JPEG or PNG of at most 4 MiB, or `{"choice": {"pending", "version", "option"}}`
-    naming the card's pending item, its version and one of its options, or `{"retry"}` naming a
-    failed message by its stamp. It returns the replies, the new snapshot, and for a photo its
-    stored key (`image_key`), so the browser can show its own copy as the stored photo. A malformed
-    body is a 400 (`invalid_request`, `invalid_image`, `image_too_large`,
-    `unsupported_image_type`), checked before anything is stored. A choice whose
-    card the item no longer shows, or whose option that card lacks, is a 409 `already_handled`
-    carrying the current snapshot; so is the second of two requests answering one card at once.
-    A text or photo is stored before it is handled. When handling fails for any reason, the cause
-    is logged as an error, the message is marked `failed` and the answer is a 503 `message_failed`.
-    A failed photo leaves no pending item of its own. A retry handles the same message again
-    from its stored copy and records `retried_at`; a message not marked failed is a 409
-    `already_handled`, so two retries of one failure run once.
-  - `GET /files/{key+}` — a presigned GET URL, valid for `file_url_minutes`, for a photo whose
-    key starts with the caller's account; any other key is a 403.
-
-  Its time limit is 60 seconds, twice the HTTP API's 30-second limit on the browser's request,
-  so a photo the model is still reading when the request is dropped is still saved as a pending
-  card that the next `GET /chat` returns. The template defines the limit once and passes it to
-  the function as `LAMBDA_TIMEOUT_SECONDS`. Each model attempt gives up after 25 seconds, with
-  one retry. A photo still marked as being read once the limit has passed belonged to a killed
-  invocation, so the next snapshot turns it into an unreadable card asking for a retake, and the
-  next photo sent after that card replaces it.
-- **SES** — the api Lambda sends the period report through it (see Period report under
-  [Cross-cutting mechanisms](#cross-cutting-mechanisms)), from the verified `SES_SENDER`. The
-  policy allows every identity because the SES sandbox also checks the recipient's address.
-- **DynamoDB tables** — described under [Storage](#storage).
-- **Files bucket** — the private S3 bucket holding uploaded meter photos.
-- **SSM parameters** `/meters-tracker/llm/<provider>/api-key` — one SecureString per model
-  provider, written by `scripts/aws-helper.sh --set-model-key`. `scripts/deploy.sh` passes the
-  api Lambda the parameter of the provider `LLM_MODEL` names, and its role can read only that
-  one. The Lambda reads it the first time a request needs the model, so `GET /chat` never reads
-  it and replacing the key needs no deploy. Changing provider leaves the other provider's key
-  stored.
-- **Frontend bucket and CloudFront distribution** — host the browser app, published by
-  `scripts/deploy.sh --frontend`: the Vite bundle, `config.js`, `app.json` and the demo page
-  `demo.html`. The app is described under [The browser app](#the-browser-app).
-
-## The browser app
-
-`frontend/` is a React and TypeScript single-page app in Hebrew (`<html lang="he" dir="rtl">`)
-that renders what the api Lambda returns and decides nothing about the conversation
-([ADR 0011](adr/0011-browser-app-renders-the-server-snapshot.md)). Its look
-follows the app inside the phone of `docs/demo/demo.html`; every user-visible string is in
-`frontend/src/texts.ts`. What a user sees on each surface is in [Feature overview](features.md).
-
-- **Sign-in** (`auth.ts`) — the Cognito hosted page with the authorization-code flow and PKCE,
-  Google as the only provider. No secret exists in the browser; the redirect address is the
-  site's own origin, and local development runs on port 8000, the callback the Cognito stack
-  allows. The ID token authorizes each API call.
-- **Chat state** (`useChat.ts`, over TanStack Query) — loads `GET /chat` for the shown day, one
-  query per day, and keeps the latest snapshot it received. Today's history stays loaded while an
-  earlier day is shown: the server records every turn under today, so from the first turn sent on an
-  earlier day the thread appends today's messages that came after it. A typed turn, a card choice or
-  a photo is a `POST /turn`: the user's message is shown at once, the server's replies are appended
-  and its snapshot replaces the shown one, then a refetch of `GET /chat` replaces the local entries
-  with the server's history. A sent photo's stored key, from the reply, takes the page's own copy as
-  its link, so it shows with no download. A stale choice (409) only replaces the snapshot. A turn
-  lost to the network or a gateway timeout only refetches, since the server may have handled it. A
-  503 `message_failed` only refetches too, which brings the message with its failed mark and retry
-  button; a text or photo whose request never reached the server stays in the page with a resend
-  while the page is open. Any other failure shows a notice and refetches. Several photos can be in
-  flight together. While the snapshot shows no card, lists queued items and no turn is in flight,
-  `GET /chat` is polled every 5 seconds, so a card saved after the gateway gave up still arrives.
-  With a card shown the queued items include cards behind it, which change only after an answer, so
-  polling stops.
-- **Cards** (`CardView.tsx`) — the buttons come from the snapshot card's options, a choice
-  posts the card's `pending`, `version` and the option, and `foldChoices.ts` shows a recorded
-  choice in place on the card its `choice` names instead of as a bubble of its own; typed text
-  never folds. `MessageList.tsx` marks the snapshot's card as live and the latest card of each
-  seq the snapshot lists as queued, and shows the `photo` of those two kinds of card as a
-  thumbnail.
-- **Photos** (`images.ts`) — the camera button takes a photo or picks existing ones; each is
-  scaled to 1600 px on its longer edge and re-encoded as JPEG, which keeps it under the API's
-  4 MiB limit. A thumbnail or the full-screen viewer fetches a link from `GET /files/{key+}`.
-- **Layout** — a header with the signed-in user and a sign-out menu; from the width in
-  `sidebar_min_width_px` of `config/app.json` (900), a panel of the day's activity, which
-  `activity.ts` derives from the loaded messages, so it needs no request of its own and follows
-  every refetch, and from the snapshot's `tariffs_missing`, true while a request for tariffs is
-  open, even behind another card. Below that width the same lists sit behind a strip under the
-  header (`DayStrip.tsx`), present only while a list has lines or tariffs are missing. A tapped
-  line focuses its message in the thread. The border
-  between the panel and the chat sets the panel's width (`PanelResizer.tsx`), kept in the browser's
-  local storage, and the stylesheet stops the page at a maximum width. One full-screen photo
-  viewer, owned by `App.tsx`, serves the thread.
-- **Runtime configuration** — `config.js` and `app.json`, both read from the site's own origin,
-  described under [Configuration both runtimes read](#configuration-both-runtimes-read).
+- **api Lambda** (`src/handlers/api.py`) — three routes: `GET /chat` loads a day's messages and
+  the current card, `POST /turn` takes one user action (a text, a photo, a card choice or a
+  retry), and `GET /files/{key+}` hands out a short-lived link to a stored photo. Its 60-second
+  limit outlasts the HTTP API's 30, so a photo still being read when the browser's request is
+  dropped is saved and arrives on the next load.
+  [Requests and their answers](domain-rules.md#requests-and-their-answers) gives every body,
+  status and limit.
+- **SES** — carries the period report, a PDF of the closed period's figures
+  ([Period report](domain-rules.md#period-report)).
+- **SSM parameters** `/meters-tracker/llm/<provider>/api-key` — the model provider's API key,
+  which the api Lambda reads on its first model call, so replacing the key needs no deploy
+  ([ADR 0008](adr/0008-one-stored-key-per-model-provider.md)).
+- **DynamoDB tables and the files bucket** — the account's records and its meter photos
+  ([Storage](#storage)).
+- **Frontend bucket and CloudFront distribution** — host the browser app, a React single-page app
+  in Hebrew that renders what the api Lambda returns and decides nothing about the conversation
+  ([Design patterns](design-patterns.md#the-browser-app-renders-the-servers-snapshot));
+  what a user sees is in [Feature overview](features.md).
 
 ## The conversation engine
 
-`src/common/engine.py` takes one action and returns the replies plus a snapshot. A photo starts
-the meter-photo flow; a card choice goes to the pending item it names; text is classified, and
-goes to the first item awaiting an answer, except that a change to a saved record becomes a
-correction card (`src/common/flows/correction.py`), planned without I/O by
-`src/common/corrections.py` on a copy of the account (`src/common/account.py`). The classifier
-also gets every waiting card and the latest dropped photos, so an edit can reach a card behind the
-first or read a dropped photo again. A change missing its value, or with one that does not fit,
-becomes a question card (`src/common/flows/question.py`) that keeps the change until the answer.
-Text with nothing awaiting is classified into a close, vacate, period-change or tariffs request,
-or into adding, listing or removing a delegate (`src/common/flows/delegates.py`).
-Any message that is not a change the app can make (a how-to question, an ambiguous message, a
-request the app lacks, a bare value with no card) is answered by `ask_back` in `src/common/flows/`
-from a fixed template, never with a bare "not understood". Every user action and every reply is
-appended to the address's message history.
+`src/common/engine.py` takes one action and returns the replies plus a snapshot: the card the user
+answers next and the items queued behind it. A photo starts the meter-photo flow; a card choice
+goes to the pending item it names; text is classified, and goes to the first item awaiting an
+answer, except that a change to a saved record becomes a correction card, planned on a copy of the
+account before anything is written. Text with nothing awaiting is classified into a request (close,
+vacate, period change, tariffs, delegates), and anything else is answered by a fixed reply that asks
+back, never a bare "not understood". Every user action and every reply is appended to the address's
+message history.
 
-Each flow (`src/common/flows/`) is a small state machine stored as a **pending item**: `seq` (a
-timestamp-ordered key), `kind` (the flow), `status`, `step`, `version` and `data` (the answers so
-far). The version grows each time the item shows a card, and every card carries it, so a choice
-answers only the card the user saw. Before handling a choice the engine claims the item with a write
-that holds only while the version and status are unchanged, so of a double-click or two devices
-answering one card, one request proceeds and the other gets 409. The statuses are `reading` while
-the model reads the photo, `awaiting` while a card waits for the user, `parked` while a close waits
-for a meter's photo and shows no card, and `standby` while a request for tariffs waits without
-blocking the queue: its card shows only when no card awaits, and typed text with nothing awaiting
-reaches it only when it is prices, a cancel or a question; any other text is classified as a request
-as usual. The **snapshot** is the first awaiting item's card, a question then a correction ahead
-of the rest, else the oldest standby item's, plus the seqs of the queued items behind it; the client
-renders it and never orders the queue itself. A turn that ends the shown card and moves the queue to
-a card shown earlier records that card again as the turn's last reply; a shown card that an older
-photo's finished read only moved behind is not ended, so no card repeats and the card the next
-message answers is always the latest in the thread. A meter photo's card carries `photo`, the stored
-key of the photo it answers, so several photos sent at once each show beside their own reply. Code
-decides every step and renders every reply from `src/common/texts.py`; the model only reads photos
-and classifies text, and every data write waits behind a confirmation card
-([ADR 0005](adr/0005-code-led-conversation.md)). Billing periods belong to the apartment, so its
-water and electricity meters open and close together
-([ADR 0003](adr/0003-period-belongs-to-apartment.md)).
-The flows and the rules they enforce are in [Domain rules](domain-rules.md).
-
-The model client (`src/common/model.py`) calls the model that the deploy setting `LLM_MODEL` names
-as `provider:model`, `anthropic:claude-opus-5-5` by default or an OpenAI model, through that
-provider's own SDK ([ADR 0008](adr/0008-one-stored-key-per-model-provider.md)). Both
-implementations ask for an answer shaped to a declared schema (the SDKs call this structured output)
-and parse it into a pydantic model: a meter reading (type, serial, candidate values with their
-display position, unreadable digits, handwritten label), a previous statement's tariffs (whether the
-photo is a statement, the electricity and water prices, whether they include VAT), or one intent
-from a closed list —
-`confirm`, `reject`, `edit`, `choose_option`, `close_period`, `vacate`, `change_period`,
-`set_tariffs`, `explain`, `how_to`, `which`, `not_offered`, `unknown`, with the operations an
-`edit`, a `how_to` or a `which` names. A photo is read as a statement only when its meter read
-finds neither a meter type nor a serial. Each classification is sent with today's date, the
-pending card's text with its fields, the field it asked for again and its button labels, and the
-waiting cards and dropped photos, but no saved records. The model looks up the records a message
-names with a `find_records` tool, offered by both the Claude and the OpenAI client, so it names an
-apartment or a record exactly as stored while a message that names none sends no records at all.
-The Lambda answers each lookup from the account it loaded for the turn (`account.lookup`); a
-classification takes at most `MAX_LOOKUPS` (3) lookups, and the request after the last turns the
-tool off, so the model still answers ([Domain rules](domain-rules.md#typed-edits-on-a-card)).
-The prompts are in `src/common/prompts.py`. A refusal raises instead of returning a guess. Only
-the owner runs the classifier against the real model, with `scripts/tools/eval-intents.sh` over the
-recorded messages in
-`tests/intents.json`; the test suite uses a fake model ([Development](development.md)).
+Each flow is a small state machine stored as a pending item, whose version every card carries, so a
+choice answers only the card the user saw and a double answer gets 409
+([Every flow is a stored state machine](design-patterns.md#every-flow-is-a-stored-state-machine)).
+Code decides every step and renders every reply; the model only reads photos and classifies text,
+through the provider `LLM_MODEL` names, and every data write waits behind a confirmation card
+([ADR 0005](adr/0005-code-led-conversation.md),
+[The model reads, the code decides](design-patterns.md#the-model-reads-the-code-decides)). Billing
+periods belong to the apartment, so its water and electricity meters open and close together
+([ADR 0003](adr/0003-period-belongs-to-apartment.md)). The flows and the rules they enforce are in
+[Domain rules](domain-rules.md).
 
 ## Configuration both runtimes read
 
-`config/app.json` holds the tunable values (listed in [Domain rules](domain-rules.md#values)).
-The Lambda package carries a copy, found through the `APP_CONFIG_PATH` environment variable, so an
-edit needs `deploy.sh`; the frontend bucket serves the same file at its root as `app.json`, and
-the Vite dev server serves it from the source file. Each table's name reaches the code as
-`<NAME>_TABLE` (`READINGS_TABLE` and so on), the bucket as `FILES_BUCKET`, the model as
-`LLM_MODEL`, the key parameter as `LLM_KEY_PARAM`, the api time limit as `LAMBDA_TIMEOUT_SECONDS`,
-the mail sender as `SES_SENDER`, the admin address as `ADMIN_EMAIL`.
+The two runtimes, the Python Lambda functions and the TypeScript app in the browser, read one file,
+`config/app.json`, which holds the tunable values (listed in
+[Domain rules](domain-rules.md#values)). The Lambda package carries a copy, found through the
+`APP_CONFIG_PATH` environment variable, so an edit needs `deploy.sh`; the frontend bucket serves the
+same file at its root as `app.json`, and the Vite dev server serves it from the source file. Each
+table's name reaches the code as `<NAME>_TABLE` (`READINGS_TABLE` and so on), the bucket as
+`FILES_BUCKET`, the model as `LLM_MODEL`, the key parameter as `LLM_KEY_PARAM`, the api time limit
+as `LAMBDA_TIMEOUT_SECONDS`, the mail sender as `SES_SENDER`, the admin address as `ADMIN_EMAIL`.
 
 The browser also reads `config.js`, the stack's endpoints and the admin's address, written by
 `scripts/lib/app-config.sh`, which `deploy.sh` runs after every backend deploy and before every
 frontend publish. The bundle is therefore the same for every stack.
 
-## Cross-cutting mechanisms
-
-- **Sign-in and accounts.** `src/common/access.py` maps the JWT's email, lowercased, through
-  the `access` table: a row names its account; an address with no row becomes the owner of its
-  own account, keyed by that address, with a conditional write so two first requests agree.
-  Data belongs to the account; the message history and the pending queue belong to the
-  signed-in address ([ADR 0002](adr/0002-google-sign-in-and-delegation.md)).
-- **Admin.** Beside the owner and delegate roles, the deployment names one admin address in the
-  `AdminEmail` stack parameter. `access.is_admin` compares the signed-in address with it, ignoring
-  case, independently of the `access` table, so the admin keeps its ordinary account. The chat
-  response carries the flag, and the frontend locks the composer on it; the backend refuses
-  nothing ([ADR 0009](adr/0009-admin-is-a-stack-parameter.md)).
-- **Period report.** A close, a re-close, a tariff that first prices a closed period, or a late
-  meter's reading that closes a closed period for it marks the period for a report during a turn.
-  After the turn's replies the engine sends each marked report that `report.missing` finds due: a
-  closed period with both meters closed and priced. Each marked report adds a line to the turn:
-  sent, held with what the bill lacks, or failed.
-  `src/common/report.py` takes the figures from `period_figures`, the code the chat's summary
-  uses, and draws a one-page PDF with fpdf2. It shapes the Hebrew with HarfBuzz and a DejaVu Sans
-  font shipped under `src/common/fonts/`, and is imported only when a report is drawn.
-  `src/common/notify.py` sends it as raw MIME, base64 encoded, under the fixed subject of
-  [ADR 0004](adr/0004-fixed-email-subject.md). A failed report is logged and never fails the turn,
-  since the reading is already saved. It is marked on its period row (`report_failed`, with the
-  report it replaces), and the first chat load of a later day sends it again and clears the
-  mark.
-- **Dates.** Every stored and shown date is a calendar date in Asia/Jerusalem
-  (`src/common/dates.py`), and the engine takes "today" from an injected clock, so tests fix
-  the day.
-- **Nothing runs on a clock.** The only time-driven behavior, the daily greeting, is computed
-  when the chat loads.
-- **Logging.** The api Lambda logs JSON at INFO: a line per request and a line per model call
-  with its tokens and cost, which `aws-helper.sh --costs` sums ([Development](development.md#logs)).
-
 ## Storage
 
-Nine DynamoDB tables, billed per request, each holding one kind of record under a string
-partition key `pk` and sort key `sk` (`access` has no sort key). The account id is the owner's
-lowercase email. No request of the app crosses accounts or scans a table. Scripts run by the
-owner with their own credentials scan: `scripts/tools/reset-account.sh` finds every row one account
-owns in each table, `scripts/tools/backup-restore.sh` copies every table and the files bucket to a
-local folder and back, and a real-model check reads the readings that carry failed photos
-([Tests](development.md#backend-tests)).
-
-- `access` — pk address, no sk: `email`, `account`, `role` (`owner` or `delegate`).
-- `properties` — pk account, sk id: `name`.
-- `apartments` — pk account, sk id: `property_id`, `name`, `period_start`, `period_months`.
-- `meters` — pk account, sk serial: `apartment_id`, `type` (`water` or `electricity`),
-  `display_choice`, `label_hint`, `retired_at`.
-- `periods` — pk `account#apartment_id`, sk start date: `months`, `closed_on`,
-  `last_reminded_on`, and while its report waits to be sent again, `report_failed` and
-  `report_ignored`.
-- `readings` — pk `account#serial`, sk `date#seq`: `value`, `image_key`, `recorded_by`,
-  `opens_period`, `closes_period`, `resets`, and, only when non-empty, `failed_photos` (the
-  keys of the photos the model failed on) and `model` (the model that failed).
-- `tariffs` — pk account, sk effective date: `electricity_per_kwh`, `water_per_m3` (either
-  null when that type is unpriced), `source_image_key` (the statement photo, or null when
-  typed).
-- `pending` — pk address, sk seq: `kind`, `status`, `step`, `version`, `data`.
-- `messages` — pk address, sk timestamp: `role`, `text`, `card`, `image_key`, `pdf_key`,
-  `choice`. A choice is recorded as a user message whose `text` is the option's label and whose
-  `choice` is `{pending, version}` of the card it answered; on any other message it is null.
-  A text or photo whose handling failed also holds `failed`, until a retry clears it, and a
-  retried one holds `retried_at`, the stamp of its latest retry. A meter photo's message holds
-  `reading` once the model has answered: `state` (`awaiting`, `saved` or `dropped`), `meter_type`,
-  `apartment` and `property`, updated each time the photo's flow shows a card or ends.
-
-Photos are stored at `<account>/images/<seq>.jpg` (or `.png`) in the files bucket; the account
-prefix is what `GET /files/{key+}` checks. Every table is read and written through
-`src/common/store.py` alone, with strongly consistent reads
-([Data access behind one gateway](design-patterns.md#data-access-behind-one-gateway)).
-
-The tables and the files bucket survive a stack delete: tables are retained, deletion-protected
-and point-in-time recoverable; the bucket is retained and versioned, and a noncurrent version
-expires after 30 days. `deploy.sh` refuses to create the app stack while such leftovers exist
-([ADR 0006](adr/0006-retain-data-on-delete.md)).
+Nine DynamoDB tables, each holding one kind of record under plain keys, with the account (the
+owner's lowercase email) or the signed-in address leading the partition key: access, properties,
+apartments, meters, periods, readings, tariffs, the pending items and the messages. Meter photos
+live in a private S3 files bucket under the account's prefix. No request of the app crosses
+accounts or scans a table, and the tables and the bucket survive a stack delete
+([ADR 0006](adr/0006-retain-data-on-delete.md)). [Data model](data-model.md) gives each table's
+keys and attributes.
 
 ## Codebase structure
 
