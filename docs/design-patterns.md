@@ -71,7 +71,8 @@ photo's finished read only moved behind is not ended, so no card repeats and the
 message answers is always the latest in the thread. A meter photo's card carries `photo`, the stored
 key of the photo it answers, so several photos sent at once each show beside their own reply. Every
 data write waits behind a confirmation card ([ADR 0005](adr/0005-code-led-conversation.md)). The
-flows and the rules they enforce are in [Domain rules](domain-rules.md).
+flows are in [The conversation engine](conversation.md), the rules they enforce in
+[Domain rules](domain-rules.md).
 
 Every flow module offers the same interface (`flows/__init__.py`): `form` and `default_field` for
 the fields a typed edit may change, `edit` and
@@ -124,7 +125,8 @@ names with a `find_records` tool, offered by both the Claude and the OpenAI clie
 apartment or a record exactly as stored while a message that names none sends no records at all.
 The Lambda answers each lookup from the account it loaded for the turn (`account.lookup`); a
 classification takes at most `MAX_LOOKUPS` (3) lookups, and the request after the last turns the
-tool off, so the model still answers ([Domain rules](domain-rules.md#typed-edits-on-a-card)).
+tool off, so the model still answers
+([The conversation engine](conversation.md#typed-edits-on-a-card)).
 The prompts are in `src/common/prompts.py`. Only the owner runs the classifier against the real
 model, with `scripts/tools/eval-intents.sh` over the recorded messages in `tests/intents.json`; the
 test suite uses a fake model ([Development](development.md#backend-tests)).

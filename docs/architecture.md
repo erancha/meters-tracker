@@ -49,13 +49,11 @@ graph LR
   verify the address so mail can reach it.
 - **HTTP API** — checks the Cognito JWT on every route, with CORS for `http://localhost:8000`
   and the CloudFront URL.
-- **api Lambda** (`src/handlers/api.py`) — three routes: `GET /chat` loads a day's messages and
-  the current card, `POST /turn` takes one user action (a text, a photo, a card choice or a
-  retry), and `GET /files/{key+}` hands out a short-lived link to a stored photo. Its 60-second
-  limit outlasts the HTTP API's 30, so a photo still being read when the browser's request is
-  dropped is saved and arrives on the next load.
-  [Requests and their answers](domain-rules.md#requests-and-their-answers) gives every body,
-  status and limit.
+- **api Lambda** (`src/handlers/api.py`) — three routes: `GET /chat` loads a day's messages and the
+  current card, `POST /turn` takes one user action (a text, a photo, a card choice or a retry), and
+  `GET /files/{key+}` hands out a short-lived link to a stored photo. Its 60-second limit outlasts
+  the HTTP API's 30, so a photo still being read when the browser's request is dropped is saved and
+  arrives on the next load. [API endpoints](api.md) gives every body, status and limit.
 - **SES** — carries the period report, a PDF of the closed period's figures
   ([Period report](domain-rules.md#period-report)).
 - **SSM parameters** `/meters-tracker/llm/<provider>/api-key` — the model provider's API key,
@@ -87,7 +85,8 @@ through the provider `LLM_MODEL` names, and every data write waits behind a conf
 ([ADR 0005](adr/0005-code-led-conversation.md),
 [The model reads, the code decides](design-patterns.md#the-model-reads-the-code-decides)). Billing
 periods belong to the apartment, so its water and electricity meters open and close together
-([ADR 0003](adr/0003-period-belongs-to-apartment.md)). The flows and the rules they enforce are in
+([ADR 0003](adr/0003-period-belongs-to-apartment.md)). The flows are walked through in
+[The conversation engine](conversation.md), and the rules they enforce are in
 [Domain rules](domain-rules.md).
 
 ## Configuration both runtimes read

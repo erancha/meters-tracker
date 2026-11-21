@@ -122,8 +122,11 @@ backups) are in [scripts/tools/](scripts/tools/README.md).
 
 ## Details
 
-- [Feature overview](docs/features.md) — what a user sees in the browser app, screen by screen
 - [Architecture](docs/architecture.md) — what each part is for, the storage and the codebase
+- [API endpoints](docs/api.md) — every route, who may call it, what it takes and its limits
+- [The conversation engine](docs/conversation.md) — what the app does with a photo, an edit, a
+  correction or a message it cannot act on
+- [Feature overview](docs/features.md) — what a user sees in the browser app, screen by screen
 - [Sign-in](docs/sign-in.md) — how Google sign-in through Cognito works, the Google console
   setup for a new deployment, and who may sign in
 - [Design patterns](docs/design-patterns.md) — the shapes the code repeats and what each is for

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run the quality gate: bash syntax check of every script, ruff lint and format check, then the
-# pytest suite, which leaves out the correction matrix. The matrix runs on request.
+# Run the quality gate: bash syntax check of every script, the check that docs/api.md names every
+# route the template declares, ruff lint and format check, then the pytest suite, which leaves
+# out the correction matrix. The matrix runs on request.
 #
 #   ./scripts/test.sh                          the gate
 #   ./scripts/test.sh --matrix [slice ...]     the full correction matrix, or the slices named
@@ -67,6 +68,8 @@ cd "$APP_FOLDER"
 for script in scripts/*.sh scripts/lib/*.sh scripts/tools/*.sh .githooks/pre-commit; do
   bash -n "$script"
 done
+python3 scripts/lib/check_api_doc.py . ||
+  die "docs/api.md and scripts/template.yaml disagree on the routes above; update docs/api.md"
 require_venv
 # The slice names, as the matrix module defines them: all of them, or the quick ones.
 slices() {
