@@ -88,7 +88,8 @@ def main(root: Path) -> int:
     code_spans = set(DOC_CODE_SPAN.findall(doc))
     problems = [f"undocumented in docs/api.md: `{r}`" for r in sorted(rest - documented_rest)]
     problems += [
-        f"undocumented in docs/api.md: WebSocket route `{r}`" for r in sorted(websocket - code_spans)
+        f"undocumented in docs/api.md: WebSocket route `{r}`"
+        for r in sorted(websocket - code_spans)
     ]
     problems += [
         f"docs/api.md names `{r}`, which scripts/template.yaml does not declare"
