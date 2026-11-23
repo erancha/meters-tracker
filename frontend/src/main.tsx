@@ -12,6 +12,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Landing } from "./components/Landing";
 import { SignInError } from "./components/SignInError";
 import "./style.css";
+// After the app's own rules, so the signed-out page's shared look wins wherever the two meet.
+import "./styles/landing.css";
 
 const cfg = getConfig();
 const root = createRoot(document.getElementById("root")!);

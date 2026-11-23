@@ -104,6 +104,12 @@ Two lists apply, and an address must pass both.
   gates sign-up, not sign-in: an account already in the pool stays when the regex changes. A
   change takes a backend deploy, before the new address first signs in.
 
+For a visitor wary of signing in with a Google account, the signed-out landing page explains it:
+a "למה להתחבר עם Google?" toggle under the sign-in button opens a panel saying that Google
+approves the sign-in and passes the app only who the person is, that the app can be disconnected
+in the Google account's settings, that the app stores no password, and that Google's two-step
+verification guards the sign-in. It ends with a link to Google's own help page.
+
 ## Accounts and roles
 
 Every route resolves the token's email, lowercased, to an account first, through the `access`

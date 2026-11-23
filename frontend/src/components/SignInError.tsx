@@ -22,10 +22,10 @@ export function SignInError({ reason, adminEmail, onSignIn }: {
       <div className="landing-card">
         <div className="alert" role="alert">{reason}</div>
         <div className="sign-in-error-actions">
-          <button type="button" className="sign-in" onClick={onSignIn}>
+          <button type="button" className="sign-in-button" onClick={onSignIn}>
             <span className="sign-in-mark" aria-hidden="true">G</span>{texts.signInAnotherAccount}
           </button>
-          <button type="button" className="sign-in" onClick={copyAdminEmail}>
+          <button type="button" className="sign-in-button" onClick={copyAdminEmail}>
             {texts.copyAdminEmail}
           </button>
         </div>

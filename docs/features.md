@@ -14,11 +14,14 @@ app inside the phone of the [demo](demo/demo.html).
 
 ## Landing page
 
-A signed-out visitor sees one card: the app's name with the build's version and commit date under
-it, a three-paragraph pitch, a "more" toggle and the "sign in with Google" button. The toggle swaps
-the pitch for seven bullets condensing the README's overview, and back. Below the card, one line of
-links opens the animated demo in a new tab, with a tooltip saying its speed can change and that it
-reads best on a computer; WhatsApp with an invite to the app prefilled as a received
+A signed-out visitor sees one card, laid out like the landing pages of the author's other apps:
+the tab's gauge icon and the app's name, a tagline, and the build's version and commit date; a
+two-line pitch and three numbered steps; a "more" toggle that adds seven details condensing the
+README's overview, and folds them back; and the "sign in with Google" button. Under the button, a
+"why sign in with Google?" toggle opens a framed panel on why it is safe, ending with a link to
+Google's help page; a ✕ closes it. The page follows the system's dark mode. Below the card, one
+line of links opens the animated demo in a new tab, with a tooltip saying its speed can change and
+that it reads best on a computer; WhatsApp with an invite to the app prefilled as a received
 recommendation; and the source repository on GitHub. A sign-in whose
 final step fails, or a first sign-in by an address not on the deployment's allowed list, shows the
 Hebrew reason in place of the chat; a refusal's reason names the deployment's admin address to ask

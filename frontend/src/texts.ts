@@ -8,37 +8,72 @@ export const texts = {
   appTitle: "מונים AI",
   appVersion: (version: string, date: string) => `גירסה ${version}, ${date}`,
   signIn: "התחברות עם Google",
-  // Landing copy. A **phrase** is set in bold. The summary bullets condense the main shipped items
-  // of the root README's overview and must stay aligned with it.
-  landingCondensed: [
-    "חיוב דירות לפי **מוני מים וחשמל**: **מצלמים את המונה**, והמערכת קוראת אותו, מחשבת את **הצריכה** ואת **החיוב**.",
-    "הכול ב**צ'אט**, בעברית ובלי טפסים: המערכת מציעה, ומאשרים בכפתור או מתקנים במילים פשוטות.",
-    "**תקופות חיוב** לכל דירה, **סגירת תקופה** עם הקריאה האחרונה, ו**תעריפים** שמוקלדים בצ'אט או נקראים מצילום של חשבון קודם.",
+  // The line under the name on the landing page: what the app is for.
+  appTagline: "חיוב דירות לפי מוני מים וחשמל",
+  // Landing copy. A **phrase** is set in bold. It condenses the root README's overview for a
+  // landlord, and must stay aligned with it.
+  landingPitch: [
+    "**מצלמים את המונה, והמערכת עושה את השאר:** קוראת אותו, ומחשבת את הצריכה ואת החיוב של כל דירה.",
+    "**הכול בצ'אט, בעברית ובלי טפסים:** המערכת מציעה, ומאשרים בכפתור או מתקנים במילים פשוטות.",
   ],
-  landingIntro: "מעקב מוני מים וחשמל של דירות להשכרה, וחיוב כל דירה לפי תקופות — הכול בצ'אט אחד:",
-  landingSummary: [
-    "המערכת קוראת מהצילום את מספר המונה ואת הקריאה, ושומרת רק אחרי אישור. תמונה לא ברורה? המערכת תבקש צילום חוזר או הקלדה.",
-    "אין טפסים: המערכת מציעה, ומאשרים בכפתור או מתקנים במילים.",
+  // The pitch as numbered steps, since visitors skim prose but follow steps.
+  landingSteps: [
+    {
+      title: "מצלמים את המונה בצ'אט",
+      text: "מונה מים או חשמל. המערכת קוראת את מספר המונה ואת הקריאה, ושומרת רק אחרי אישור.",
+    },
+    {
+      title: "רואים את הצריכה והחיוב",
+      text: "אחרי כל קריאה: הקריאה הקודמת, הצריכה מאז ומתחילת התקופה, והחיוב לפי התעריפים.",
+    },
+    {
+      title: "סוגרים את תקופת החיוב",
+      text: "קריאה בסוף התקופה מציעה לסגור אותה, וסיכום התקופה של הדירה מגיע במייל.",
+    },
+  ],
+  // What the "more" toggle adds under the steps.
+  landingDetails: [
+    "תמונה לא ברורה? המערכת **לא מנחשת**: היא מבקשת צילום חוזר או הקלדה.",
     "מונה חדש משויך לנכס ולדירה, שנוצרים לפי שם.",
-    "כל דירה מחויבת לפי תקופות, חודשיים כברירת מחדל. קריאה בסוף התקופה מציעה לסגור אותה, והבאה נפתחת למחרת.",
-    "אפשר גם לסגור תקופה מוקדם, או לקבוע תאריך התחלה לדייר חדש.",
-    "אחרי כל קריאה מוצגים הצריכה והחיוב, לפי תעריפים שמוקלדים בצ'אט או נקראים מחשבון קודם.",
-    "קריאות חשודות נבדקות: קריאה שנייה באותו יום, או ערך נמוך מהקודם.",
+    "כל דירה מחויבת לפי **תקופות**, חודשיים כברירת מחדל, והתקופה הבאה נפתחת למחרת הסגירה.",
+    "אפשר גם לסגור תקופה מוקדם, לסמן דירה כפנויה, או לקבוע תאריך התחלה לדייר חדש, הכול במילים.",
+    "**תעריפים** מוקלדים בצ'אט או נקראים מצילום של חשבון קודם.",
+    "**קריאות חשודות נבדקות:** קריאה שנייה באותו יום, ערך נמוך מהקודם, או קפיצה חריגה בצריכה.",
+    "במסך רחב, חלונית ליד הצ'אט מציגה את הקריאות של היום.",
   ],
+  // The toggle under the landing's sign-in button, for a visitor wary of signing in to an
+  // unfamiliar site with a Google account, and the text it opens. The first two points answer the
+  // fear of handing the app access to a Google account, since a worried reader discounts advantages
+  // until then; the last two argue the advantages.
+  signInWhy: "למה להתחבר עם Google?",
+  signInWhyLead: "כניסה עם Google **בטוחה ונוחה יותר** מפתיחת חשבון עם סיסמה חדשה.",
+  signInWhyPoints: [
+    "**ההתחברות מאושרת על ידי Google.\u200F** Google מוסרת לאפליקציה רק אימות לגבי הזהות שלכם, ללא גישה לנתונים שלכם (מיילים, אנשי קשר ועוד).",
+    "**השליטה אצלכם:** אפשר לנתק את האפליקציה בכל רגע מהגדרות חשבון Google.",
+    "**אין עוד סיסמה לזכור,** ואין סיסמה שיכולה לדלוף מכאן: האפליקציה לא שומרת סיסמאות בכלל.",
+    "**ההגנות של Google עובדות בשבילכם:** אימות דו-שלבי והתראה על כניסה חשודה שומרים גם על הכניסה לכאן.",
+  ],
+  signInWhyLink: "ההסבר המלא של Google",
+  signInWhyClose: "סגירת ההסבר",
+  // What a link that opens a new tab adds to its name, where the eye sees ↗.
+  newTab: "(נפתח בכרטיסייה חדשה)",
   more: "יותר",
   less: "פחות",
   demo: "הדגמה",
   demoHint: "ניתן לשנות את המהירות; מומלץ לראות במסך מחשב",
+  // The marks before the demo and invite links, the same as the invite message's own.
+  demoMark: "▶️",
+  inviteMark: "💬",
   invite: "הזמנת חברים ב-WhatsApp",
-  // A landing-page visitor is not the developer, so the invite speaks as a received recommendation.
-  // The address closes the message on a line of its own, so WhatsApp renders it as a tappable link.
-  inviteMessage: (address: string) => [
-    "📟 היי! קיבלתי המלצה על אפליקציה לחיוב דירות לפי מוני מים וחשמל",
-    "📷 מצלמים את המונה בצ'אט, והיא קוראת אותו ומחשבת את הצריכה והחיוב",
-    "",
-    "נכנסים עם חשבון Google 👇",
-    address,
-  ].join("\n"),
+  // The invite's paragraphs, in the voice of a friend passing on a recommendation, since a
+  // landing-page visitor is not the developer. The page's own address follows the last one.
+  inviteMessage: [
+    "היי! 👋 קיבלתי המלצה על אפליקציה לחיוב דירות לפי מוני מים וחשמל, למי שמשכיר דירות.",
+    "📷 מצלמים את המונה בצ'אט, והיא קוראת אותו, מחשבת את הצריכה ואת החיוב, ומנהלת תקופות חיוב" +
+      " לכל דירה.",
+    "אין טפסים: היא מציעה, ומאשרים בכפתור או מתקנים במילים פשוטות.",
+    "▶️ יש שם גם הדגמה, שאפשר לראות בלי להתחבר:",
+  ],
   source: "קוד המקור ב-GitHub",
   signInAnotherAccount: "התחברות עם חשבון Google אחר",
   copyAdminEmail: "העתקת כתובת מנהל המערכת",
