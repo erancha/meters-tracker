@@ -4,6 +4,7 @@ chat."""
 
 import base64
 import json
+from datetime import datetime
 from urllib.parse import unquote
 
 import anthropic
@@ -35,6 +36,11 @@ def event(route, body=None, key=None, email=USER_EMAIL, email_verified="true", q
 def kit(env, ddb, monkeypatch):
     kit = Kit()
     monkeypatch.setattr(api, "_model", lambda: kit.model)
+    # The handler's engine reads the real clock; pinned to the kit's day, the seeded period's end
+    # stays as far off as the tests expect, whatever the calendar date.
+    monkeypatch.setattr(
+        dates, "now", lambda: datetime.combine(kit.today, datetime.now(dates.TZ).timetz())
+    )
     return kit
 
 
