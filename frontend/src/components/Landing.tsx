@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { whatsAppInviteUrl } from "../invite";
 import { texts } from "../texts";
+import { demoFlashClass } from "./demoFlash";
 
 // The animated walkthrough, published beside the app by deploy.sh --frontend.
 const DEMO_PATH = "demo.html";
@@ -123,7 +124,8 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
       </div>
       <footer className="landing-links">
         {/* The demo is this site's own page: its tab keeps the tie to this one. */}
-        <a href={DEMO_PATH} target="_blank" rel="opener" title={texts.demoHint}>
+        <a href={DEMO_PATH} className={demoFlashClass()} target="_blank" rel="opener"
+           title={texts.demoHint}>
           <LinkMark mark={texts.demoMark} />{texts.demo}
         </a>
         <a href={whatsAppInviteUrl()} target="_blank" rel="noreferrer">
