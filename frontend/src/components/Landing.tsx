@@ -92,7 +92,7 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
           <img className="app-icon" src="favicon.svg" alt="" /> {texts.appTitle}
         </h1>
         {/* Siblings of the heading, so the heading's accessible name stays the bare title. */}
-        <p className="app-tagline">{texts.appTagline}</p>
+        <p className="app-tagline landing-flash">{texts.appTagline}</p>
         <p className="app-version">{texts.appVersion(__APP_VERSION__, __APP_COMMIT_DATE__)}</p>
         {texts.landingPitch.map((line) => (
           <p key={line} className="landing-pitch"><Rich text={line} /></p>
@@ -109,7 +109,7 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
             {texts.landingDetails.map((detail) => <li key={detail}><Rich text={detail} /></li>)}
           </ul>
         )}
-        <button type="button" className="landing-more" aria-expanded={expanded}
+        <button type="button" className="landing-more landing-flash" aria-expanded={expanded}
                 onClick={() => setExpanded(!expanded)}>
           {expanded ? texts.less : texts.more}
         </button>
@@ -124,7 +124,7 @@ export function Landing({ onSignIn }: { onSignIn: () => void }) {
       </div>
       <footer className="landing-links">
         {/* The demo is this site's own page: its tab keeps the tie to this one. */}
-        <a href={DEMO_PATH} className={demoFlashClass()} target="_blank" rel="opener"
+        <a href={DEMO_PATH} className={`landing-flash ${demoFlashClass() ?? ""}`} target="_blank" rel="opener"
            title={texts.demoHint}>
           <LinkMark mark={texts.demoMark} />{texts.demo}
         </a>
